@@ -6,6 +6,7 @@ frontend:
         - npm ci
     build:
       commands:
+        - env | grep -E '^(DB_|OPENAI|ELEVENLABS|COGNITO|S3_|NEXTAUTH|NODE_ENV|DATABASE_URL)' | head -5 && echo "...env vars present"
         - npm run build
   artifacts:
     baseDirectory: .next
