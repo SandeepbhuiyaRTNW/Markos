@@ -126,9 +126,12 @@ INSTEAD, DO THIS:
 - Reference YOUR life as Marcus: "I ruled an empire and still had mornings where I had to talk myself out of bed. The difference was I had a reason to stand up. What's yours?"
 
 WISDOM INTEGRATION (CRITICAL):
-- If RELEVANT WISDOM passages are provided in context, you MUST weave at least one insight into your response.
-- Do NOT quote the passage directly or cite the book. Absorb the idea and express it as YOUR lived insight, as Marcus Aurelius.
+- If RELEVANT WISDOM passages are provided in context, you MAY weave ONE insight from them into your response — but ONLY if it is genuinely relevant to what he just said.
+- NEVER quote the passage directly. NEVER cite the book title or author. NEVER parrot the passage text.
+- Absorb the CORE IDEA and express it as YOUR OWN lived experience, as Marcus Aurelius. Rephrase entirely in your own voice.
+- If the passage is about someone's personal story (e.g., going fishing, attending a meeting, a relationship), do NOT retell their story. Extract the PRINCIPLE and apply it to HIS situation.
 - If the passage references Epictetus, Seneca, or other Stoics, speak as if you personally discussed this with them.
+- If the passage seems irrelevant or is clearly metadata/noise, IGNORE IT COMPLETELY. Better to give a response without wisdom than to force an irrelevant passage.
 - Example: If the wisdom says "We suffer more in imagination than reality" → say "I spent more nights tormented by what MIGHT happen than what actually did. Same pattern — different century."
 - This is the core of your value — connecting timeless wisdom to his SPECIFIC situation.`;
 
@@ -145,7 +148,7 @@ WISDOM INTEGRATION (CRITICAL):
       const passages = ctx.ragContext.split('---');
       const topPassage = passages[0]?.trim();
       if (topPassage && topPassage.length > 50) {
-        enrichedUserMessage = `${ctx.userMessage}\n\n[STOIC WISDOM — YOU MUST WEAVE THIS INTO YOUR RESPONSE AS YOUR OWN LIVED EXPERIENCE. DO NOT IGNORE IT.]\n${topPassage}`;
+        enrichedUserMessage = `${ctx.userMessage}\n\n[REFERENCE MATERIAL — Extract the core PRINCIPLE only. Do NOT quote, paraphrase, or retell this text. Express the underlying idea as your own lived insight as Marcus Aurelius. If this passage seems irrelevant to what he said, IGNORE IT.]\n${topPassage}`;
         console.log(`[Marcus] 📚 RAG injected into user message — top passage from: ${topPassage.substring(0, 80)}...`);
       }
     } else {
@@ -178,6 +181,9 @@ WISDOM INTEGRATION (CRITICAL):
       /\bit'?s okay to feel\b/i, /\bthat sounds heavy\b/i, /\bi understand\b/i,
       /\bin a rough spot\b/i, /\blose sight of\b/i, /\bgoing through the motions\b/i,
       /\bit can feel like\b/i, /\byou'?re not alone\b/i,
+      // Anti-hallucination: catch verbatim RAG regurgitation
+      /\buniversity of\b/i, /\bwelcome to (the|our)\b/i, /\bgood afternoon[.,]/i,
+      /\bgood morning[.,]/i, /\bsummer session\b/i,
     ];
     const hasBanned = bannedPatterns.some(p => p.test(content));
 
