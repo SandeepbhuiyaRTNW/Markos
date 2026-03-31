@@ -89,8 +89,9 @@ export async function POST(req: NextRequest) {
     console.log(`[Auth] ✉️ Code sent to ${email}`);
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('[Auth] Send code error:', error);
-    return NextResponse.json({ error: 'Failed to send code' }, { status: 500 });
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error('[Auth] Send code error:', errMsg, error);
+    return NextResponse.json({ error: `Failed to send code: ${errMsg}` }, { status: 500 });
   }
 }
 
