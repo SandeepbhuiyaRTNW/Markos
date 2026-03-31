@@ -11,6 +11,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.994.0",
     "@aws-sdk/client-secrets-manager": "^3.994.0",
+    "@aws-sdk/client-sesv2": "^3.1020.0",
     "@langchain/community": "^1.1.17",
     "@langchain/core": "^1.1.27",
     "@langchain/openai": "^1.2.9",

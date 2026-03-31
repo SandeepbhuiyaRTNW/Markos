@@ -58,32 +58,24 @@ export default function AnalyticsDashboard({ userId, onSelectSession }: Analytic
   const allTopics = data?.topics ?? [];
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto px-5 py-8 space-y-8 fade-in-up">
+    <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+      {/* ─── LEFT PANEL: Analytics ─── */}
+      <div className="lg:w-[40%] lg:border-r border-border lg:overflow-y-auto lg:h-[calc(100vh-60px)] overflow-y-auto">
+        <div className="px-5 py-8 space-y-6 fade-in-up">
 
-          {/* Welcome / last session pondering */}
+          {/* Last session pondering */}
           {data?.lastSessionNotes && (
             <div className="glass-strong rounded-2xl p-5 fade-in-scale">
               <div className="flex items-center gap-2 mb-3">
                 <Lightbulb className="w-4 h-4 text-[#a3785e]" />
-                <span className="text-xs font-semibold uppercase tracking-widest text-[#a3785e]">
-                  From Your Last Session
-                </span>
+                <span className="text-xs font-semibold uppercase tracking-widest text-[#a3785e]">From Your Last Session</span>
               </div>
-              <p className="text-sm leading-relaxed text-foreground/80 mb-3">
-                {data.lastSessionNotes.summary}
-              </p>
+              <p className="text-sm leading-relaxed text-foreground/80 mb-3">{data.lastSessionNotes.summary}</p>
               {data.lastSessionNotes.pondering_topics?.length > 0 && (
                 <div className="space-y-2 mt-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50">
-                    Things to ponder
-                  </p>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50">Things to ponder</p>
                   {data.lastSessionNotes.pondering_topics.map((t, i) => (
-                    <div key={i} className="flex gap-2.5 text-sm text-muted-foreground">
-                      <span className="text-[#a3785e]/60 mt-0.5">→</span>
-                      <span className="italic">{t}</span>
-                    </div>
+                    <div key={i} className="flex gap-2.5 text-sm text-muted-foreground"><span className="text-[#a3785e]/60 mt-0.5">→</span><span className="italic">{t}</span></div>
                   ))}
                 </div>
               )}
@@ -91,59 +83,36 @@ export default function AnalyticsDashboard({ userId, onSelectSession }: Analytic
                 <div className="mt-3 pt-3 border-t border-border/30">
                   <div className="flex items-center gap-2">
                     <BookOpen className="w-3.5 h-3.5 text-[#a3785e]/50" />
-                    <span className="text-[11px] text-muted-foreground/50">
-                      Stoic Principle: <span className="text-foreground/70">{data.lastSessionNotes.stoic_principle}</span>
-                    </span>
+                    <span className="text-[11px] text-muted-foreground/50">Stoic Principle: <span className="text-foreground/70">{data.lastSessionNotes.stoic_principle}</span></span>
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* Stats row */}
+          {/* Stats */}
           <div className="grid grid-cols-2 gap-3">
             <div className="stat-card flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-[#a3785e]/8 flex items-center justify-center">
-                <BarChart2 className="w-5 h-5 text-[#a3785e]/60" />
-              </div>
-              <div>
-                <p className="text-3xl font-semibold text-foreground tabular-nums">
-                  {loading ? '—' : data?.totalSessions ?? 0}
-                </p>
-                <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider">Sessions</p>
-              </div>
+              <div className="w-10 h-10 rounded-xl bg-[#a3785e]/8 flex items-center justify-center"><BarChart2 className="w-5 h-5 text-[#a3785e]/60" /></div>
+              <div><p className="text-3xl font-semibold text-foreground tabular-nums">{loading ? '—' : data?.totalSessions ?? 0}</p><p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider">Sessions</p></div>
             </div>
             <div className="stat-card flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-[#a3785e]/8 flex items-center justify-center">
-                <MessageSquare className="w-5 h-5 text-[#a3785e]/60" />
-              </div>
-              <div>
-                <p className="text-3xl font-semibold text-foreground tabular-nums">
-                  {loading ? '—' : data?.totalMessages ?? 0}
-                </p>
-                <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider">Exchanges</p>
-              </div>
+              <div className="w-10 h-10 rounded-xl bg-[#a3785e]/8 flex items-center justify-center"><MessageSquare className="w-5 h-5 text-[#a3785e]/60" /></div>
+              <div><p className="text-3xl font-semibold text-foreground tabular-nums">{loading ? '—' : data?.totalMessages ?? 0}</p><p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider">Exchanges</p></div>
             </div>
           </div>
 
-          {/* Weekly Usage Graph */}
+          {/* Weekly Usage */}
           {(data?.weeklyUsage?.length ?? 0) > 0 && (
             <div className="space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/40 flex items-center gap-2">
-                <BarChart2 className="w-3.5 h-3.5 text-[#a3785e]/50" /> Weekly Activity
-              </p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/40 flex items-center gap-2"><BarChart2 className="w-3.5 h-3.5 text-[#a3785e]/50" /> Weekly Activity</p>
               <div className="glass-card px-4 py-4">
                 <div className="flex items-end gap-2 h-20">
                   {(data?.weeklyUsage ?? []).map((w, i) => (
                     <div key={i} className="flex-1 flex flex-col items-center gap-1">
                       <span className="text-[10px] text-muted-foreground/50 font-mono">{w.sessions}</span>
-                      <div
-                        className="w-full rounded-t-md bg-gradient-to-t from-[#a3785e]/40 to-[#a3785e]/20 transition-all"
-                        style={{ height: `${Math.max((w.sessions / maxWeekly) * 56, 4)}px` }}
-                      />
-                      <span className="text-[9px] text-muted-foreground/30">
-                        {new Date(w.week).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </span>
+                      <div className="w-full rounded-t-md bg-gradient-to-t from-[#a3785e]/40 to-[#a3785e]/20 transition-all" style={{ height: `${Math.max((w.sessions / maxWeekly) * 56, 4)}px` }} />
+                      <span className="text-[9px] text-muted-foreground/30">{new Date(w.week).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                     </div>
                   ))}
                 </div>
@@ -151,28 +120,18 @@ export default function AnalyticsDashboard({ userId, onSelectSession }: Analytic
             </div>
           )}
 
-          {/* Topic Distribution */}
+          {/* Topics */}
           {allTopics.length > 0 && (
             <div className="space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/40 flex items-center gap-2">
-                <Flame className="w-3.5 h-3.5 text-[#a3785e]/50" /> Conversation Themes
-              </p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/40 flex items-center gap-2"><Flame className="w-3.5 h-3.5 text-[#a3785e]/50" /> Conversation Themes</p>
               <div className="glass-card px-4 py-4 space-y-3">
                 {allTopics.slice(0, 6).map((t, i) => {
                   const maxCount = allTopics[0]?.count ?? 1;
                   const pct = Math.max((t.count / maxCount) * 100, 8);
                   return (
                     <div key={i} className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-foreground/80">{t.label}</span>
-                        <span className="text-[10px] text-muted-foreground/50 font-mono">{t.count}×</span>
-                      </div>
-                      <div className="h-1.5 bg-secondary/50 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-[#a3785e]/60 to-[#a3785e]/30 transition-all"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
+                      <div className="flex items-center justify-between"><span className="text-xs text-foreground/80">{t.label}</span><span className="text-[10px] text-muted-foreground/50 font-mono">{t.count}×</span></div>
+                      <div className="h-1.5 bg-secondary/50 rounded-full overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-[#a3785e]/60 to-[#a3785e]/30 transition-all" style={{ width: `${pct}%` }} /></div>
                     </div>
                   );
                 })}
@@ -180,60 +139,52 @@ export default function AnalyticsDashboard({ userId, onSelectSession }: Analytic
               {allTopics.length > 6 && (
                 <div className="flex flex-wrap gap-2">
                   {allTopics.slice(6, 15).map((t, i) => (
-                    <span key={i} className="px-3 py-1 rounded-full text-xs border border-border/50 text-muted-foreground/60 bg-secondary/30">
-                      {t.label}
-                    </span>
+                    <span key={i} className="px-3 py-1 rounded-full text-xs border border-border/50 text-muted-foreground/60 bg-secondary/30">{t.label}</span>
                   ))}
                 </div>
               )}
             </div>
           )}
 
-          {/* Session list */}
-          {(data?.conversations ?? []).length > 0 && (
-            <div className="space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/40">Past Sessions</p>
-              <div className="space-y-1.5">
-                {(data?.conversations ?? []).map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => onSelectSession(s.id)}
-                    className="w-full text-left glass-card px-4 py-3.5 group flex items-center gap-3"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary/60 text-muted-foreground/40 font-mono shrink-0">
-                          {s.session_number}
-                        </span>
-                        <span className="text-[13px] font-medium text-foreground/90 truncate flex-1">{getTitle(s)}</span>
-                        <span className="text-[11px] text-muted-foreground/40 shrink-0">{formatDate(s.started_at)}</span>
-                      </div>
-                      {s.summary && (
-                        <p className="text-[11px] text-muted-foreground/40 line-clamp-1 leading-relaxed mt-0.5">{s.summary}</p>
-                      )}
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-[#a3785e]/60 transition-colors shrink-0" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Empty state */}
+          {/* Empty state (mobile-only since right panel also shows it) */}
           {!loading && data?.totalSessions === 0 && (
             <div className="text-center py-16 space-y-4">
-              <div className="w-16 h-16 rounded-2xl bg-[#a3785e]/5 border border-[#a3785e]/10 flex items-center justify-center mx-auto">
-                <Mic className="w-7 h-7 text-[#a3785e]/30" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground/70">No sessions yet</p>
-                <p className="text-xs text-muted-foreground/35 mt-1">Begin your first conversation with Marcus</p>
-              </div>
+              <div className="w-16 h-16 rounded-2xl bg-[#a3785e]/5 border border-[#a3785e]/10 flex items-center justify-center mx-auto"><Mic className="w-7 h-7 text-[#a3785e]/30" /></div>
+              <div><p className="text-sm text-muted-foreground/70">No sessions yet</p><p className="text-xs text-muted-foreground/35 mt-1">Click &quot;New Session&quot; to begin</p></div>
             </div>
           )}
         </div>
       </div>
 
+      {/* ─── RIGHT PANEL: Session List ─── */}
+      <div className="lg:w-[60%] lg:overflow-y-auto lg:h-[calc(100vh-60px)] overflow-y-auto">
+        <div className="px-5 py-8 space-y-3 fade-in-up">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-4">Past Sessions</p>
+          {(data?.conversations ?? []).length > 0 ? (
+            <div className="space-y-2">
+              {(data?.conversations ?? []).map((s) => (
+                <button key={s.id} onClick={() => onSelectSession(s.id)} className="w-full text-left glass-card px-5 py-4 group flex items-center gap-3 hover:border-[#a3785e]/20 transition-all">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary/60 text-muted-foreground/40 font-mono shrink-0">{s.session_number}</span>
+                      <span className="text-[13px] font-medium text-foreground/90 truncate flex-1">{getTitle(s)}</span>
+                      <span className="text-[11px] text-muted-foreground/40 shrink-0">{formatDate(s.started_at)}</span>
+                    </div>
+                    {s.summary && <p className="text-[11px] text-muted-foreground/40 line-clamp-2 leading-relaxed mt-0.5">{s.summary}</p>}
+                    {typeof s.metadata?.mood === 'string' && <span className="inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full bg-[#a3785e]/8 text-[#a3785e]/60">{s.metadata.mood}</span>}
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-[#a3785e]/60 transition-colors shrink-0" />
+                </button>
+              ))}
+            </div>
+          ) : !loading ? (
+            <div className="text-center py-20 space-y-3">
+              <p className="text-sm text-muted-foreground/50">No sessions yet</p>
+              <p className="text-xs text-muted-foreground/30">Your conversations with Marcus will appear here</p>
+            </div>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }

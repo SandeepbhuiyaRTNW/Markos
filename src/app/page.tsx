@@ -49,6 +49,11 @@ export default function Home() {
   const [sessionNotes, setSessionNotes] = useState<SessionNotesData | null>(null);
   const [endingSession, setEndingSession] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [authStep, setAuthStep] = useState<'email' | 'otp'>('email');
+  const [otpCode, setOtpCode] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [sendingCode, setSendingCode] = useState(false);
+  const [verifyingCode, setVerifyingCode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fetchingOpeningRef = useRef(false);
   const viewRef = useRef<AppView>(view);
@@ -112,21 +117,43 @@ export default function Home() {
     }
   }, [userId, onboardingComplete]);
 
-  const initUser = async () => {
-    if (!email) return;
+  const handleSendCode = async () => {
+    if (!email || !email.includes('@')) { setAuthError('Please enter a valid email.'); return; }
+    setSendingCode(true);
+    setAuthError('');
     try {
-      const res = await fetch(`/api/conversation?email=${encodeURIComponent(email)}&name=`);
+      const res = await fetch('/api/auth/send-code', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
       const data = await res.json();
-      setUserId(data.id);
-      setUserEmail(email);
+      if (!res.ok) { setAuthError(data.error || 'Failed to send code'); return; }
+      setAuthStep('otp');
+      setOtpCode('');
+    } catch { setAuthError('Network error. Please try again.'); }
+    finally { setSendingCode(false); }
+  };
+
+  const handleVerifyCode = async () => {
+    if (otpCode.length !== 6) { setAuthError('Please enter the 6-digit code.'); return; }
+    setVerifyingCode(true);
+    setAuthError('');
+    try {
+      const res = await fetch('/api/auth/verify-code', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), code: otpCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setAuthError(data.error || 'Invalid code'); return; }
+      setUserId(data.userId);
+      setUserEmail(data.email);
       setInitialized(true);
-      // Persist to localStorage
-      localStorage.setItem('marcus_userId', data.id);
-      localStorage.setItem('marcus_email', email);
+      localStorage.setItem('marcus_userId', data.userId);
+      localStorage.setItem('marcus_email', data.email);
       setShowLogin(false);
-    } catch (err) {
-      console.error('Init error:', err);
-    }
+      setAuthStep('email');
+    } catch { setAuthError('Network error. Please try again.'); }
+    finally { setVerifyingCode(false); }
   };
 
   const handleLogout = () => {
@@ -250,12 +277,43 @@ export default function Home() {
 
             {showLogin ? (
               <div className="max-w-sm mx-auto space-y-4 fade-in-scale">
-                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && initUser()}
-                  placeholder="Enter your email" className="h-13 bg-white border-border text-foreground placeholder:text-muted-foreground/60 rounded-xl px-5 text-sm" />
-                <Button onClick={initUser} className="w-full h-13 text-sm font-medium rounded-xl bg-[#44403c] hover:bg-[#57534e] text-white transition-all">
-                  Begin Your Journey <ChevronRight className="w-4 h-4 ml-2" />
-                </Button>
-                <button onClick={() => setShowLogin(false)} className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">Cancel</button>
+                {authStep === 'email' ? (
+                  <>
+                    <Input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setAuthError(''); }}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSendCode()}
+                      placeholder="Enter your email"
+                      className="h-13 bg-white border-border text-foreground placeholder:text-muted-foreground/60 rounded-xl px-5 text-sm" />
+                    <Button onClick={handleSendCode} disabled={sendingCode}
+                      className="w-full h-13 text-sm font-medium rounded-xl bg-[#44403c] hover:bg-[#57534e] text-white transition-all disabled:opacity-50">
+                      {sendingCode ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending code…</> : <>Send Verification Code <ChevronRight className="w-4 h-4 ml-2" /></>}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-muted-foreground">Code sent to <span className="font-medium text-foreground">{email}</span></p>
+                    <Input type="text" inputMode="numeric" maxLength={6} value={otpCode}
+                      onChange={(e) => { setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setAuthError(''); }}
+                      onKeyDown={(e) => e.key === 'Enter' && otpCode.length === 6 && handleVerifyCode()}
+                      placeholder="Enter 6-digit code"
+                      className="h-13 bg-white border-border text-foreground placeholder:text-muted-foreground/60 rounded-xl px-5 text-sm text-center tracking-[0.3em] text-lg font-mono" />
+                    <Button onClick={handleVerifyCode} disabled={verifyingCode || otpCode.length !== 6}
+                      className="w-full h-13 text-sm font-medium rounded-xl bg-[#44403c] hover:bg-[#57534e] text-white transition-all disabled:opacity-50">
+                      {verifyingCode ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Verifying…</> : <>Verify & Sign In <ChevronRight className="w-4 h-4 ml-2" /></>}
+                    </Button>
+                    <div className="flex items-center justify-center gap-4">
+                      <button onClick={handleSendCode} disabled={sendingCode} className="text-xs text-[#a3785e] hover:text-[#8a6550] transition-colors disabled:opacity-50">
+                        {sendingCode ? 'Sending…' : 'Resend code'}
+                      </button>
+                      <span className="text-muted-foreground/30">·</span>
+                      <button onClick={() => { setAuthStep('email'); setOtpCode(''); setAuthError(''); }} className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                        Change email
+                      </button>
+                    </div>
+                  </>
+                )}
+                {authError && <p className="text-xs text-red-500 text-center">{authError}</p>}
+                <button onClick={() => { setShowLogin(false); setAuthStep('email'); setOtpCode(''); setAuthError(''); }}
+                  className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">Cancel</button>
               </div>
             ) : (
               <button onClick={() => setShowLogin(true)}
