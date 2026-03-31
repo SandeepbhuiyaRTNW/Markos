@@ -397,9 +397,11 @@ export default function Home() {
       <header className="relative z-20 border-b border-border bg-white sticky top-0">
         <div className="flex items-center justify-between px-4 py-3 lg:px-6">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="lg:hidden text-muted-foreground hover:text-foreground" onClick={() => setSidebarOpen(!sidebarOpen)}>
-              {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </Button>
+            {(view === 'voice' || view === 'session-notes') && (
+              <Button variant="ghost" size="icon" className="lg:hidden text-muted-foreground hover:text-foreground" onClick={() => setSidebarOpen(!sidebarOpen)}>
+                {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </Button>
+            )}
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#a3785e]/12 to-[#a3785e]/4 border border-[#a3785e]/15 flex items-center justify-center">
               <span className="text-lg font-light text-[#a3785e]">M</span>
             </div>
@@ -429,15 +431,18 @@ export default function Home() {
 
       {/* Body */}
       <div className="flex-1 flex relative z-10 overflow-hidden">
-        <Sidebar
-          userId={userId}
-          onSelectSession={handleSelectSession}
-          activeSessionId={selectedConvId}
-          onNewSession={handleNewSession}
-          refreshTrigger={refreshSidebar}
-          isOpen={sidebarOpen}
-          onToggle={() => setSidebarOpen(!sidebarOpen)}
-        />
+        {/* Sidebar only visible during voice/session-notes views — dashboard has its own session list */}
+        {(view === 'voice' || view === 'session-notes') && (
+          <Sidebar
+            userId={userId}
+            onSelectSession={handleSelectSession}
+            activeSessionId={selectedConvId}
+            onNewSession={handleNewSession}
+            refreshTrigger={refreshSidebar}
+            isOpen={sidebarOpen}
+            onToggle={() => setSidebarOpen(!sidebarOpen)}
+          />
+        )}
 
         <main className="flex-1 flex flex-col overflow-hidden">
           {view === 'session-detail' && selectedConvId ? (
