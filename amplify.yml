@@ -4,9 +4,23 @@ frontend:
     preBuild:
       commands:
         - npm ci
+        - echo "DB_HOST=$DB_HOST" >> .env.production
+        - echo "DB_PORT=$DB_PORT" >> .env.production
+        - echo "DB_NAME=$DB_NAME" >> .env.production
+        - echo "DB_USER=$DB_USER" >> .env.production
+        - echo "DB_PASSWORD=$DB_PASSWORD" >> .env.production
+        - echo "DATABASE_URL=$DATABASE_URL" >> .env.production
+        - echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> .env.production
+        - echo "ELEVENLABS_API_KEY=$ELEVENLABS_API_KEY" >> .env.production
+        - echo "ELEVENLABS_VOICE_ID=$ELEVENLABS_VOICE_ID" >> .env.production
+        - echo "S3_BUCKET=$S3_BUCKET" >> .env.production
+        - echo "NEXTAUTH_SECRET=$NEXTAUTH_SECRET" >> .env.production
+        - echo "SES_ACCESS_KEY_ID=$SES_ACCESS_KEY_ID" >> .env.production
+        - echo "SES_SECRET_ACCESS_KEY=$SES_SECRET_ACCESS_KEY" >> .env.production
+        - echo "SES_SENDER_EMAIL=$SES_SENDER_EMAIL" >> .env.production
+        - echo "SES_REGION=$SES_REGION" >> .env.production
     build:
       commands:
-        - env | grep -E '^(DB_|OPENAI|ELEVENLABS|COGNITO|S3_|NEXTAUTH|NODE_ENV|DATABASE_URL)' | head -5 && echo "...env vars present"
         - npm run build
   artifacts:
     baseDirectory: .next
