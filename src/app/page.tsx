@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Mic, History, Plus, Menu, X, Loader2, Send, ChevronRight, LogOut, Shield, BookOpen, Brain, ArrowRight } from 'lucide-react';
+import { Mic, History, Plus, Menu, X, Loader2, Send, ChevronRight, LogOut, Shield, BookOpen, Brain, ArrowRight, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import VoiceOrb from '@/components/VoiceOrb';
@@ -170,6 +170,29 @@ export default function Home() {
     setView('analytics');
     setShowLogin(false);
     setEmail('');
+  };
+
+  const handleCleanSlate = async () => {
+    if (!userId) return;
+    const confirmed = window.confirm('This will permanently delete all your sessions, messages, and memories. Marcus will forget everything. Are you sure?');
+    if (!confirmed) return;
+    try {
+      const res = await fetch('/api/auth/clean-slate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      setConversationId(null);
+      setTranscripts([]);
+      setOpeningMessage(null);
+      setSessionNotes(null);
+      setView('analytics');
+      setRefreshSidebar((p) => p + 1);
+      setSelectedConvId(null);
+    } catch (err) {
+      console.error('Clean slate error:', err);
+      alert('Failed to reset. Please try again.');
+    }
   };
 
   const handleTranscript = useCallback((userText: string, marcusText: string) => {
@@ -412,6 +435,11 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button onClick={handleCleanSlate}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all border border-transparent text-muted-foreground/50 hover:text-red-500 hover:border-red-200 hover:bg-red-50"
+              title="Delete all sessions and memories — start fresh">
+              <RotateCcw className="w-3.5 h-3.5" /><span className="hidden sm:inline">Clean Slate</span>
+            </button>
             <button onClick={handleGoToAnalytics}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all border ${
                 view === 'analytics' || view === 'session-detail' ? 'bg-white text-foreground shadow-sm border-border' : 'text-muted-foreground hover:text-foreground border-transparent hover:border-border'
