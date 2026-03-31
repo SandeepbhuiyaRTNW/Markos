@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, MessageSquare, Mic } from 'lucide-react';
+import { MessageSquare, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Session {
@@ -75,16 +75,7 @@ export default function Sidebar({
     >
       {/* Header */}
       <div className="px-4 py-4 border-b border-sidebar-border">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60">Sessions</h2>
-          <button
-            onClick={onNewSession}
-            title="New Session"
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-[#a3785e] hover:bg-[#a3785e]/8 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-        </div>
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60">Sessions</h2>
       </div>
 
       {/* Session List */}

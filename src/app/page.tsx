@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Mic, History, Plus, Menu, X, Loader2, Send, ChevronRight } from 'lucide-react';
+import { Mic, History, Plus, Menu, X, Loader2, Send, ChevronRight, LogOut, Shield, BookOpen, Brain, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import VoiceOrb from '@/components/VoiceOrb';
@@ -11,7 +11,17 @@ import Sidebar from '@/components/Sidebar';
 import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
-type AppView = 'analytics' | 'voice' | 'session-detail';
+type AppView = 'analytics' | 'voice' | 'session-detail' | 'session-notes';
+
+interface SessionNotesData {
+  title?: string;
+  summary?: string;
+  takeaways?: string[];
+  pondering_topics?: string[];
+  mood?: string;
+  stoic_principle?: string;
+  topics?: string[];
+}
 
 interface Transcript {
   user: string;
@@ -21,21 +31,40 @@ interface Transcript {
 export default function Home() {
   const [state, setState] = useState<VoiceState>('idle');
   const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [email, setEmail] = useState('');
   const [initialized, setInitialized] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true); // Loading saved session
   const [onboardingComplete, setOnboardingComplete] = useState(false);
   const [checkingOnboarding, setCheckingOnboarding] = useState(false);
   const [openingMessage, setOpeningMessage] = useState<string | null>(null);
   const [openingLoading, setOpeningLoading] = useState(false);
-  const [view, setView] = useState<AppView>('voice');
+  const [view, setView] = useState<AppView>('analytics');
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [refreshSidebar, setRefreshSidebar] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [textInput, setTextInput] = useState('');
-  const [sessionTrigger, setSessionTrigger] = useState(0);
+  const [sessionNotes, setSessionNotes] = useState<SessionNotesData | null>(null);
+  const [endingSession, setEndingSession] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fetchingOpeningRef = useRef(false);
+  const viewRef = useRef<AppView>(view);
+  viewRef.current = view;
+
+  // Restore session from localStorage on mount
+  useEffect(() => {
+    const savedId = localStorage.getItem('marcus_userId');
+    const savedEmail = localStorage.getItem('marcus_email');
+    if (savedId && savedEmail) {
+      setUserId(savedId);
+      setUserEmail(savedEmail);
+      setInitialized(true);
+    }
+    setAuthLoading(false);
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -53,9 +82,11 @@ export default function Home() {
       .catch(() => setCheckingOnboarding(false));
   }, [userId]);
 
-  // Fetch Marcus opening message whenever a new session is triggered
   const fetchOpening = useCallback(async () => {
     if (!userId || !onboardingComplete) return;
+    if (viewRef.current !== 'voice') return;
+    if (fetchingOpeningRef.current) return;
+    fetchingOpeningRef.current = true;
     setOpeningLoading(true);
     setOpeningMessage(null);
     try {
@@ -64,7 +95,6 @@ export default function Home() {
       const marcusText = decodeURIComponent(r.headers.get('X-Marcus-Text') || '');
       if (convId) setConversationId(convId);
       if (marcusText) setOpeningMessage(marcusText);
-      // Refresh sidebar to show the new session
       setRefreshSidebar((p) => p + 1);
       const audioBuffer = await r.arrayBuffer();
       if (audioBuffer.byteLength > 0) {
@@ -78,15 +108,9 @@ export default function Home() {
       console.error('Opening fetch error:', err);
     } finally {
       setOpeningLoading(false);
+      fetchingOpeningRef.current = false;
     }
   }, [userId, onboardingComplete]);
-
-  // Auto-start first session once onboarding completes, and on every sessionTrigger
-  useEffect(() => {
-    if (!userId || !onboardingComplete) return;
-    fetchOpening();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, onboardingComplete, sessionTrigger]);
 
   const initUser = async () => {
     if (!email) return;
@@ -94,10 +118,31 @@ export default function Home() {
       const res = await fetch(`/api/conversation?email=${encodeURIComponent(email)}&name=`);
       const data = await res.json();
       setUserId(data.id);
+      setUserEmail(email);
       setInitialized(true);
+      // Persist to localStorage
+      localStorage.setItem('marcus_userId', data.id);
+      localStorage.setItem('marcus_email', email);
+      setShowLogin(false);
     } catch (err) {
       console.error('Init error:', err);
     }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('marcus_userId');
+    localStorage.removeItem('marcus_email');
+    setUserId(null);
+    setUserEmail(null);
+    setInitialized(false);
+    setOnboardingComplete(false);
+    setConversationId(null);
+    setTranscripts([]);
+    setOpeningMessage(null);
+    setSessionNotes(null);
+    setView('analytics');
+    setShowLogin(false);
+    setEmail('');
   };
 
   const handleTranscript = useCallback((userText: string, marcusText: string) => {
@@ -106,75 +151,162 @@ export default function Home() {
   }, []);
 
   const handleNewSession = () => {
+    if (fetchingOpeningRef.current) return;
+    if (conversationId && view === 'voice' && (transcripts.length > 0 || openingMessage)) return;
     setConversationId(null);
     setTranscripts([]);
     setOpeningMessage(null);
-    setView('voice');
+    setSessionNotes(null);
     setSelectedConvId(null);
-    // Trigger a new opening message fetch
-    setSessionTrigger((p) => p + 1);
-  };
-
-  const handleGoToAnalytics = () => {
-    setView('analytics');
-    setSelectedConvId(null);
-  };
-
-  const handleSelectSession = (id: string) => {
-    setSelectedConvId(id);
-    setView('session-detail');
     setSidebarOpen(false);
+    setView('voice');
+    viewRef.current = 'voice';
+    fetchOpening();
   };
+
+  const handleEndSession = async () => {
+    if (!conversationId || endingSession) return;
+    setEndingSession(true);
+    try {
+      const res = await fetch(`/api/conversations/${conversationId}`, { method: 'POST' });
+      const data = await res.json();
+      setSessionNotes(data);
+      setView('session-notes');
+      setRefreshSidebar((p) => p + 1);
+    } catch (err) {
+      console.error('End session error:', err);
+    } finally {
+      setEndingSession(false);
+    }
+  };
+
+  const handleGoToAnalytics = () => { setView('analytics'); setSelectedConvId(null); setSessionNotes(null); };
+  const handleSelectSession = (id: string) => { setSelectedConvId(id); setView('session-detail'); setSidebarOpen(false); };
 
   const statusLabel: Record<VoiceState, string> = {
-    idle: 'Tap the orb to speak',
-    listening: 'Listening…',
-    processing: 'Reflecting…',
-    speaking: 'Marcus is speaking…',
+    idle: 'Tap the orb to speak', listening: 'Listening…', processing: 'Reflecting…', speaking: 'Marcus is speaking…',
   };
 
-  // ─── Login ───
+  // ─── Global Nav Bar (always visible) ───
+  const NavBar = ({ transparent }: { transparent?: boolean }) => (
+    <header className={`relative z-30 sticky top-0 ${transparent ? 'bg-transparent' : 'bg-white border-b border-border'}`}>
+      <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3 lg:px-6">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#a3785e]/12 to-[#a3785e]/4 border border-[#a3785e]/15 flex items-center justify-center">
+            <span className="text-lg font-light text-[#a3785e]">M</span>
+          </div>
+          <div>
+            <h1 className="text-base font-semibold text-foreground leading-tight">mrkos.ai</h1>
+            <p className="text-[11px] text-muted-foreground/60">Stoic Companion</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {initialized && userId ? (
+            <>
+              <span className="text-xs text-muted-foreground hidden sm:inline">{userEmail}</span>
+              <button onClick={handleLogout} className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-muted-foreground hover:text-foreground border border-transparent hover:border-border transition-all">
+                <LogOut className="w-3.5 h-3.5" /> Log out
+              </button>
+            </>
+          ) : (
+            <button onClick={() => setShowLogin(true)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-[#44403c] hover:bg-[#57534e] text-white transition-all shadow-sm">
+              Log in
+            </button>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+
+  // ─── Auth Loading ───
+  if (authLoading) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center relative gap-4">
+        <div className="ambient-bg" />
+        <div className="w-8 h-8 rounded-full border-2 border-[#a3785e]/20 border-t-[#a3785e] animate-spin" />
+      </div>
+    );
+  }
+
+  // ─── Landing Page (not logged in) ───
   if (!initialized || !userId) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center px-6 relative">
+      <div className="h-screen flex flex-col relative overflow-y-auto">
         <div className="ambient-bg" />
-        <div className="relative z-10 flex flex-col items-center fade-in-up max-w-md w-full">
-          {/* Logo */}
-          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#a3785e]/15 to-[#a3785e]/5 border border-[#a3785e]/20 flex items-center justify-center mb-8">
-            <span className="text-3xl font-light text-[#a3785e]">M</span>
-          </div>
+        <NavBar transparent />
+        <div className="relative z-10 flex-1">
+          {/* Hero Section */}
+          <section className="max-w-4xl mx-auto px-6 pt-16 pb-20 text-center fade-in-up">
+            <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#a3785e]/15 to-[#a3785e]/5 border border-[#a3785e]/20 flex items-center justify-center mx-auto mb-8">
+              <span className="text-5xl font-light text-[#a3785e]">M</span>
+            </div>
+            <h2 className="text-5xl sm:text-6xl font-semibold tracking-tight text-foreground mb-4 leading-tight">
+              Your Stoic<br />Companion
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-xl mx-auto mb-10 leading-relaxed">
+              Marcus is an AI embodiment of Marcus Aurelius — a voice-first companion for men navigating
+              work, relationships, identity, and purpose through Stoic wisdom.
+            </p>
 
-          <h1 className="text-4xl font-semibold tracking-tight mb-2 text-foreground">mrkos.ai</h1>
-          <p className="text-sm text-muted-foreground mb-12 tracking-wide">Your Stoic Companion</p>
+            {showLogin ? (
+              <div className="max-w-sm mx-auto space-y-4 fade-in-scale">
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && initUser()}
+                  placeholder="Enter your email" className="h-13 bg-white border-border text-foreground placeholder:text-muted-foreground/60 rounded-xl px-5 text-sm" />
+                <Button onClick={initUser} className="w-full h-13 text-sm font-medium rounded-xl bg-[#44403c] hover:bg-[#57534e] text-white transition-all">
+                  Begin Your Journey <ChevronRight className="w-4 h-4 ml-2" />
+                </Button>
+                <button onClick={() => setShowLogin(false)} className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => setShowLogin(true)}
+                className="inline-flex items-center gap-3 px-8 py-4 rounded-2xl text-base font-bold bg-[#44403c] hover:bg-[#57534e] text-white transition-all shadow-lg hover:shadow-xl">
+                Start Your Journey <ArrowRight className="w-5 h-5" />
+              </button>
+            )}
+          </section>
 
-          <div className="w-full max-w-sm space-y-4">
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && initUser()}
-              placeholder="Enter your email"
-              className="h-13 bg-white border-border text-foreground placeholder:text-muted-foreground/60 rounded-xl px-5 text-sm"
-            />
-            <Button
-              onClick={initUser}
-              className="w-full h-13 text-sm font-medium rounded-xl bg-[#44403c] hover:bg-[#57534e] text-white transition-all"
-            >
-              Begin Your Journey
-              <ChevronRight className="w-4 h-4 ml-2" />
-            </Button>
-          </div>
+          {/* Features */}
+          <section className="max-w-4xl mx-auto px-6 pb-20">
+            <div className="grid sm:grid-cols-3 gap-6">
+              <div className="glass-strong rounded-2xl p-6 text-center">
+                <div className="w-12 h-12 rounded-xl bg-[#a3785e]/8 flex items-center justify-center mx-auto mb-4">
+                  <Mic className="w-6 h-6 text-[#a3785e]/60" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground mb-2">Voice-First</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">Speak naturally. Marcus listens deeply and responds with the weight of 2,000 years of Stoic wisdom.</p>
+              </div>
+              <div className="glass-strong rounded-2xl p-6 text-center">
+                <div className="w-12 h-12 rounded-xl bg-[#a3785e]/8 flex items-center justify-center mx-auto mb-4">
+                  <BookOpen className="w-6 h-6 text-[#a3785e]/60" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground mb-2">Stoic Library</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">Draws from Meditations, Seneca, Epictetus, Frankl, and more — woven into every conversation.</p>
+              </div>
+              <div className="glass-strong rounded-2xl p-6 text-center">
+                <div className="w-12 h-12 rounded-xl bg-[#a3785e]/8 flex items-center justify-center mx-auto mb-4">
+                  <Brain className="w-6 h-6 text-[#a3785e]/60" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground mb-2">Remembers You</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">Marcus remembers your struggles, patterns, and growth — each session builds on the last.</p>
+              </div>
+            </div>
+          </section>
 
-          <p className="text-[11px] mt-16 max-w-xs text-center leading-relaxed text-muted-foreground/50 italic">
-            &quot;Waste no more time arguing about what a good man should be. Be one.&quot;
-            <span className="block mt-1 not-italic text-muted-foreground/40">— Marcus Aurelius</span>
-          </p>
+          {/* Quote */}
+          <section className="max-w-2xl mx-auto px-6 pb-20 text-center">
+            <div className="glass-strong rounded-2xl p-8 border-[#a3785e]/10">
+              <p className="text-base italic text-foreground/70 leading-relaxed mb-3">
+                &quot;Waste no more time arguing about what a good man should be. Be one.&quot;
+              </p>
+              <p className="text-xs text-muted-foreground/50">— Marcus Aurelius, Meditations</p>
+            </div>
+          </section>
         </div>
       </div>
     );
   }
 
-  // ─── Loading ───
+  // ─── Checking Onboarding ───
   if (checkingOnboarding) {
     return (
       <div className="h-screen flex flex-col items-center justify-center relative gap-4">
@@ -190,6 +322,7 @@ export default function Home() {
     return (
       <div className="relative">
         <div className="ambient-bg" />
+        <NavBar />
         <div className="relative z-10">
           <OnboardingFlow userId={userId} onComplete={() => setOnboardingComplete(true)} />
         </div>
@@ -197,21 +330,16 @@ export default function Home() {
     );
   }
 
-  // ─── Main App ───
+  // ─── Main App (logged in) ───
   return (
     <div className="h-screen flex flex-col relative">
       <div className="ambient-bg" />
 
-      {/* Header */}
+      {/* App Header */}
       <header className="relative z-20 border-b border-border bg-white sticky top-0">
         <div className="flex items-center justify-between px-4 py-3 lg:px-6">
           <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="lg:hidden text-muted-foreground hover:text-foreground"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-            >
+            <Button variant="ghost" size="icon" className="lg:hidden text-muted-foreground hover:text-foreground" onClick={() => setSidebarOpen(!sidebarOpen)}>
               {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </Button>
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#a3785e]/12 to-[#a3785e]/4 border border-[#a3785e]/15 flex items-center justify-center">
@@ -223,41 +351,21 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Nav Tabs — ZAP-inspired pill */}
-          <div className="flex items-center gap-1 bg-secondary rounded-xl p-1 border border-border">
-            <button
-              onClick={() => { setView('voice'); setSelectedConvId(null); }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
-                view === 'voice'
-                  ? 'bg-white text-foreground shadow-sm border border-border'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Mic className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Speak</span>
+          <div className="flex items-center gap-3">
+            <button onClick={handleGoToAnalytics}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all border ${
+                view === 'analytics' || view === 'session-detail' ? 'bg-white text-foreground shadow-sm border-border' : 'text-muted-foreground hover:text-foreground border-transparent hover:border-border'
+              }`}>
+              <History className="w-3.5 h-3.5" /><span className="hidden sm:inline">Sessions</span>
             </button>
-            <button
-              onClick={handleGoToAnalytics}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
-                view === 'analytics' || view === 'session-detail'
-                  ? 'bg-white text-foreground shadow-sm border border-border'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <History className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Sessions</span>
+            <button onClick={handleNewSession} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-[#44403c] hover:bg-[#57534e] text-white transition-all shadow-sm">
+              <Plus className="w-4 h-4" /> New Session
             </button>
+            <div className="hidden sm:flex items-center gap-2 pl-3 border-l border-border ml-1">
+              <span className="text-[11px] text-muted-foreground">{userEmail}</span>
+              <button onClick={handleLogout} className="text-muted-foreground/50 hover:text-foreground transition-colors" title="Log out"><LogOut className="w-3.5 h-3.5" /></button>
+            </div>
           </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2 text-xs"
-            onClick={handleNewSession}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">New</span>
-          </Button>
         </div>
       </header>
 
@@ -277,7 +385,81 @@ export default function Home() {
           {view === 'session-detail' && selectedConvId ? (
             <ConversationView conversationId={selectedConvId} onBack={handleGoToAnalytics} />
           ) : view === 'analytics' ? (
-            <AnalyticsDashboard userId={userId} onStartSession={handleNewSession} onSelectSession={handleSelectSession} />
+            <AnalyticsDashboard userId={userId} onSelectSession={handleSelectSession} />
+          ) : view === 'session-notes' && sessionNotes ? (
+            /* ─── Session Notes (post end-session) ─── */
+            <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-8">
+              <div className="max-w-2xl mx-auto space-y-6 fade-in-up">
+                <div className="text-center mb-8">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#a3785e]/15 to-[#a3785e]/5 border border-[#a3785e]/20 flex items-center justify-center mx-auto mb-4">
+                    <span className="text-2xl font-light text-[#a3785e]">M</span>
+                  </div>
+                  <h2 className="text-xl font-semibold text-foreground">{sessionNotes.title || 'Session Complete'}</h2>
+                  {sessionNotes.mood && (
+                    <p className="text-xs text-muted-foreground/50 mt-1 uppercase tracking-wider">
+                      Mood: {sessionNotes.mood}
+                    </p>
+                  )}
+                </div>
+
+                {/* Summary */}
+                {sessionNotes.summary && (
+                  <div className="glass-strong rounded-2xl p-5">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-[#a3785e] mb-2">Summary</p>
+                    <p className="text-sm leading-relaxed text-foreground/80">{sessionNotes.summary}</p>
+                  </div>
+                )}
+
+                {/* Takeaways */}
+                {sessionNotes.takeaways && sessionNotes.takeaways.length > 0 && (
+                  <div className="glass-strong rounded-2xl p-5">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-[#a3785e] mb-3">Key Takeaways</p>
+                    <ul className="space-y-2">
+                      {sessionNotes.takeaways.map((t, i) => (
+                        <li key={i} className="flex gap-2.5 text-sm text-foreground/80">
+                          <span className="text-[#a3785e]/60 mt-0.5">→</span>
+                          <span>{t}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Pondering Topics */}
+                {sessionNotes.pondering_topics && sessionNotes.pondering_topics.length > 0 && (
+                  <div className="glass-strong rounded-2xl p-5 border border-[#a3785e]/10">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-[#a3785e] mb-3">Before Next Session — Ponder These</p>
+                    <div className="space-y-3">
+                      {sessionNotes.pondering_topics.map((t, i) => (
+                        <div key={i} className="flex gap-2.5 text-sm text-muted-foreground italic">
+                          <span className="text-[#a3785e]/50 mt-0.5 not-italic">✦</span>
+                          <span>{t}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Stoic Principle */}
+                {sessionNotes.stoic_principle && (
+                  <div className="text-center py-4">
+                    <p className="text-[11px] text-muted-foreground/40 uppercase tracking-wider mb-1">Stoic Principle</p>
+                    <p className="text-sm font-medium text-foreground/70">{sessionNotes.stoic_principle}</p>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="pt-4">
+                  <button
+                    onClick={handleGoToAnalytics}
+                    className="w-full h-12 rounded-xl flex items-center justify-center gap-2 text-sm font-medium border border-border text-foreground/70 hover:bg-secondary transition-all"
+                  >
+                    <History className="w-4 h-4" />
+                    Back to Dashboard
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : (
             /* ─── Voice UI ─── */
             <div className="flex-1 flex flex-col h-full">
@@ -365,6 +547,22 @@ export default function Home() {
                       {statusLabel[state]}
                     </p>
                   </div>
+                  {/* End Session button — only visible when there are transcripts */}
+                  {(transcripts.length > 0 || openingMessage) && conversationId && (
+                    <div className="flex justify-center mt-2">
+                      <button
+                        onClick={handleEndSession}
+                        disabled={endingSession}
+                        className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-secondary transition-all disabled:opacity-50"
+                      >
+                        {endingSession ? (
+                          <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Ending session…</>
+                        ) : (
+                          <><Send className="w-3.5 h-3.5" /> End Session</>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

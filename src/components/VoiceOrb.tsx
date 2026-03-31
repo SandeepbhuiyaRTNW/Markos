@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Mic, Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -28,6 +28,49 @@ export default function VoiceOrb({
   const chunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // ─── REFS to avoid stale closures in MediaRecorder callbacks ───
+  // Without these, startRecording's useCallback captures stale values
+  // and every voice message would create a new session (conversationId = null).
+  const conversationIdRef = useRef(conversationId);
+  const userIdRef = useRef(userId);
+  const onConversationIdRef = useRef(onConversationId);
+  const onTranscriptRef = useRef(onTranscript);
+  const onStateChangeRef = useRef(onStateChange);
+
+  useEffect(() => { conversationIdRef.current = conversationId; }, [conversationId]);
+  useEffect(() => { userIdRef.current = userId; }, [userId]);
+  useEffect(() => { onConversationIdRef.current = onConversationId; }, [onConversationId]);
+  useEffect(() => { onTranscriptRef.current = onTranscript; }, [onTranscript]);
+  useEffect(() => { onStateChangeRef.current = onStateChange; }, [onStateChange]);
+
+  const sendAudio = useCallback(async (audioBlob: Blob) => {
+    try {
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'recording.webm');
+      formData.append('userId', userIdRef.current);
+      if (conversationIdRef.current) formData.append('conversationId', conversationIdRef.current);
+      const res = await fetch('/api/conversation', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      const convId = res.headers.get('X-Conversation-Id');
+      if (convId && !conversationIdRef.current) {
+        conversationIdRef.current = convId;
+        onConversationIdRef.current(convId);
+      }
+      const userText = decodeURIComponent(res.headers.get('X-User-Text') || '');
+      const marcusText = decodeURIComponent(res.headers.get('X-Marcus-Text') || '');
+      onTranscriptRef.current(userText, marcusText);
+      const audioBuffer = await res.arrayBuffer();
+      const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
+      const url = URL.createObjectURL(blob);
+      if (audioRef.current) audioRef.current.pause();
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      onStateChangeRef.current('speaking');
+      audio.onended = () => { onStateChangeRef.current('idle'); URL.revokeObjectURL(url); };
+      await audio.play();
+    } catch (err) { console.error('Send audio error:', err); onStateChangeRef.current('idle'); }
+  }, []);
+
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -41,42 +84,17 @@ export default function VoiceOrb({
       };
       mediaRecorder.start();
       setIsRecording(true);
-      onStateChange('listening');
+      onStateChangeRef.current('listening');
     } catch (err) { console.error('Mic access error:', err); }
-  }, [onStateChange]);
+  }, [sendAudio]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      onStateChange('processing');
+      onStateChangeRef.current('processing');
     }
-  }, [isRecording, onStateChange]);
-
-  const sendAudio = async (audioBlob: Blob) => {
-    try {
-      const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.webm');
-      formData.append('userId', userId);
-      if (conversationId) formData.append('conversationId', conversationId);
-      const res = await fetch('/api/conversation', { method: 'POST', body: formData });
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-      const convId = res.headers.get('X-Conversation-Id');
-      if (convId && !conversationId) onConversationId(convId);
-      const userText = decodeURIComponent(res.headers.get('X-User-Text') || '');
-      const marcusText = decodeURIComponent(res.headers.get('X-Marcus-Text') || '');
-      onTranscript(userText, marcusText);
-      const audioBuffer = await res.arrayBuffer();
-      const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
-      const url = URL.createObjectURL(blob);
-      if (audioRef.current) audioRef.current.pause();
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      onStateChange('speaking');
-      audio.onended = () => { onStateChange('idle'); URL.revokeObjectURL(url); };
-      await audio.play();
-    } catch (err) { console.error('Send audio error:', err); onStateChange('idle'); }
-  };
+  }, [isRecording]);
 
   const handleClick = () => { isRecording ? stopRecording() : startRecording(); };
 

@@ -13,11 +13,11 @@ export async function synthesizeSpeech(text: string): Promise<Buffer> {
       },
       body: JSON.stringify({
         text,
-        model_id: 'eleven_monolingual_v1',
+        model_id: 'eleven_multilingual_v2',
         voice_settings: {
-          stability: 0.71,
-          similarity_boost: 0.75,
-          style: 0.0,
+          stability: 0.65,
+          similarity_boost: 0.78,
+          style: 0.15,
           use_speaker_boost: true,
         },
       }),

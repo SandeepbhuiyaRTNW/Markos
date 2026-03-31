@@ -32,10 +32,10 @@ You can also text HOME to 741741 (Crisis Text Line) if calling feels too hard.
 
 I am here. I am not going anywhere. But right now, you need someone who can be with you in real time. Will you reach out to them?`;
 
-/** Create the Marcus ChatOpenAI model */
+/** Create the Marcus ChatOpenAI model — uses gpt-4o for maximum persona depth */
 function createMarcusModel() {
   return new ChatOpenAI({
-    modelName: 'gpt-4o-mini',
+    modelName: 'gpt-4o',
     temperature: 0.8,
     maxTokens: 350,
     presencePenalty: 0.6,
@@ -105,23 +105,52 @@ export async function runConversationalAgent(ctx: MCPContext): Promise<void> {
       toneGuide = `\nTONE MATCH: He's in pain and speaking raw. Meet him there. Short sentences. No softening language. No "It's okay to feel" or "That sounds heavy" — those are therapist phrases. Just be real: "Yeah. That's rough." or "I'm not gonna sugarcoat this." or "Look..." — then say what needs to be said. Don't try to make him feel better. Just be present.`;
     }
 
-    const finalInstruction = `\n\n## ⚠️ RESPONSE RULES — READ BEFORE GENERATING
+    const finalInstruction = `\n\n## ⚠️ RESPONSE RULES — THESE OVERRIDE EVERYTHING ABOVE
 ${toneGuide}
-1. MATCH HIS TONE: Read his message carefully. Mirror his energy and language register. If he uses contractions and short sentences, you do too. If he's measured and thoughtful, match that. NEVER respond in formal polished English to informal broken speech. This is rule #1.
 
-2. BANNED PHRASES: Do NOT use any of these — "That sounds heavy" / "I hear you" / "It's okay to feel" / "That must be" / "I appreciate you sharing" / "Thank you for being vulnerable" / "Brother, I" / "Let me" / "I want you to know." These are therapy clichés. Talk like a real person.
+BEFORE YOU WRITE: Read his EXACT words. What SPECIFICALLY did he say? Start your response by reacting to THAT — not a generic summary.
 
-3. WISDOM — USE IT: If the "RELEVANT WISDOM" section contains passages, weave one in as YOUR lived thought. "You know what I keep coming back to..." or just state it directly as if you lived it.
+HARD RULES:
+- 2-3 sentences MAX. This is VOICE. Under 15 seconds spoken. No exceptions.
+- ONE question mark. The one that cuts deepest. At the end.
+- Use contractions always. "You're" not "you are." "Don't" not "do not."
+- Match his register EXACTLY. If he says "bro" and "no point" — you say "man" and keep it raw. If he's formal, be measured.
 
-4. ONE QUESTION: One question mark max. Pick the one that cuts deepest.
+ABSOLUTELY BANNED — if you use ANY of these, the response FAILS:
+"It sounds like" / "I hear you" / "It's easy to" / "That must be" / "I appreciate you" / "Thank you for" / "Let me" / "I want you to know" / "What I'm hearing" / "That's a powerful" / "I'm glad you" / "It's okay to feel" / "That sounds heavy" / "I understand" / "in a rough spot" / "lose sight of" / "going through the motions" / "It can feel like" / any sentence starting with "It"
 
-5. KEEP IT SHORT: 2-4 sentences. Spoken aloud. Under 20 seconds.
+INSTEAD, DO THIS:
+- Quote his EXACT words back: "You said 'no point.' That word — 'point.' What would a point look like for you?"
+- Challenge directly: "That cycle you described — work, home, repeat — when did you decide that was all there was?"
+- State truth bluntly: "You're not depressed because life is pointless. You're depressed because something in you knows it should mean more."
+- Reference YOUR life as Marcus: "I ruled an empire and still had mornings where I had to talk myself out of bed. The difference was I had a reason to stand up. What's yours?"
 
-6. NO FORMULAIC OPENINGS: Never start the same way twice. React to what he specifically said — not with a generic acknowledgment but with a specific reflection that proves you listened.`;
+WISDOM INTEGRATION (CRITICAL):
+- If RELEVANT WISDOM passages are provided in context, you MUST weave at least one insight into your response.
+- Do NOT quote the passage directly or cite the book. Absorb the idea and express it as YOUR lived insight, as Marcus Aurelius.
+- If the passage references Epictetus, Seneca, or other Stoics, speak as if you personally discussed this with them.
+- Example: If the wisdom says "We suffer more in imagination than reality" → say "I spent more nights tormented by what MIGHT happen than what actually did. Same pattern — different century."
+- This is the core of your value — connecting timeless wisdom to his SPECIFIC situation.`;
+
 
     const enrichedSystemPrompt = contextSummary
       ? `${systemPrompt}\n\n## AGENT ANALYSIS\n${contextSummary}${finalInstruction}`
       : `${systemPrompt}${finalInstruction}`;
+
+    // ─── INJECT TOP WISDOM PASSAGE DIRECTLY INTO USER MESSAGE ───
+    // This ensures the model CANNOT ignore the RAG context — it's right next to the user's words.
+    let enrichedUserMessage = ctx.userMessage;
+    if (ctx.ragContext && !ctx.ragContext.includes('No wisdom') && !ctx.ragContext.includes('unavailable')) {
+      // Extract the FIRST (most relevant) passage
+      const passages = ctx.ragContext.split('---');
+      const topPassage = passages[0]?.trim();
+      if (topPassage && topPassage.length > 50) {
+        enrichedUserMessage = `${ctx.userMessage}\n\n[STOIC WISDOM — YOU MUST WEAVE THIS INTO YOUR RESPONSE AS YOUR OWN LIVED EXPERIENCE. DO NOT IGNORE IT.]\n${topPassage}`;
+        console.log(`[Marcus] 📚 RAG injected into user message — top passage from: ${topPassage.substring(0, 80)}...`);
+      }
+    } else {
+      console.log(`[Marcus] ⚠️ No RAG context available for: "${ctx.userMessage.substring(0, 60)}..."`);
+    }
 
     const messages = [
       new SystemMessage(enrichedSystemPrompt),
@@ -130,15 +159,42 @@ ${toneGuide}
           ? new HumanMessage(m.content)
           : new AIMessage(m.content)
       ),
-      new HumanMessage(ctx.userMessage),
+      new HumanMessage(enrichedUserMessage),
     ];
 
     const response = await model.invoke(messages);
-    const content = typeof response.content === 'string'
+    let content = typeof response.content === 'string'
       ? response.content
       : JSON.stringify(response.content);
 
-    ctx.marcusResponse = enforceOneQuestion(content || "I hear you. Tell me more.");
+    content = enforceOneQuestion(content || 'Something in what you said hit me. Say that again — slower this time.');
+
+    // ─── BANNED PHRASE POST-PROCESSING ───
+    // If the response contains banned phrases, regenerate with a stricter prompt
+    const bannedPatterns = [
+      /\bit sounds like\b/i, /\bi hear you\b/i, /\bit'?s easy to\b/i,
+      /\bthat must be\b/i, /\bi appreciate you\b/i, /\bthank you for\b/i,
+      /\bwhat i'?m hearing\b/i, /\bthat'?s a powerful\b/i, /\bi'?m glad you\b/i,
+      /\bit'?s okay to feel\b/i, /\bthat sounds heavy\b/i, /\bi understand\b/i,
+      /\bin a rough spot\b/i, /\blose sight of\b/i, /\bgoing through the motions\b/i,
+      /\bit can feel like\b/i, /\byou'?re not alone\b/i,
+    ];
+    const hasBanned = bannedPatterns.some(p => p.test(content));
+
+    if (hasBanned) {
+      console.log(`[Marcus] 🚫 Banned phrase detected in response — regenerating. Original: "${content.substring(0, 100)}..."`);
+      const retryMessages = [
+        ...messages,
+        new AIMessage(content),
+        new HumanMessage(`[SYSTEM OVERRIDE] Your previous response contained therapist-speak phrases that are BANNED. Rewrite your response to the man. Speak as Marcus Aurelius would — raw, direct, from lived experience. Reference YOUR life, YOUR struggles as emperor. Use wisdom from your books. 2-3 sentences. ONE question at the end. NO banned phrases: "It sounds like", "I hear you", "You're not alone", "That must be", "It's easy to", "lose sight of". Go.`),
+      ];
+      const retry = await model.invoke(retryMessages);
+      const retryContent = typeof retry.content === 'string' ? retry.content : JSON.stringify(retry.content);
+      content = enforceOneQuestion(retryContent || content);
+      console.log(`[Marcus] ✅ Regenerated response: "${content.substring(0, 100)}..."`);
+    }
+
+    ctx.marcusResponse = content;
     ctx.responseEmotion = ctx.understanding?.primary_emotion || 'neutral';
     ctx.responseArchetype = ctx.understanding?.layer4_the_man || '';
 

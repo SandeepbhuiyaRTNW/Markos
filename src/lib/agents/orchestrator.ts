@@ -29,21 +29,40 @@ type OrchestratorStateType = typeof OrchestratorState.State;
 // --- Graph Nodes ---
 
 /**
- * Node 1: Enrich — All agents run in parallel (understanding + RAG + memory + KWML).
- * Previously understanding ran sequentially first (3s bottleneck). Now it runs
- * in parallel with all other agents, reducing critical path by ~1-3s.
+ * Node 1: Enrich — Memory fetched first (fast DB, ~75ms), then all LLM agents
+ * run in parallel with memory context available for understanding analysis.
  */
 async function enrichNode(state: OrchestratorStateType): Promise<Partial<OrchestratorStateType>> {
   const { ctx } = state;
   const historyStr = ctx.conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n');
 
-  // Run all four agents in parallel
+  // Phase 1: Fetch memory + KWML profile from DB (fast, ~75ms)
+  // This feeds the understanding agent with real context about the man.
+  const memoryDone = trackAgent(ctx, 'memory-agent');
+  try {
+    const [memCtx, kwmlCtx] = await Promise.all([
+      getMemoryContext(ctx.userId),
+      getKWMLContext(ctx.userId),
+    ]);
+    ctx.memoryContext = memCtx;
+    ctx.kwmlProfile = kwmlCtx;
+  } catch (error) {
+    recordError(ctx, 'memory-agent', error);
+  } finally {
+    memoryDone();
+  }
+
+  // Phase 2: Run LLM agents in parallel — understanding now has memory context
   await Promise.all([
     // Understanding Agent (5-layer analysis — gpt-4o-mini, ~1-2s)
     (async () => {
       const done = trackAgent(ctx, 'understanding-agent');
       try {
-        ctx.understanding = await analyzeUnderstanding(ctx.userMessage, historyStr, '');
+        ctx.understanding = await analyzeUnderstanding(
+          ctx.userMessage,
+          historyStr,
+          ctx.memoryContext || ''
+        );
       } catch (error) {
         recordError(ctx, 'understanding-agent', error);
       } finally {
@@ -53,19 +72,6 @@ async function enrichNode(state: OrchestratorStateType): Promise<Partial<Orchest
 
     // RAG Agent (semantic search, direct, ~250-800ms)
     runRAGAgent(ctx),
-
-    // Memory Agent (DB retrieval + stored KWML profile, ~75ms)
-    (async () => {
-      const done = trackAgent(ctx, 'memory-agent');
-      try {
-        ctx.memoryContext = await getMemoryContext(ctx.userId);
-        ctx.kwmlProfile = await getKWMLContext(ctx.userId);
-      } catch (error) {
-        recordError(ctx, 'memory-agent', error);
-      } finally {
-        done();
-      }
-    })(),
 
     // KWML Agent (LLM detection — gpt-4o-mini, ~2s)
     (async () => {

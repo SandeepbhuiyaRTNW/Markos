@@ -1,24 +1,30 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Mic, MessageSquare, BarChart2, Flame, ChevronRight } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Mic, MessageSquare, BarChart2, Flame, ChevronRight, Lightbulb, BookOpen } from 'lucide-react';
 
 interface Topic { label: string; count: number; }
+interface WeeklyUsage { week: string; sessions: number; }
+interface LastSessionNotes {
+  title: string; summary: string; takeaways: string[];
+  pondering_topics: string[]; stoic_principle: string; mood: string;
+}
 interface SessionRow {
   id: string; started_at: string; summary: string | null;
   first_message: string | null; message_count: number;
-  session_number: number; metadata: Record<string, unknown>;
+  session_number: number; session_ended: boolean;
+  metadata: Record<string, unknown>;
 }
 interface AnalyticsData {
   totalSessions: number; totalMessages: number;
   topics: Topic[]; conversations: SessionRow[];
+  weeklyUsage: WeeklyUsage[]; lastSessionNotes: LastSessionNotes | null;
 }
 interface AnalyticsDashboardProps {
-  userId: string; onStartSession: () => void; onSelectSession: (id: string) => void;
+  userId: string; onSelectSession: (id: string) => void;
 }
 
-export default function AnalyticsDashboard({ userId, onStartSession, onSelectSession }: AnalyticsDashboardProps) {
+export default function AnalyticsDashboard({ userId, onSelectSession }: AnalyticsDashboardProps) {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -48,13 +54,51 @@ export default function AnalyticsDashboard({ userId, onStartSession, onSelectSes
     return `Session ${s.session_number}`;
   };
 
-  const mainTopics = data?.topics.slice(0, 3) ?? [];
-  const floatingTopics = data?.topics.slice(3, 12) ?? [];
+  const maxWeekly = Math.max(...(data?.weeklyUsage?.map(w => w.sessions) ?? [1]), 1);
+  const allTopics = data?.topics ?? [];
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-5 py-8 space-y-8 fade-in-up">
+
+          {/* Welcome / last session pondering */}
+          {data?.lastSessionNotes && (
+            <div className="glass-strong rounded-2xl p-5 fade-in-scale">
+              <div className="flex items-center gap-2 mb-3">
+                <Lightbulb className="w-4 h-4 text-[#a3785e]" />
+                <span className="text-xs font-semibold uppercase tracking-widest text-[#a3785e]">
+                  From Your Last Session
+                </span>
+              </div>
+              <p className="text-sm leading-relaxed text-foreground/80 mb-3">
+                {data.lastSessionNotes.summary}
+              </p>
+              {data.lastSessionNotes.pondering_topics?.length > 0 && (
+                <div className="space-y-2 mt-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+                    Things to ponder
+                  </p>
+                  {data.lastSessionNotes.pondering_topics.map((t, i) => (
+                    <div key={i} className="flex gap-2.5 text-sm text-muted-foreground">
+                      <span className="text-[#a3785e]/60 mt-0.5">→</span>
+                      <span className="italic">{t}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {data.lastSessionNotes.stoic_principle && (
+                <div className="mt-3 pt-3 border-t border-border/30">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-3.5 h-3.5 text-[#a3785e]/50" />
+                    <span className="text-[11px] text-muted-foreground/50">
+                      Stoic Principle: <span className="text-foreground/70">{data.lastSessionNotes.stoic_principle}</span>
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Stats row */}
           <div className="grid grid-cols-2 gap-3">
@@ -82,36 +126,66 @@ export default function AnalyticsDashboard({ userId, onStartSession, onSelectSes
             </div>
           </div>
 
-          {/* Main topics */}
-          {mainTopics.length > 0 && (
+          {/* Weekly Usage Graph */}
+          {(data?.weeklyUsage?.length ?? 0) > 0 && (
             <div className="space-y-3">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/40 flex items-center gap-2">
-                <Flame className="w-3.5 h-3.5 text-[#a3785e]/50" /> Key Themes
+                <BarChart2 className="w-3.5 h-3.5 text-[#a3785e]/50" /> Weekly Activity
               </p>
-              <div className="space-y-2">
-                {mainTopics.map((t, i) => (
-                  <div key={i} className="glass-card px-4 py-3 flex items-center justify-between group">
-                    <span className="text-sm text-foreground/90">{t.label}</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#a3785e]/8 text-[#a3785e]/70 font-mono">
-                      {t.count}×
-                    </span>
-                  </div>
-                ))}
+              <div className="glass-card px-4 py-4">
+                <div className="flex items-end gap-2 h-20">
+                  {(data?.weeklyUsage ?? []).map((w, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                      <span className="text-[10px] text-muted-foreground/50 font-mono">{w.sessions}</span>
+                      <div
+                        className="w-full rounded-t-md bg-gradient-to-t from-[#a3785e]/40 to-[#a3785e]/20 transition-all"
+                        style={{ height: `${Math.max((w.sessions / maxWeekly) * 56, 4)}px` }}
+                      />
+                      <span className="text-[9px] text-muted-foreground/30">
+                        {new Date(w.week).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
 
-          {/* Floating tags */}
-          {floatingTopics.length > 0 && (
+          {/* Topic Distribution */}
+          {allTopics.length > 0 && (
             <div className="space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/40">Also Explored</p>
-              <div className="flex flex-wrap gap-2">
-                {floatingTopics.map((t, i) => (
-                  <span key={i} className="px-3 py-1 rounded-full text-xs border border-border/50 text-muted-foreground/60 bg-secondary/30 hover:bg-secondary/60 transition-colors cursor-default">
-                    {t.label}
-                  </span>
-                ))}
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/40 flex items-center gap-2">
+                <Flame className="w-3.5 h-3.5 text-[#a3785e]/50" /> Conversation Themes
+              </p>
+              <div className="glass-card px-4 py-4 space-y-3">
+                {allTopics.slice(0, 6).map((t, i) => {
+                  const maxCount = allTopics[0]?.count ?? 1;
+                  const pct = Math.max((t.count / maxCount) * 100, 8);
+                  return (
+                    <div key={i} className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-foreground/80">{t.label}</span>
+                        <span className="text-[10px] text-muted-foreground/50 font-mono">{t.count}×</span>
+                      </div>
+                      <div className="h-1.5 bg-secondary/50 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-[#a3785e]/60 to-[#a3785e]/30 transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
+              {allTopics.length > 6 && (
+                <div className="flex flex-wrap gap-2">
+                  {allTopics.slice(6, 15).map((t, i) => (
+                    <span key={i} className="px-3 py-1 rounded-full text-xs border border-border/50 text-muted-foreground/60 bg-secondary/30">
+                      {t.label}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -160,17 +234,6 @@ export default function AnalyticsDashboard({ userId, onStartSession, onSelectSes
         </div>
       </div>
 
-      {/* Start Session CTA */}
-      <div className="p-5 border-t border-border bg-white">
-        <button
-          onClick={onStartSession}
-          className="w-full h-13 rounded-xl flex items-center justify-center gap-3 text-sm font-medium bg-[#44403c] hover:bg-[#57534e] text-white transition-all"
-        >
-          <Mic className="w-4 h-4" />
-          Start Session
-        </button>
-      </div>
     </div>
   );
 }
-
