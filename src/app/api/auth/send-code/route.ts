@@ -3,11 +3,11 @@ import { query } from '@/lib/db';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 
 const ses = new SESv2Client({
-  region: process.env.APP_AWS_REGION || process.env.AWS_REGION || 'us-east-1',
-  ...(process.env.AWS_ACCESS_KEY_ID_SES ? {
+  region: process.env.SES_REGION || 'us-east-1',
+  ...(process.env.SES_ACCESS_KEY_ID ? {
     credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID_SES,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY_SES || '',
+      accessKeyId: process.env.SES_ACCESS_KEY_ID,
+      secretAccessKey: process.env.SES_SECRET_ACCESS_KEY || '',
     },
   } : {}),
 });
