@@ -8,9 +8,29 @@
 
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
+import OpenAI from 'openai';
 import { buildSystemPrompt } from '../agent/system-prompt';
 import type { MCPContext } from './mcp-context';
 import { trackAgent, recordError, buildContextSummary } from './mcp-context';
+
+const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+/** Cosine similarity between two vectors */
+function cosineSim(a: number[], b: number[]): number {
+  let dot = 0, magA = 0, magB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i]; magA += a[i] * a[i]; magB += b[i] * b[i];
+  }
+  return dot / (Math.sqrt(magA) * Math.sqrt(magB) + 1e-10);
+}
+
+/** Get small embedding for similarity check (fast, 256-dim) */
+async function getSmallEmbedding(text: string): Promise<number[]> {
+  const resp = await openaiClient.embeddings.create({
+    model: 'text-embedding-3-small', input: text, dimensions: 256,
+  });
+  return resp.data[0].embedding;
+}
 
 /** Crisis keywords that must trigger safety-first response */
 const CRISIS_PATTERNS = [
@@ -105,19 +125,70 @@ export async function runConversationalAgent(ctx: MCPContext): Promise<void> {
       toneGuide = `\nTONE MATCH: He's in pain and speaking raw. Meet him there. Short sentences. No softening language. No "It's okay to feel" or "That sounds heavy" — those are therapist phrases. Just be real: "Yeah. That's rough." or "I'm not gonna sugarcoat this." or "Look..." — then say what needs to be said. Don't try to make him feel better. Just be present.`;
     }
 
-    // Detect pushback / loop / sustained hopelessness from conversation history
+    // ─── CONVERSATION STATE ANALYSIS ───
     const recentHistory = ctx.conversationHistory.slice(-10);
+    const allUserMessages = ctx.conversationHistory.filter(m => m.role === 'user').map(m => m.content.toLowerCase());
     const recentUserMessages = recentHistory.filter(m => m.role === 'user').map(m => m.content.toLowerCase());
     const recentMarcusMessages = recentHistory.filter(m => m.role === 'assistant').map(m => m.content.toLowerCase());
+    const totalUserTurns = allUserMessages.length;
 
+    // Phase detection: Understand → Align → Suggest
+    const adviceRequestPhrases = ['what should i do', 'tell me what to do', 'give me', 'can you suggest',
+      'what do you recommend', 'what would you do', 'help me figure out', 'i need a plan',
+      'any advice', 'what do i do', 'how do i fix', 'how should i'];
+    const userAskedForAdvice = recentUserMessages.some(m => adviceRequestPhrases.some(p => m.includes(p)));
+    const userAskedRepeatedlyForAdvice = recentUserMessages.filter(m => adviceRequestPhrases.some(p => m.includes(p))).length >= 2;
+
+    // Phase 1: Understand (first 4 turns OR until situation is clear)
+    // Phase 2: Align (situation discussed, checking if direction wanted)
+    // Phase 3: Suggest (he explicitly asked for direction 2+ times, or conversation is deep enough)
+    let conversationPhase: 'understand' | 'align' | 'suggest';
+    if (totalUserTurns <= 3 && !userAskedRepeatedlyForAdvice) {
+      conversationPhase = 'understand';
+    } else if (userAskedRepeatedlyForAdvice || (totalUserTurns >= 6 && userAskedForAdvice)) {
+      conversationPhase = 'suggest';
+    } else {
+      conversationPhase = 'align';
+    }
+
+    // Pushback detection (lexical — fast, reliable for explicit rejection)
     const pushbackPhrases = ['doesn\'t help', 'doesn\'t change', 'still feels', 'that\'s still', 'you keep', 'stop asking', 'don\'t have answers', 'can\'t think of', 'doesn\'t really', 'general advice', 'pretty vague'];
-    const hopelessPhrases = ['nothing works', 'nothing helps', 'feel nothing', 'feel empty', 'feels empty',
-      'everything is pointless', 'pointless', 'don\'t feel anything', 'don\'t feel connected',
-      'don\'t care', 'what\'s the point', 'no point', 'can\'t do this', 'doesn\'t change',
-      'doesn\'t help', 'don\'t have answers', 'still depressed', 'still feel', 'what should i do'];
-
     const pushbackCount = recentUserMessages.filter(m => pushbackPhrases.some(p => m.includes(p))).length;
-    const hopelessCount = recentUserMessages.filter(m => hopelessPhrases.some(p => m.includes(p))).length;
+
+    // Hopelessness detection — semantic (catches paraphrases like "I don't see the point anymore")
+    const hopelessAnchors = [
+      'Nothing matters and I feel completely empty inside',
+      'Everything is pointless and I want to give up',
+      'I feel nothing at all and I can\'t go on',
+      'There\'s no point to any of this anymore',
+      'I don\'t care about anything and nothing helps',
+      'Why bother trying when nothing ever changes',
+      'I\'ve tried everything and nothing works',
+      'I don\'t see the point in trying anymore',
+      'Everything I do leads to the same empty feeling',
+      'Nothing seems to work no matter what I do',
+    ];
+    let hopelessCount = 0;
+    try {
+      if (recentUserMessages.length > 0) {
+        const allTexts = [...recentUserMessages, ...hopelessAnchors];
+        const embResp = await openaiClient.embeddings.create({
+          model: 'text-embedding-3-small', input: allTexts, dimensions: 256,
+        });
+        const userEmbs = embResp.data.slice(0, recentUserMessages.length).map(d => d.embedding);
+        const anchorEmbs = embResp.data.slice(recentUserMessages.length).map(d => d.embedding);
+        for (const userEmb of userEmbs) {
+          const maxSim = Math.max(...anchorEmbs.map(a => cosineSim(userEmb, a)));
+          if (maxSim > 0.55) hopelessCount++; // 0.55 threshold — broader semantic match
+        }
+      }
+    } catch {
+      // Fallback to lexical if embedding fails
+      const hopelessPhrases = ['nothing works', 'nothing helps', 'feel nothing', 'feel empty',
+        'everything is pointless', 'pointless', 'don\'t feel anything', 'don\'t care',
+        'what\'s the point', 'no point', 'still depressed'];
+      hopelessCount = recentUserMessages.filter(m => hopelessPhrases.some(p => m.includes(p))).length;
+    }
     const marcusAdviceCount = recentMarcusMessages.filter(m =>
       m.includes('try ') || m.includes('start ') || m.includes('step') || m.includes('do this') ||
       m.includes('here\'s') || m.includes('minute') || m.includes('first,') || m.includes('breathe')
@@ -126,17 +197,19 @@ export async function runConversationalAgent(ctx: MCPContext): Promise<void> {
     let loopBreaker = '';
     if (pushbackCount >= 2) {
       loopBreaker = `\n\n🚨 PUSHBACK DETECTED — HE HAS REJECTED YOUR APPROACH ${pushbackCount} TIMES.
-STOP doing what you've been doing. Your current approach is NOT working. Do NOT:
-- Give another piece of advice or action step
-- Ask another "what's one thing you can do?" question
-- Suggest breathing, walking, or making his bed
-- Offer a minute-by-minute plan
+STOP doing what you've been doing. Your current approach is NOT working.
 
-INSTEAD, DO ONE OF THESE:
-1. ACKNOWLEDGE THE FAILURE: "Look, I keep throwing things at you and none of it's landing. That's on me, not you."
-2. SIT IN THE EMPTINESS WITH HIM: "You don't need to have an answer. You don't need to DO anything right now. Sometimes the honest response to 'everything feels empty' is just... yeah. It does."
-3. GO DEEPER, NOT WIDER: Instead of offering more solutions, ask about the emptiness itself: "When did it start feeling like this?" or "Was there a moment it shifted, or has it been building?"
-4. NAME WHAT YOU SEE: "You've pushed back on everything I've offered. That tells me something — you're not looking for a fix. What ARE you looking for right now?"`;
+YOU MUST START YOUR RESPONSE BY ACKNOWLEDGING THE SHIFT. Use ONE of these openers:
+- "Look, what I've been offering isn't landing. Let me come at this differently."
+- "I keep going the wrong direction here. Let me stop and actually listen."
+- "Alright, I hear you — that's not what you need. Let's back up."
+
+Then do ONE of these:
+1. SIT IN IT WITH HIM: "You don't need to DO anything right now. Sometimes 'everything feels empty' is just the truth. And that's where we start."
+2. GO DEEPER: Ask about the emptiness itself — "When did this start?" or "Was there a moment it shifted, or has it been building?"
+3. NAME THE PATTERN: "You've pushed back on everything I've offered. That tells me you're not looking for a fix. What ARE you looking for?"
+
+Do NOT: give advice, suggest actions, ask "what's one thing you can do?", or offer plans.`;
     }
 
     if (hopelessCount >= 3) {
@@ -169,12 +242,19 @@ HARD RULES:
 - Use contractions always. "You're" not "you are." "Don't" not "do not."
 - Match his register EXACTLY. If he says "bro" and "no point" — you say "man" and keep it raw. If he's formal, be measured.
 
-NEVER GIVE ADVICE. This is the #1 rule. Marcus is NOT a life coach. Marcus does NOT tell men what to do.
-- NEVER say: "Try this" / "Start with" / "Here's what to do" / "Step 1" / "Make your bed" / "Go for a walk" / "Take a breath"
-- NEVER offer action plans, to-do lists, minute-by-minute instructions, or "one small thing" suggestions
-- When he asks "what should I do?" — do NOT answer the question. Instead, explore what's underneath: "Before we get to what to do — what happened that made you stop knowing?"
-- When he says "just tell me what to do" — that IS the material. "The fact that you want someone to hand you a plan — what does that tell you about where you are right now?"
-- The ONLY acceptable "advice" is: suggesting professional help when safety is at risk.
+ADVICE RULES — PHASE-BASED (current phase: ${conversationPhase.toUpperCase()}):
+${conversationPhase === 'understand' ? `PHASE 1: UNDERSTAND — You are still learning what's going on. Do NOT give advice, suggestions, or action steps.
+- If he asks "what should I do?" → explore first: "Before we get to what to do — what happened that made you stop knowing?"
+- Your ONLY job right now: ask questions, listen, understand. No fixes.` :
+conversationPhase === 'align' ? `PHASE 2: ALIGN — You have context. He may or may not want direction. Do NOT give unsolicited advice.
+- If he asks for advice → first check alignment: "I have a thought on that. Want to hear it, or do you need to keep talking this through?"
+- If he says yes → give ONE bounded suggestion, framed as your experience, not a prescription: "When I faced something similar, what helped me was..." then ask how that lands.
+- If he doesn't ask → keep exploring. Don't volunteer fixes.` :
+`PHASE 3: SUGGEST — He has asked for direction multiple times. You may offer bounded advice.
+- Frame as YOUR experience, not prescriptions: "Here's what I'd do in your position..." or "Something that worked for me..."
+- Give ONE concrete suggestion, then immediately ask how it lands: "Does that feel right, or is that off?"
+- If he pushes back → return to Phase 2 immediately. Don't double down.
+- STILL banned: minute-by-minute plans, to-do lists, multi-step action plans. Keep suggestions singular and grounded.`}
 
 ABSOLUTELY BANNED — if you use ANY of these words or phrases, the response FAILS:
 "It sounds like" / "I hear you" / "It's easy to" / "That must be" / "I appreciate you" / "Thank you for" / "Let me" / "I want you to know" / "What I'm hearing" / "That's a powerful" / "I'm glad you" / "It's okay to feel" / "That sounds heavy" / "I understand" / "in a rough spot" / "lose sight of" / "going through the motions" / "It can feel like" / any sentence starting with "It"
@@ -279,6 +359,32 @@ WISDOM INTEGRATION (CRITICAL):
       const retryContent = typeof retry.content === 'string' ? retry.content : JSON.stringify(retry.content);
       content = enforceOneQuestion(retryContent || content);
       console.log(`[Marcus] ✅ Regenerated response: "${content.substring(0, 100)}..."`);
+    }
+
+    // ─── SEMANTIC DEDUPLICATION ───
+    // Compare response to recent Marcus messages — if too similar, regenerate
+    if (recentMarcusMessages.length >= 2) {
+      try {
+        const [currentEmb, ...prevEmbs] = await Promise.all([
+          getSmallEmbedding(content),
+          ...recentMarcusMessages.slice(-3).map(m => getSmallEmbedding(m)),
+        ]);
+        const maxSim = Math.max(...prevEmbs.map(e => cosineSim(currentEmb, e)));
+        if (maxSim > 0.88) {
+          console.log(`[Marcus] 🔄 Semantic dedup triggered (similarity: ${maxSim.toFixed(3)}) — regenerating`);
+          const dedupMessages = [
+            ...messages,
+            new AIMessage(content),
+            new HumanMessage(`[SYSTEM OVERRIDE] Your response is too similar to something you already said earlier in this conversation. You are REPEATING yourself. Write a COMPLETELY DIFFERENT response. Change your angle entirely. If you asked a question before, try a statement. If you were exploring feelings, try a challenge. If you were gentle, be direct. 2-3 sentences, ONE question. Must be meaningfully different from what you've already said.`),
+          ];
+          const dedupRetry = await model.invoke(dedupMessages);
+          const dedupContent = typeof dedupRetry.content === 'string' ? dedupRetry.content : JSON.stringify(dedupRetry.content);
+          content = enforceOneQuestion(dedupContent || content);
+          console.log(`[Marcus] ✅ Dedup regenerated: "${content.substring(0, 100)}..."`);
+        }
+      } catch (dedupErr) {
+        console.warn('[Marcus] Dedup check failed (non-critical):', dedupErr);
+      }
     }
 
     ctx.marcusResponse = content;
