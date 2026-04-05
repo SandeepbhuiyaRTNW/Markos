@@ -29,16 +29,24 @@ export async function GET(req: NextRequest) {
           (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id) as message_count
          FROM conversations c
          WHERE c.user_id = $1
+           AND (
+             c.session_ended = true
+             OR EXISTS (SELECT 1 FROM messages WHERE conversation_id = c.id AND role = 'user')
+           )
          ORDER BY c.started_at DESC`,
         [userId]
       ),
-      // Weekly session counts for the last 8 weeks
+      // Weekly session counts for the last 8 weeks (only sessions with user interaction)
       query(
         `SELECT
           date_trunc('week', started_at)::date as week_start,
           COUNT(*) as session_count
          FROM conversations
          WHERE user_id = $1 AND started_at >= NOW() - INTERVAL '8 weeks'
+           AND (
+             session_ended = true
+             OR EXISTS (SELECT 1 FROM messages WHERE conversation_id = conversations.id AND role = 'user')
+           )
          GROUP BY date_trunc('week', started_at)
          ORDER BY week_start ASC`,
         [userId]

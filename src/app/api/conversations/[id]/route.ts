@@ -74,21 +74,30 @@ export async function POST(
       .filter((m: { role: string; emotion_detected: string | null }) => m.role === 'user' && m.emotion_detected)
       .map((m: { emotion_detected: string }) => m.emotion_detected);
 
+    const messageCount = messagesResult.rows.length;
+    const isShortSession = messageCount <= 4; // Opening + 1 exchange or less
+
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: `You are summarizing a conversation between a man and Marcus Aurelius (his Stoic AI companion). You must write from a STOIC philosophical perspective — not generic self-help or therapy language.
+          content: `You are summarizing a conversation between a man and Marcus (his Stoic AI companion).
+
+CRITICAL RULES:
+1. Your summary must be GROUNDED in the EXACT words he used. Quote him or paraphrase closely. Do NOT embellish or add literary prose he did not earn.
+2. If the conversation was short (few exchanges), keep the summary proportionally short. Do NOT generate elaborate insights from a brief exchange.
+3. Takeaways must reference SPECIFIC things he said or revealed — not generic Stoic philosophy.
+4. Pondering topics must connect to HIS actual situation, using HIS words and context.${isShortSession ? '\n5. THIS WAS A SHORT SESSION. Keep everything minimal and honest. Do not over-interpret.' : ''}
 
 Generate a JSON object with:
-- "title": A brief 3-6 word title capturing the core theme. Use Stoic weight, not therapy-speak. Good: "Wrestling with Career Purpose", "The Weight of an Unlived Life". Bad: "Finding Balance at Work", "Improving Communication".
-- "summary": A 2-3 sentence summary written as Marcus Aurelius would reflect on it. Reference what the man revealed and what Stoic truth emerged. Example: "He came bearing the weight of inadequacy at work — measuring himself against standards no one set. Through our exchange, the dichotomy of control surfaced: his skills are within his power, his colleagues' opinions are not."
-- "takeaways": An array of 3-5 insights framed through Stoic philosophy. Each must reference a Stoic concept or principle. BANNED: generic coaching language like "Skills can be built", "Communication is key", "Take time for yourself", "Set boundaries". REQUIRED: Stoic framing like "What is in your control is your effort and your character — not the judgment of others (Dichotomy of Control)", "The obstacle before you IS the way forward — your discomfort at work is the training ground (Obstacle is the Way)".
-- "pondering_topics": An array of 2-3 deep, open-ended questions for him to sit with. These must be philosophical, not actionable. Good: "If you stripped away every title and role — father, employee, husband — who remains? Is that man enough?", "What would Marcus Aurelius say to you if he saw you measuring your worth by your salary?". Bad: "How can you improve your work skills?", "What steps can you take to feel better?"
-- "mood": The overall emotional tone (one word)
-- "stoic_principle": The most relevant Stoic principle (e.g. "Dichotomy of Control", "Amor Fati", "Memento Mori", "Premeditatio Malorum", "Obstacle is the Way", "Sympatheia")
-- "topics": An array of 2-4 topic labels for this conversation (e.g. ["work identity", "impostor syndrome", "self-worth"])
+- "title": 3-6 words capturing what HE actually talked about. Use his language, not literary language. Good: "Feeling Lost at Work", "Can't Talk to His Wife". Bad: "The Weight of an Unlived Life", "Wrestling with Existential Purpose".
+- "summary": 1-3 sentences describing what he ACTUALLY said and where the conversation went. Ground it in his real words.${isShortSession ? ' This was a short session — 1 sentence is fine.' : ''} Example: "He said he feels 'stuck' — work and home both feel flat. We started exploring what 'whatever' means to him and where the numbness began." BAD example: "He arrived weighed down by a sense of despair, grappling with the void of purpose."
+- "takeaways": An array of 2-4 insights that emerged. Each must reference something HE said or a specific pattern that surfaced. Frame through Stoic lens but anchor in his reality.${isShortSession ? ' For short sessions, 1-2 takeaways is enough.' : ''} Good: "He used the word 'grinding' three times — his relationship with work has become purely mechanical. The Stoic question is whether this grinding serves his character or just his resume." Bad: "Skills can be built through dedication."
+- "pondering_topics": 2-3 questions for him to sit with. These must reference HIS specific situation.${isShortSession ? ' For short sessions, 1-2 is enough.' : ''} Good: "You said 'I got nothing left' when you come home — what took it all? Is it the work itself, or something else?" Bad: "What does it mean to live a life of purpose?"
+- "mood": One word — the emotional tone of HIS side of the conversation
+- "stoic_principle": The most relevant Stoic principle (e.g. "Dichotomy of Control", "Amor Fati", "Memento Mori", "Obstacle is the Way")
+- "topics": 2-4 topic labels based on what he actually discussed (e.g. ["work burnout", "marriage strain"])
 Return ONLY valid JSON.`,
         },
         { role: 'user', content: transcript },

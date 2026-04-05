@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const result = await query(
-      `SELECT 
+      `SELECT
         c.id,
         c.started_at,
         c.ended_at,
@@ -21,11 +21,17 @@ export async function GET(req: NextRequest) {
         c.mood_start,
         c.mood_end,
         c.session_number,
+        c.session_ended,
         c.metadata,
         (SELECT content FROM messages WHERE conversation_id = c.id AND role = 'user' ORDER BY created_at ASC LIMIT 1) as first_message,
-        (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id) as message_count
+        (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id) as message_count,
+        (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id AND role = 'user') as user_message_count
       FROM conversations c
       WHERE c.user_id = $1
+        AND (
+          c.session_ended = true
+          OR EXISTS (SELECT 1 FROM messages WHERE conversation_id = c.id AND role = 'user')
+        )
       ORDER BY c.started_at DESC`,
       [userId]
     );
