@@ -49,18 +49,37 @@ export async function GET(req: NextRequest) {
   const threadHeads = sessions.filter(s => !continuedFromIds.has(s.id));
 
   // Format for the UI
-  const formatted = threadHeads.slice(0, 5).map(s => ({
-    id: s.id,
-    sessionNumber: s.session_number,
-    title: s.summary
-      ? s.summary.substring(0, 80) + (s.summary.length > 80 ? '…' : '')
-      : s.first_user_message
-        ? s.first_user_message.substring(0, 80) + (s.first_user_message.length > 80 ? '…' : '')
-        : `Session ${s.session_number}`,
-    date: s.ended_at || s.started_at,
-    hasPondering: !!(s.pondering_topics && s.pondering_topics.length > 0),
-    sessionType: s.metadata && (s.metadata as Record<string, unknown>).sessionType === 'fresh' ? 'fresh' : 'continue',
-  }));
+  const formatted = threadHeads.slice(0, 5).map(s => {
+    const md = (s.metadata || {}) as Record<string, unknown>;
+    const metaTitle = md.title as string | undefined;
+
+    // Title: use metadata.title (short), fallback to first user message
+    const title = metaTitle
+      || (s.first_user_message
+        ? s.first_user_message.substring(0, 50) + (s.first_user_message.length > 50 ? '…' : '')
+        : `Session ${s.session_number}`);
+
+    // Summary: 1-line preview of what was discussed
+    const summary = s.summary
+      ? s.summary.substring(0, 120) + (s.summary.length > 120 ? '…' : '')
+      : null;
+
+    // Pondering preview: first pondering topic (what they'd continue into)
+    const ponderingPreview = s.pondering_topics && s.pondering_topics.length > 0
+      ? s.pondering_topics[0].substring(0, 100) + (s.pondering_topics[0].length > 100 ? '…' : '')
+      : null;
+
+    return {
+      id: s.id,
+      sessionNumber: s.session_number,
+      title,
+      summary,
+      ponderingPreview,
+      ponderingCount: s.pondering_topics?.length || 0,
+      date: s.ended_at || s.started_at,
+      sessionType: md.sessionType === 'fresh' ? 'fresh' : 'continue',
+    };
+  });
 
   return NextResponse.json({ sessions: formatted });
 }

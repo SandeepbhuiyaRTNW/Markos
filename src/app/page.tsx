@@ -61,8 +61,9 @@ export default function Home() {
   const [sessionType, setSessionType] = useState<SessionType>('continue');
   const [continueFromId, setContinueFromId] = useState<string | null>(null);
   const [recentSessions, setRecentSessions] = useState<Array<{
-    id: string; sessionNumber: number; title: string; date: string;
-    hasPondering: boolean; sessionType: string;
+    id: string; sessionNumber: number; title: string; summary: string | null;
+    ponderingPreview: string | null; ponderingCount: number;
+    date: string; sessionType: string;
   }>>([]);
   const [loadingRecent, setLoadingRecent] = useState(false);
   const [textSending, setTextSending] = useState(false);
@@ -786,28 +787,37 @@ export default function Home() {
                   </div>
                   <p className="text-sm font-medium text-foreground mb-1">Continue from which conversation?</p>
                   <p className="text-xs text-muted-foreground/50 mb-6">Pick the thread you want to pick up</p>
-                  <div className="flex flex-col gap-2 w-full max-w-sm">
+                  <div className="flex flex-col gap-3 w-full max-w-md">
                     {recentSessions.map((s) => (
                       <button
                         key={s.id}
                         onClick={() => handlePickSession(s.id)}
-                        className="flex items-start gap-3 px-4 py-3 rounded-xl border border-border hover:border-[#a3785e]/30 hover:bg-[#a3785e]/5 transition-all text-left group"
+                        className="flex items-start gap-3 px-4 py-4 rounded-xl border border-border hover:border-[#a3785e]/30 hover:bg-[#a3785e]/5 transition-all text-left group"
                       >
                         <div className="w-8 h-8 rounded-lg bg-[#a3785e]/8 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-[#a3785e]/15 transition-colors">
                           <span className="text-xs font-medium text-[#a3785e]/60">{s.sessionNumber}</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{s.title}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[11px] text-muted-foreground/40">
+                          {/* Title + date */}
+                          <div className="flex items-baseline gap-2">
+                            <p className="text-sm font-medium text-foreground truncate">{s.title}</p>
+                            <span className="text-[10px] text-muted-foreground/40 shrink-0">
                               {new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                             </span>
-                            {s.hasPondering && (
-                              <span className="text-[10px] text-[#a3785e]/50 bg-[#a3785e]/8 px-1.5 py-0.5 rounded">has pondering topics</span>
-                            )}
                           </div>
+                          {/* Summary */}
+                          {s.summary && (
+                            <p className="text-[12px] text-muted-foreground/60 mt-1 line-clamp-2 leading-relaxed">{s.summary}</p>
+                          )}
+                          {/* Pondering preview — what they'd continue into */}
+                          {s.ponderingPreview && (
+                            <div className="mt-2 flex gap-1.5 items-start">
+                              <span className="text-[10px] text-[#a3785e]/50 mt-0.5 shrink-0">↳</span>
+                              <p className="text-[11px] text-[#a3785e]/60 italic leading-relaxed">{s.ponderingPreview}</p>
+                            </div>
+                          )}
                         </div>
-                        <svg className="w-4 h-4 text-muted-foreground/30 shrink-0 mt-1 group-hover:text-[#a3785e]/50 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" /></svg>
+                        <svg className="w-4 h-4 text-muted-foreground/20 shrink-0 mt-1 group-hover:text-[#a3785e]/50 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" /></svg>
                       </button>
                     ))}
                   </div>
