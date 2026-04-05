@@ -18,7 +18,8 @@ export async function GET(req: NextRequest) {
   try {
     const userId = req.nextUrl.searchParams.get('userId');
     const skipTts = req.nextUrl.searchParams.get('skipTts') === 'true';
-    const sessionType = req.nextUrl.searchParams.get('sessionType') || 'continue'; // 'continue' | 'fresh'
+    const sessionType = req.nextUrl.searchParams.get('sessionType') || 'continue';
+    const continueFrom = req.nextUrl.searchParams.get('continueFrom'); // specific session ID to continue from
 
     if (!userId) {
       return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
@@ -79,30 +80,48 @@ export async function GET(req: NextRequest) {
       sessionNumber = parseInt(countResult.rows[0].cnt, 10) + 1;
 
       const created = await query(
-        `INSERT INTO conversations (user_id, session_number, metadata) VALUES ($1, $2, $3) RETURNING id`,
-        [userId, sessionNumber, JSON.stringify({ sessionType })]
+        `INSERT INTO conversations (user_id, session_number, metadata, parent_session_id) VALUES ($1, $2, $3, $4) RETURNING id`,
+        [userId, sessionNumber, JSON.stringify({ sessionType }), continueFrom || null]
       );
       conversationId = created.rows[0].id;
     }
 
-    // Fetch memory context + last session's takeaways + last few messages
+    // Fetch memory context + session to continue from + last few messages
+    const lastSessionQuery = continueFrom
+      ? query(
+          // Specific session chosen by user
+          `SELECT takeaways, pondering_topics, summary, metadata
+           FROM conversations
+           WHERE id = $1 AND user_id = $2 AND session_ended = true`,
+          [continueFrom, userId]
+        )
+      : query(
+          // Default: most recent ended session
+          `SELECT takeaways, pondering_topics, summary, metadata
+           FROM conversations
+           WHERE user_id = $1 AND session_ended = true AND id != $2
+           ORDER BY ended_at DESC LIMIT 1`,
+          [userId, conversationId]
+        );
+
     const [memoryContext, prevResult, lastSessionResult] = await Promise.all([
       getMemoryContext(userId),
-      query(
-        `SELECT m.role, m.content FROM messages m
-         JOIN conversations c ON c.id = m.conversation_id
-         WHERE c.user_id = $1 AND m.conversation_id != $2
-         ORDER BY m.created_at DESC LIMIT 6`,
-        [userId, conversationId]
-      ),
-      // Get last completed session's takeaways and pondering topics
-      query(
-        `SELECT takeaways, pondering_topics, summary, metadata
-         FROM conversations
-         WHERE user_id = $1 AND session_ended = true AND id != $2
-         ORDER BY ended_at DESC LIMIT 1`,
-        [userId, conversationId]
-      ),
+      continueFrom
+        ? query(
+            // Get messages from the SPECIFIC session being continued
+            `SELECT m.role, m.content FROM messages m
+             WHERE m.conversation_id = $1
+             ORDER BY m.created_at DESC LIMIT 6`,
+            [continueFrom]
+          )
+        : query(
+            `SELECT m.role, m.content FROM messages m
+             JOIN conversations c ON c.id = m.conversation_id
+             WHERE c.user_id = $1 AND m.conversation_id != $2
+             ORDER BY m.created_at DESC LIMIT 6`,
+            [userId, conversationId]
+          ),
+      lastSessionQuery,
     ]);
     // Determine if we have REAL memories (not just session count metadata)
     const hasMemory = !memoryContext.includes('No memories stored')

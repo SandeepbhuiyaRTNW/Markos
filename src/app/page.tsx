@@ -12,7 +12,7 @@ import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
 type AppView = 'analytics' | 'voice' | 'session-detail' | 'session-notes';
-type InputMode = 'session-type' | 'choice' | 'voice' | 'text';
+type InputMode = 'session-type' | 'pick-session' | 'choice' | 'voice' | 'text';
 type SessionType = 'continue' | 'fresh';
 
 interface SessionNotesData {
@@ -50,6 +50,12 @@ export default function Home() {
   const [textInput, setTextInput] = useState('');
   const [inputMode, setInputMode] = useState<InputMode>('session-type');
   const [sessionType, setSessionType] = useState<SessionType>('continue');
+  const [continueFromId, setContinueFromId] = useState<string | null>(null);
+  const [recentSessions, setRecentSessions] = useState<Array<{
+    id: string; sessionNumber: number; title: string; date: string;
+    hasPondering: boolean; sessionType: string;
+  }>>([]);
+  const [loadingRecent, setLoadingRecent] = useState(false);
   const [textSending, setTextSending] = useState(false);
   const [sessionNotes, setSessionNotes] = useState<SessionNotesData | null>(null);
   const [endingSession, setEndingSession] = useState(false);
@@ -102,7 +108,8 @@ export default function Home() {
     try {
       const isTextMode = mode === 'text';
       const sessionTypeParam = sessionType === 'fresh' ? '&sessionType=fresh' : '';
-      const url = `/api/conversation/opening?userId=${userId}${isTextMode ? '&skipTts=true' : ''}${sessionTypeParam}`;
+      const continueParam = continueFromId ? `&continueFrom=${continueFromId}` : '';
+      const url = `/api/conversation/opening?userId=${userId}${isTextMode ? '&skipTts=true' : ''}${sessionTypeParam}${continueParam}`;
       const r = await fetch(url);
 
       if (isTextMode) {
@@ -141,7 +148,7 @@ export default function Home() {
       setOpeningLoading(false);
       fetchingOpeningRef.current = false;
     }
-  }, [userId, onboardingComplete, sessionType]);
+  }, [userId, onboardingComplete, sessionType, continueFromId]);
 
   const handleSendCode = async () => {
     if (!email || !email.includes('@')) { setAuthError('Please enter a valid email.'); return; }
@@ -237,12 +244,38 @@ export default function Home() {
     setSidebarOpen(false);
     setInputMode('session-type');
     setSessionType('continue');
+    setContinueFromId(null);
+    setRecentSessions([]);
     setView('voice');
     viewRef.current = 'voice';
   };
 
-  const handleChooseSessionType = (type: SessionType) => {
+  const handleChooseSessionType = async (type: SessionType) => {
     setSessionType(type);
+    if (type === 'continue') {
+      // Fetch recent sessions to pick from
+      setLoadingRecent(true);
+      try {
+        const res = await fetch(`/api/conversations/recent?userId=${userId}`);
+        const data = await res.json();
+        if (data.sessions && data.sessions.length > 0) {
+          setRecentSessions(data.sessions);
+          setInputMode('pick-session');
+          return;
+        }
+      } catch (e) {
+        console.warn('Failed to fetch recent sessions:', e);
+      } finally {
+        setLoadingRecent(false);
+      }
+      // No recent sessions — go straight to mode choice (first time user)
+      setContinueFromId(null);
+    }
+    setInputMode('choice');
+  };
+
+  const handlePickSession = (sessionId: string) => {
+    setContinueFromId(sessionId);
     setInputMode('choice');
   };
 
@@ -650,6 +683,48 @@ export default function Home() {
                 </div>
               )}
 
+              {/* Step 1b: Pick which session to continue from */}
+              {inputMode === 'pick-session' && (
+                <div className="flex-1 flex flex-col items-center justify-center py-12 text-center fade-in-up">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#a3785e]/10 to-transparent border border-[#a3785e]/10 flex items-center justify-center mb-6">
+                    <span className="text-2xl font-light text-[#a3785e]">M</span>
+                  </div>
+                  <p className="text-sm font-medium text-foreground mb-1">Continue from which conversation?</p>
+                  <p className="text-xs text-muted-foreground/50 mb-6">Pick the thread you want to pick up</p>
+                  <div className="flex flex-col gap-2 w-full max-w-sm">
+                    {recentSessions.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => handlePickSession(s.id)}
+                        className="flex items-start gap-3 px-4 py-3 rounded-xl border border-border hover:border-[#a3785e]/30 hover:bg-[#a3785e]/5 transition-all text-left group"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-[#a3785e]/8 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-[#a3785e]/15 transition-colors">
+                          <span className="text-xs font-medium text-[#a3785e]/60">{s.sessionNumber}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{s.title}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[11px] text-muted-foreground/40">
+                              {new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </span>
+                            {s.hasPondering && (
+                              <span className="text-[10px] text-[#a3785e]/50 bg-[#a3785e]/8 px-1.5 py-0.5 rounded">has pondering topics</span>
+                            )}
+                          </div>
+                        </div>
+                        <svg className="w-4 h-4 text-muted-foreground/30 shrink-0 mt-1 group-hover:text-[#a3785e]/50 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" /></svg>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => { setContinueFromId(null); setInputMode('choice'); }}
+                    className="mt-4 text-xs text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors"
+                  >
+                    or just continue from the latest
+                  </button>
+                </div>
+              )}
+
               {/* Step 2: Voice/Text Selection */}
               {inputMode === 'choice' && !openingMessage && !openingLoading && transcripts.length === 0 && (
                 <div className="flex-1 flex flex-col items-center justify-center py-20 text-center fade-in-up">
@@ -684,7 +759,7 @@ export default function Home() {
               )}
 
               {/* Chat-style transcript area (visible after mode is chosen) */}
-              {inputMode !== 'choice' && inputMode !== 'session-type' && (
+              {inputMode !== 'choice' && inputMode !== 'session-type' && inputMode !== 'pick-session' && (
                 <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-6">
                   <div className="max-w-2xl mx-auto space-y-4">
                     {/* Opening message from Marcus */}
