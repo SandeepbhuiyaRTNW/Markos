@@ -10,10 +10,10 @@ interface LastSessionNotes {
   pondering_topics: string[]; stoic_principle: string; mood: string;
 }
 interface SessionRow {
-  id: string; started_at: string; summary: string | null;
-  first_message: string | null; message_count: number;
-  session_number: number; session_ended: boolean;
-  metadata: Record<string, unknown>;
+  id: string; started_at: string; ended_at: string | null;
+  summary: string | null; first_message: string | null;
+  message_count: number; session_number: number;
+  session_ended: boolean; metadata: Record<string, unknown>;
 }
 interface AnalyticsData {
   totalSessions: number; totalMessages: number;
@@ -37,14 +37,9 @@ export default function AnalyticsDashboard({ userId, onSelectSession }: Analytic
       .finally(() => setLoading(false));
   }, [userId]);
 
-  const formatDate = (dateStr: string) => {
+  const formatDate = (session: { started_at: string; ended_at?: string | null; session_ended?: boolean }) => {
+    const dateStr = (session.session_ended && session.ended_at) ? session.ended_at : session.started_at;
     const d = new Date(dateStr);
-    const now = new Date();
-    const diff = now.getTime() - d.getTime();
-    const days = Math.floor(diff / 86400000);
-    if (days === 0) return 'Today';
-    if (days === 1) return 'Yesterday';
-    if (days < 7) return `${days}d ago`;
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
@@ -168,7 +163,7 @@ export default function AnalyticsDashboard({ userId, onSelectSession }: Analytic
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary/60 text-muted-foreground/40 font-mono shrink-0">{s.session_number}</span>
                       <span className="text-[13px] font-medium text-foreground/90 truncate flex-1">{getTitle(s)}</span>
-                      <span className="text-[11px] text-muted-foreground/40 shrink-0">{formatDate(s.started_at)}</span>
+                      <span className="text-[11px] text-muted-foreground/40 shrink-0">{formatDate(s)}</span>
                     </div>
                     {s.summary && <p className="text-[11px] text-muted-foreground/40 line-clamp-2 leading-relaxed mt-0.5">{s.summary}</p>}
                     {typeof s.metadata?.mood === 'string' && <span className="inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full bg-[#a3785e]/8 text-[#a3785e]/60">{s.metadata.mood}</span>}

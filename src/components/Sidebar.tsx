@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils';
 interface Session {
   id: string;
   started_at: string;
+  ended_at: string | null;
+  session_ended: boolean;
   summary: string | null;
   first_message: string | null;
   message_count: number;
@@ -42,14 +44,11 @@ export default function Sidebar({
       .catch(console.error);
   }, [userId, refreshTrigger]);
 
-  const formatDate = (dateStr: string) => {
+  const formatDate = (session: { started_at: string; ended_at?: string | null; session_ended?: boolean }) => {
+    // Use ended_at for completed sessions, started_at for active ones
+    const dateStr = (session.session_ended && session.ended_at) ? session.ended_at : session.started_at;
     const d = new Date(dateStr);
-    const now = new Date();
-    const diff = now.getTime() - d.getTime();
-    const days = Math.floor(diff / 86400000);
-    if (days === 0) return 'Today';
-    if (days === 1) return 'Yesterday';
-    if (days < 7) return `${days}d ago`;
+    // Always show the actual date — "Today" is confusing for past sessions
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
@@ -110,7 +109,7 @@ export default function Sidebar({
                 </span>
               </div>
               <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/50 mt-1">
-                <span>{formatDate(session.started_at)}</span>
+                <span>{formatDate(session)}</span>
                 <span className="text-muted-foreground/20">·</span>
                 <MessageSquare className="w-3 h-3" />
                 <span>{session.message_count}</span>
