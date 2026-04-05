@@ -20,6 +20,9 @@ interface SessionNotesData {
   summary?: string;
   takeaways?: string[];
   pondering_topics?: string[];
+  pattern?: string;
+  action_plan?: string[];
+  check_in?: string;
   mood?: string;
   stoic_principle?: string;
   topics?: string[];
@@ -623,6 +626,37 @@ export default function Home() {
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Pattern */}
+                {sessionNotes.pattern && (
+                  <div className="glass-strong rounded-2xl p-5 border border-orange-500/10 bg-orange-50/30 dark:bg-orange-950/10">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-orange-600/80 mb-2">🔁 The Pattern</p>
+                    <p className="text-sm leading-relaxed text-foreground/80">{sessionNotes.pattern}</p>
+                  </div>
+                )}
+
+                {/* Action Plan */}
+                {sessionNotes.action_plan && sessionNotes.action_plan.length > 0 && (
+                  <div className="glass-strong rounded-2xl p-5 border border-emerald-500/10 bg-emerald-50/30 dark:bg-emerald-950/10">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-emerald-600/80 mb-3">🎯 Action Plan</p>
+                    <ul className="space-y-2">
+                      {sessionNotes.action_plan.map((a, i) => (
+                        <li key={i} className="flex gap-2.5 text-sm text-foreground/80">
+                          <span className="text-emerald-600/60 mt-0.5 font-medium">{i + 1}.</span>
+                          <span>{a}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Check-in */}
+                {sessionNotes.check_in && (
+                  <div className="glass-strong rounded-2xl p-5 border border-blue-500/10 bg-blue-50/30 dark:bg-blue-950/10">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-blue-600/80 mb-2">📊 Check In (3-5 Days)</p>
+                    <p className="text-sm leading-relaxed text-foreground/80 italic">{sessionNotes.check_in}</p>
                   </div>
                 )}
 

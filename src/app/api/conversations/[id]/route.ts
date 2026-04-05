@@ -109,12 +109,18 @@ CRITICAL RULES:
 2. Takeaways must reference SPECIFIC things he said — not generic philosophy.
 3. Pondering topics must use HIS words and situation, not abstract questions.
 4. The depth of your summary must match the depth of the conversation. Don't create meaning that wasn't there.
+5. You MUST identify the core PATTERN (the loop he's stuck in) — not abstract concepts.
+6. You MUST provide a concrete ACTION PLAN with specific behaviors, frequency, and duration.
+7. You MUST include a FEEDBACK CHECK — how he should evaluate whether it's working.
 
 Generate a JSON object:
 - "title": 3-6 words using HIS language. Good: "Can't Talk to His Wife". Bad: "The Weight of an Unlived Life".
-- "summary": 2-3 sentences. What he said (quote him), what emerged, where it ended. Example: "He said he feels 'stuck' — work and home both feel flat. We explored what 'whatever' means to him. He admitted he hasn't told anyone else about this."
-- "takeaways": 2-4 insights. Each MUST quote or closely paraphrase something he said. Example: "He used the word 'grinding' three times — his relationship with work has become purely mechanical. Worth exploring whether the grinding serves his character or just his resume."
+- "summary": 2-3 sentences. What he said (quote him), what emerged, where it ended.
+- "takeaways": 2-4 insights. Each MUST quote or closely paraphrase something he said.
 - "pondering_topics": 2-3 questions using HIS words. Example: "You said 'I got nothing left' when you come home — what took it all?"
+- "pattern": The specific behavioral loop he's stuck in. Must be concrete, not abstract. Format: "X → Y → Z → back to X". Example: "He avoids slowing down → unprocessed thoughts pile up → overwhelm builds → he pushes through harder → more avoidance". Use HIS words where possible.
+- "action_plan": An array of 1-3 specific, trackable actions. Each must include WHAT to do, WHEN to do it, and HOW LONG. Example: ["10-15 min walk daily — no phone, focus on steps and breathing", "After each walk, ask yourself: 'Do I feel even 1% lighter?'", "Weekly check: did I do it 4+ times this week?"]
+- "check_in": A single question he should ask himself in 3-5 days to evaluate whether the action plan is working. Must be specific and binary-answerable. Example: "After 5 days: did taking walks reduce the 'cluttered' feeling you described, even slightly?"
 - "mood": One word
 - "stoic_principle": Most relevant Stoic principle
 - "topics": 2-4 topic labels from what he actually discussed
@@ -143,6 +149,9 @@ Return ONLY valid JSON.`;
     parsed.takeaways = parsed.takeaways || [];
     parsed.pondering_topics = parsed.pondering_topics || [];
     parsed.topics = parsed.topics || [];
+    parsed.action_plan = parsed.action_plan || [];
+    parsed.pattern = parsed.pattern || '';
+    parsed.check_in = parsed.check_in || '';
 
     // Save to conversations table
     await query(
@@ -162,6 +171,9 @@ Return ONLY valid JSON.`;
           title: parsed.title,
           takeaways: parsed.takeaways,
           pondering_topics: parsed.pondering_topics,
+          pattern: parsed.pattern,
+          action_plan: parsed.action_plan,
+          check_in: parsed.check_in,
           mood: parsed.mood,
           stoic_principle: parsed.stoic_principle,
           topics: parsed.topics,

@@ -32,6 +32,9 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
   const [meta, setMeta] = useState<ConversationMeta | null>(null);
   const [takeaways, setTakeaways] = useState<string[]>([]);
   const [ponderingTopics, setPonderingTopics] = useState<string[]>([]);
+  const [pattern, setPattern] = useState<string>('');
+  const [actionPlan, setActionPlan] = useState<string[]>([]);
+  const [checkIn, setCheckIn] = useState<string>('');
   const [stoicPrinciple, setStoicPrinciple] = useState<string>('');
   const [mood, setMood] = useState<string>('');
   const [title, setTitle] = useState('');
@@ -56,6 +59,9 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
         setTitle((md?.title as string) || '');
         setTakeaways(conv?.takeaways || (md?.takeaways as string[]) || []);
         setPonderingTopics(conv?.pondering_topics || (md?.pondering_topics as string[]) || []);
+        setPattern((md?.pattern as string) || '');
+        setActionPlan((md?.action_plan as string[]) || []);
+        setCheckIn((md?.check_in as string) || '');
         setStoicPrinciple((md?.stoic_principle as string) || '');
         setMood((md?.mood as string) || '');
         setLoading(false);
@@ -70,6 +76,9 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
       const data = await res.json();
       if (data.takeaways) setTakeaways(data.takeaways);
       if (data.pondering_topics) setPonderingTopics(data.pondering_topics);
+      if (data.pattern) setPattern(data.pattern);
+      if (data.action_plan) setActionPlan(data.action_plan);
+      if (data.check_in) setCheckIn(data.check_in);
       if (data.stoic_principle) setStoicPrinciple(data.stoic_principle);
       if (data.mood) setMood(data.mood);
       if (data.title) setTitle(data.title);
@@ -138,6 +147,37 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
                     <div key={i} className="flex gap-2.5 text-sm text-muted-foreground italic"><span className="text-[#a3785e]/50 mt-0.5 not-italic">✦</span><span>{t}</span></div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Pattern */}
+            {pattern && (
+              <div className="glass-strong rounded-2xl p-5 border border-orange-500/10 bg-orange-50/30 dark:bg-orange-950/10">
+                <span className="text-xs font-semibold uppercase tracking-widest text-orange-600/80 block mb-2">🔁 The Pattern</span>
+                <p className="text-sm leading-relaxed text-foreground/80">{pattern}</p>
+              </div>
+            )}
+
+            {/* Action Plan */}
+            {actionPlan.length > 0 && (
+              <div className="glass-strong rounded-2xl p-5 border border-emerald-500/10 bg-emerald-50/30 dark:bg-emerald-950/10">
+                <span className="text-xs font-semibold uppercase tracking-widest text-emerald-600/80 block mb-3">🎯 Action Plan</span>
+                <ul className="space-y-2">
+                  {actionPlan.map((a, i) => (
+                    <li key={i} className="flex gap-2.5 text-sm text-foreground/80">
+                      <span className="text-emerald-600/60 mt-0.5 font-medium">{i + 1}.</span>
+                      <span>{a}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Check-in */}
+            {checkIn && (
+              <div className="glass-strong rounded-2xl p-5 border border-blue-500/10 bg-blue-50/30 dark:bg-blue-950/10">
+                <span className="text-xs font-semibold uppercase tracking-widest text-blue-600/80 block mb-2">📊 Check In (3-5 Days)</span>
+                <p className="text-sm leading-relaxed text-foreground/80 italic">{checkIn}</p>
               </div>
             )}
 
