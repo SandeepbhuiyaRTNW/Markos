@@ -33,7 +33,9 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
   const [takeaways, setTakeaways] = useState<string[]>([]);
   const [ponderingTopics, setPonderingTopics] = useState<string[]>([]);
   const [pattern, setPattern] = useState<string>('');
-  const [actionPlan, setActionPlan] = useState<string[]>([]);
+  const [actionPlan, setActionPlan] = useState<{
+    actions?: string[]; when_to_use?: string[]; frequency?: string; fallback?: string; real_goal?: string;
+  }>({});
   const [checkIn, setCheckIn] = useState<string>('');
   const [stoicPrinciple, setStoicPrinciple] = useState<string>('');
   const [mood, setMood] = useState<string>('');
@@ -60,7 +62,12 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
         setTakeaways(conv?.takeaways || (md?.takeaways as string[]) || []);
         setPonderingTopics(conv?.pondering_topics || (md?.pondering_topics as string[]) || []);
         setPattern((md?.pattern as string) || '');
-        setActionPlan((md?.action_plan as string[]) || []);
+        const rawPlan = md?.action_plan;
+        setActionPlan(
+          Array.isArray(rawPlan)
+            ? { actions: rawPlan as string[] }
+            : (rawPlan as typeof actionPlan) || {}
+        );
         setCheckIn((md?.check_in as string) || '');
         setStoicPrinciple((md?.stoic_principle as string) || '');
         setMood((md?.mood as string) || '');
@@ -77,7 +84,9 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
       if (data.takeaways) setTakeaways(data.takeaways);
       if (data.pondering_topics) setPonderingTopics(data.pondering_topics);
       if (data.pattern) setPattern(data.pattern);
-      if (data.action_plan) setActionPlan(data.action_plan);
+      if (data.action_plan) {
+        setActionPlan(Array.isArray(data.action_plan) ? { actions: data.action_plan } : data.action_plan);
+      }
       if (data.check_in) setCheckIn(data.check_in);
       if (data.stoic_principle) setStoicPrinciple(data.stoic_principle);
       if (data.mood) setMood(data.mood);
@@ -158,18 +167,50 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
               </div>
             )}
 
-            {/* Action Plan */}
-            {actionPlan.length > 0 && (
-              <div className="glass-strong rounded-2xl p-5 border border-emerald-500/10 bg-emerald-50/30 dark:bg-emerald-950/10">
-                <span className="text-xs font-semibold uppercase tracking-widest text-emerald-600/80 block mb-3">🎯 Action Plan</span>
-                <ul className="space-y-2">
-                  {actionPlan.map((a, i) => (
-                    <li key={i} className="flex gap-2.5 text-sm text-foreground/80">
-                      <span className="text-emerald-600/60 mt-0.5 font-medium">{i + 1}.</span>
-                      <span>{a}</span>
-                    </li>
-                  ))}
-                </ul>
+            {/* Action System */}
+            {(actionPlan.actions?.length || actionPlan.when_to_use?.length || actionPlan.frequency) && (
+              <div className="glass-strong rounded-2xl p-5 border border-emerald-500/10 bg-emerald-50/30 dark:bg-emerald-950/10 space-y-4">
+                <span className="text-xs font-semibold uppercase tracking-widest text-emerald-600/80 block">🎯 Your System</span>
+
+                {actionPlan.actions && actionPlan.actions.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600/60 mb-2">Steps</p>
+                    <ul className="space-y-1.5">
+                      {actionPlan.actions.map((a, i) => (
+                        <li key={i} className="flex gap-2.5 text-sm text-foreground/80"><span className="text-emerald-600/60 mt-0.5 font-medium">{i + 1}.</span><span>{a}</span></li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {actionPlan.when_to_use && actionPlan.when_to_use.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600/60 mb-2">When to Use This</p>
+                    <ul className="space-y-1">
+                      {actionPlan.when_to_use.map((w, i) => (
+                        <li key={i} className="flex gap-2 text-sm text-foreground/70"><span className="text-emerald-500/50 mt-1">•</span><span>{w}</span></li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {actionPlan.frequency && (
+                  <div><p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600/60 mb-1">Frequency</p><p className="text-sm text-foreground/70">{actionPlan.frequency}</p></div>
+                )}
+
+                {actionPlan.fallback && (
+                  <div className="border-t border-emerald-500/10 pt-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-600/60 mb-1">🔄 If It Doesn&apos;t Work</p>
+                    <p className="text-sm text-foreground/70">{actionPlan.fallback}</p>
+                  </div>
+                )}
+
+                {actionPlan.real_goal && (
+                  <div className="border-t border-emerald-500/10 pt-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600/60 mb-1">The Real Goal</p>
+                    <p className="text-sm text-foreground/80 font-medium">{actionPlan.real_goal}</p>
+                  </div>
+                )}
               </div>
             )}
 

@@ -119,7 +119,12 @@ Generate a JSON object:
 - "takeaways": 2-4 insights. Each MUST quote or closely paraphrase something he said.
 - "pondering_topics": 2-3 questions using HIS words. Example: "You said 'I got nothing left' when you come home — what took it all?"
 - "pattern": The specific behavioral loop he's stuck in. Must be concrete, not abstract. Format: "X → Y → Z → back to X". Example: "He avoids slowing down → unprocessed thoughts pile up → overwhelm builds → he pushes through harder → more avoidance". Use HIS words where possible.
-- "action_plan": An array of 1-3 specific, trackable actions. Each must include WHAT to do, WHEN to do it, and HOW LONG. Example: ["10-15 min walk daily — no phone, focus on steps and breathing", "After each walk, ask yourself: 'Do I feel even 1% lighter?'", "Weekly check: did I do it 4+ times this week?"]
+- "action_plan": An object with these fields:
+  - "actions": Array of 1-3 specific, trackable steps. Each must include WHAT, WHEN, HOW LONG. Example: ["10-15 min walk daily — no phone, focus on steps and breathing", "After each walk, ask: 'Do I feel even 1% lighter?'"]
+  - "when_to_use": Array of 2-4 specific triggers/situations when he should use this plan. Must reference HIS feelings/situations from the conversation. Example: ["When you feel that 'cluttered' heaviness you described", "When you catch yourself pushing through without pausing", "Anytime you feel stuck or empty"]
+  - "frequency": A single clear statement. Example: "Once daily, or anytime you feel stuck" or "Every morning before work, and once more if the heaviness returns"
+  - "fallback": What to do if the plan doesn't work. Must be a NEXT action, not overthinking. Example: "If the walk doesn't shift anything — do one more small physical action: shower, drink water, change rooms. The goal is motion, not perfection."
+  - "real_goal": Reframe what success actually looks like. NOT "feel better." Example: "Not to fix everything — just to move despite feeling nothing. The goal is breaking the avoidance loop, not instant relief."
 - "check_in": A single question he should ask himself in 3-5 days to evaluate whether the action plan is working. Must be specific and binary-answerable. Example: "After 5 days: did taking walks reduce the 'cluttered' feeling you described, even slightly?"
 - "mood": One word
 - "stoic_principle": Most relevant Stoic principle
@@ -145,13 +150,17 @@ Return ONLY valid JSON.`;
       parsed = { title: 'Conversation', summary: raw, takeaways: [], pondering_topics: [], mood: 'reflective', stoic_principle: '', topics: [] };
     }
 
-    // Ensure arrays exist
+    // Ensure arrays/objects exist
     parsed.takeaways = parsed.takeaways || [];
     parsed.pondering_topics = parsed.pondering_topics || [];
     parsed.topics = parsed.topics || [];
-    parsed.action_plan = parsed.action_plan || [];
     parsed.pattern = parsed.pattern || '';
     parsed.check_in = parsed.check_in || '';
+    // Normalize action_plan: could be old format (array) or new format (object)
+    if (Array.isArray(parsed.action_plan)) {
+      parsed.action_plan = { actions: parsed.action_plan, when_to_use: [], frequency: '', fallback: '', real_goal: '' };
+    }
+    parsed.action_plan = parsed.action_plan || { actions: [], when_to_use: [], frequency: '', fallback: '', real_goal: '' };
 
     // Save to conversations table
     await query(

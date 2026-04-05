@@ -21,7 +21,13 @@ interface SessionNotesData {
   takeaways?: string[];
   pondering_topics?: string[];
   pattern?: string;
-  action_plan?: string[];
+  action_plan?: {
+    actions?: string[];
+    when_to_use?: string[];
+    frequency?: string;
+    fallback?: string;
+    real_goal?: string;
+  } | string[];  // backward compat with old format
   check_in?: string;
   mood?: string;
   stoic_principle?: string;
@@ -637,18 +643,73 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Action Plan */}
-                {sessionNotes.action_plan && sessionNotes.action_plan.length > 0 && (
-                  <div className="glass-strong rounded-2xl p-5 border border-emerald-500/10 bg-emerald-50/30 dark:bg-emerald-950/10">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-emerald-600/80 mb-3">🎯 Action Plan</p>
-                    <ul className="space-y-2">
-                      {sessionNotes.action_plan.map((a, i) => (
-                        <li key={i} className="flex gap-2.5 text-sm text-foreground/80">
-                          <span className="text-emerald-600/60 mt-0.5 font-medium">{i + 1}.</span>
-                          <span>{a}</span>
-                        </li>
-                      ))}
-                    </ul>
+                {/* Action System */}
+                {sessionNotes.action_plan && (
+                  <div className="glass-strong rounded-2xl p-5 border border-emerald-500/10 bg-emerald-50/30 dark:bg-emerald-950/10 space-y-4">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-emerald-600/80">🎯 Your System</p>
+
+                    {/* Actions */}
+                    {(() => {
+                      const plan = sessionNotes.action_plan!;
+                      const actions = Array.isArray(plan) ? plan : (plan.actions || []);
+                      const whenToUse = !Array.isArray(plan) ? plan.when_to_use : undefined;
+                      const frequency = !Array.isArray(plan) ? plan.frequency : undefined;
+                      const fallback = !Array.isArray(plan) ? plan.fallback : undefined;
+                      const realGoal = !Array.isArray(plan) ? plan.real_goal : undefined;
+
+                      return (
+                        <>
+                          {actions.length > 0 && (
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600/60 mb-2">Steps</p>
+                              <ul className="space-y-1.5">
+                                {actions.map((a: string, i: number) => (
+                                  <li key={i} className="flex gap-2.5 text-sm text-foreground/80">
+                                    <span className="text-emerald-600/60 mt-0.5 font-medium">{i + 1}.</span>
+                                    <span>{a}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {whenToUse && whenToUse.length > 0 && (
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600/60 mb-2">When to Use This</p>
+                              <ul className="space-y-1">
+                                {whenToUse.map((w: string, i: number) => (
+                                  <li key={i} className="flex gap-2 text-sm text-foreground/70">
+                                    <span className="text-emerald-500/50 mt-1">•</span>
+                                    <span>{w}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {frequency && (
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600/60 mb-1">Frequency</p>
+                              <p className="text-sm text-foreground/70">{frequency}</p>
+                            </div>
+                          )}
+
+                          {fallback && (
+                            <div className="border-t border-emerald-500/10 pt-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-600/60 mb-1">🔄 If It Doesn&apos;t Work</p>
+                              <p className="text-sm text-foreground/70">{fallback}</p>
+                            </div>
+                          )}
+
+                          {realGoal && (
+                            <div className="border-t border-emerald-500/10 pt-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600/60 mb-1">The Real Goal</p>
+                              <p className="text-sm text-foreground/80 font-medium">{realGoal}</p>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
 
