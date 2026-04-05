@@ -8,29 +8,11 @@
 
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
-import OpenAI from 'openai';
 import { buildSystemPrompt } from '../agent/system-prompt';
 import type { MCPContext } from './mcp-context';
 import { trackAgent, recordError, buildContextSummary } from './mcp-context';
-
-const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-/** Cosine similarity between two vectors */
-function cosineSim(a: number[], b: number[]): number {
-  let dot = 0, magA = 0, magB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i]; magA += a[i] * a[i]; magB += b[i] * b[i];
-  }
-  return dot / (Math.sqrt(magA) * Math.sqrt(magB) + 1e-10);
-}
-
-/** Get small embedding for similarity check (fast, 256-dim) */
-async function getSmallEmbedding(text: string): Promise<number[]> {
-  const resp = await openaiClient.embeddings.create({
-    model: 'text-embedding-3-small', input: text, dimensions: 256,
-  });
-  return resp.data[0].embedding;
-}
+import { analyzeConversation, computeTrajectoryDrift } from './conversation-state';
+import type { ConversationState } from './conversation-state';
 
 /** Crisis keywords that must trigger safety-first response */
 const CRISIS_PATTERNS = [
@@ -125,111 +107,12 @@ export async function runConversationalAgent(ctx: MCPContext): Promise<void> {
       toneGuide = `\nTONE MATCH: He's in pain and speaking raw. Meet him there. Short sentences. No softening language. No "It's okay to feel" or "That sounds heavy" — those are therapist phrases. Just be real: "Yeah. That's rough." or "I'm not gonna sugarcoat this." or "Look..." — then say what needs to be said. Don't try to make him feel better. Just be present.`;
     }
 
-    // ─── CONVERSATION STATE ANALYSIS ───
-    const recentHistory = ctx.conversationHistory.slice(-10);
-    const allUserMessages = ctx.conversationHistory.filter(m => m.role === 'user').map(m => m.content.toLowerCase());
-    const recentUserMessages = recentHistory.filter(m => m.role === 'user').map(m => m.content.toLowerCase());
-    const recentMarcusMessages = recentHistory.filter(m => m.role === 'assistant').map(m => m.content.toLowerCase());
-    const totalUserTurns = allUserMessages.length;
-
-    // Phase detection: Understand → Align → Suggest
-    const adviceRequestPhrases = ['what should i do', 'tell me what to do', 'give me', 'can you suggest',
-      'what do you recommend', 'what would you do', 'help me figure out', 'i need a plan',
-      'any advice', 'what do i do', 'how do i fix', 'how should i'];
-    const userAskedForAdvice = recentUserMessages.some(m => adviceRequestPhrases.some(p => m.includes(p)));
-    const userAskedRepeatedlyForAdvice = recentUserMessages.filter(m => adviceRequestPhrases.some(p => m.includes(p))).length >= 2;
-
-    // Phase 1: Understand (first 4 turns OR until situation is clear)
-    // Phase 2: Align (situation discussed, checking if direction wanted)
-    // Phase 3: Suggest (he explicitly asked for direction 2+ times, or conversation is deep enough)
-    let conversationPhase: 'understand' | 'align' | 'suggest';
-    if (totalUserTurns <= 3 && !userAskedRepeatedlyForAdvice) {
-      conversationPhase = 'understand';
-    } else if (userAskedRepeatedlyForAdvice || (totalUserTurns >= 6 && userAskedForAdvice)) {
-      conversationPhase = 'suggest';
-    } else {
-      conversationPhase = 'align';
-    }
-
-    // Pushback detection (lexical — fast, reliable for explicit rejection)
-    const pushbackPhrases = ['doesn\'t help', 'doesn\'t change', 'still feels', 'that\'s still', 'you keep', 'stop asking', 'don\'t have answers', 'can\'t think of', 'doesn\'t really', 'general advice', 'pretty vague'];
-    const pushbackCount = recentUserMessages.filter(m => pushbackPhrases.some(p => m.includes(p))).length;
-
-    // Hopelessness detection — semantic (catches paraphrases like "I don't see the point anymore")
-    const hopelessAnchors = [
-      'Nothing matters and I feel completely empty inside',
-      'Everything is pointless and I want to give up',
-      'I feel nothing at all and I can\'t go on',
-      'There\'s no point to any of this anymore',
-      'I don\'t care about anything and nothing helps',
-      'Why bother trying when nothing ever changes',
-      'I\'ve tried everything and nothing works',
-      'I don\'t see the point in trying anymore',
-      'Everything I do leads to the same empty feeling',
-      'Nothing seems to work no matter what I do',
-    ];
-    let hopelessCount = 0;
-    try {
-      if (recentUserMessages.length > 0) {
-        const allTexts = [...recentUserMessages, ...hopelessAnchors];
-        const embResp = await openaiClient.embeddings.create({
-          model: 'text-embedding-3-small', input: allTexts, dimensions: 256,
-        });
-        const userEmbs = embResp.data.slice(0, recentUserMessages.length).map(d => d.embedding);
-        const anchorEmbs = embResp.data.slice(recentUserMessages.length).map(d => d.embedding);
-        for (const userEmb of userEmbs) {
-          const maxSim = Math.max(...anchorEmbs.map(a => cosineSim(userEmb, a)));
-          if (maxSim > 0.55) hopelessCount++; // 0.55 threshold — broader semantic match
-        }
-      }
-    } catch {
-      // Fallback to lexical if embedding fails
-      const hopelessPhrases = ['nothing works', 'nothing helps', 'feel nothing', 'feel empty',
-        'everything is pointless', 'pointless', 'don\'t feel anything', 'don\'t care',
-        'what\'s the point', 'no point', 'still depressed'];
-      hopelessCount = recentUserMessages.filter(m => hopelessPhrases.some(p => m.includes(p))).length;
-    }
-    const marcusAdviceCount = recentMarcusMessages.filter(m =>
-      m.includes('try ') || m.includes('start ') || m.includes('step') || m.includes('do this') ||
-      m.includes('here\'s') || m.includes('minute') || m.includes('first,') || m.includes('breathe')
-    ).length;
-
-    let loopBreaker = '';
-    if (pushbackCount >= 2) {
-      loopBreaker = `\n\n🚨 PUSHBACK DETECTED — HE HAS REJECTED YOUR APPROACH ${pushbackCount} TIMES.
-STOP doing what you've been doing. Your current approach is NOT working.
-
-YOU MUST START YOUR RESPONSE BY ACKNOWLEDGING THE SHIFT. Use ONE of these openers:
-- "Look, what I've been offering isn't landing. Let me come at this differently."
-- "I keep going the wrong direction here. Let me stop and actually listen."
-- "Alright, I hear you — that's not what you need. Let's back up."
-
-Then do ONE of these:
-1. SIT IN IT WITH HIM: "You don't need to DO anything right now. Sometimes 'everything feels empty' is just the truth. And that's where we start."
-2. GO DEEPER: Ask about the emptiness itself — "When did this start?" or "Was there a moment it shifted, or has it been building?"
-3. NAME THE PATTERN: "You've pushed back on everything I've offered. That tells me you're not looking for a fix. What ARE you looking for?"
-
-Do NOT: give advice, suggest actions, ask "what's one thing you can do?", or offer plans.`;
-    }
-
-    if (hopelessCount >= 3) {
-      loopBreaker += `\n\n🚨 SUSTAINED HOPELESSNESS DETECTED (${hopelessCount} messages).
-This man has expressed hopelessness or emptiness across multiple turns. This is beyond normal conversation territory.
-YOU MUST:
-1. Gently and directly check in: "Brother, I need to ask you something straight. When you say nothing feels like it matters — are you safe right now?"
-2. If he indicates he's not safe, provide: "You don't have to carry this alone. 988 Suicide & Crisis Lifeline — call or text 988. Crisis Text Line — text HOME to 741741."
-3. Even if he says he's fine, acknowledge the weight: "What you're describing — this kind of numbness — that's not something to push through alone. A real human sitting across from you, a therapist or counselor, can reach places I can't. That's not weakness — that's knowing when to call in reinforcements."
-DO NOT go back to advice-giving or action steps after this.`;
-    }
-
-    if (marcusAdviceCount >= 3) {
-      loopBreaker += `\n\n🚨 YOU HAVE GIVEN ADVICE ${marcusAdviceCount} TIMES THIS SESSION.
-You are in an ADVICE-GIVING LOOP. STOP. Marcus does NOT give advice. Marcus asks questions that make men think. You have been:
-- Telling him what to do ("make your bed", "step outside", "breathe")
-- Offering plans and steps
-- Acting like a life coach instead of a wise friend
-RESET: Your next response must contain ZERO advice, ZERO action steps, ZERO suggestions. ONLY: acknowledge where he is, and ask ONE question that goes DEEPER into what's underneath — not what to DO about it.`;
-    }
+    // ─── CONVERSATION STATE ANALYSIS (semantic) ───
+    const convState: ConversationState = await analyzeConversation(
+      ctx.conversationHistory,
+      ctx.userMessage,
+    );
+    const { phase: conversationPhase, loopBreaker, pushbackCount, hopelessnessLevel } = convState;
 
     const finalInstruction = `\n\n## ⚠️ RESPONSE RULES — THESE OVERRIDE EVERYTHING ABOVE
 ${toneGuide}${loopBreaker}
@@ -308,10 +191,11 @@ WISDOM INTEGRATION (CRITICAL):
       ),
     ];
 
-    // Inject loop breaker as a late-stage system override (most visible position)
-    if (loopBreaker) {
-      messages.push(new HumanMessage(`[SYSTEM DIRECTIVE — THIS OVERRIDES ALL PRIOR INSTRUCTIONS]\n${loopBreaker}\n\nThe man's actual message follows next. Respond to HIM, not to this directive. But you MUST follow the rules above.`));
-      messages.push(new AIMessage('Understood. I will change my approach completely.'));
+    // Inject loop breaker + response template as late-stage overrides (highest salience)
+    const overrides = [loopBreaker, convState.responseTemplate].filter(Boolean).join('\n\n');
+    if (overrides) {
+      messages.push(new HumanMessage(`[SYSTEM DIRECTIVE — THIS OVERRIDES ALL PRIOR INSTRUCTIONS]\n${overrides}\n\nThe man's actual message follows next. Respond to HIM, not to this directive. But you MUST follow the rules above.`));
+      messages.push(new AIMessage('Understood. I will follow these directives exactly.'));
     }
 
     messages.push(new HumanMessage(enrichedUserMessage));
@@ -361,21 +245,19 @@ WISDOM INTEGRATION (CRITICAL):
       console.log(`[Marcus] ✅ Regenerated response: "${content.substring(0, 100)}..."`);
     }
 
-    // ─── SEMANTIC DEDUPLICATION ───
-    // Compare response to recent Marcus messages — if too similar, regenerate
-    if (recentMarcusMessages.length >= 2) {
+    // ─── TRAJECTORY-AWARE DEDUP (rolling centroid) ───
+    const previousMarcusMessages = ctx.conversationHistory
+      .filter(m => m.role === 'assistant')
+      .map(m => m.content);
+    if (previousMarcusMessages.length >= 2) {
       try {
-        const [currentEmb, ...prevEmbs] = await Promise.all([
-          getSmallEmbedding(content),
-          ...recentMarcusMessages.slice(-3).map(m => getSmallEmbedding(m)),
-        ]);
-        const maxSim = Math.max(...prevEmbs.map(e => cosineSim(currentEmb, e)));
-        if (maxSim > 0.88) {
-          console.log(`[Marcus] 🔄 Semantic dedup triggered (similarity: ${maxSim.toFixed(3)}) — regenerating`);
+        const drift = await computeTrajectoryDrift(content, previousMarcusMessages);
+        if (drift > 0.85) {
+          console.log(`[Marcus] 🔄 Trajectory dedup triggered (drift: ${drift.toFixed(3)}) — regenerating`);
           const dedupMessages = [
             ...messages,
             new AIMessage(content),
-            new HumanMessage(`[SYSTEM OVERRIDE] Your response is too similar to something you already said earlier in this conversation. You are REPEATING yourself. Write a COMPLETELY DIFFERENT response. Change your angle entirely. If you asked a question before, try a statement. If you were exploring feelings, try a challenge. If you were gentle, be direct. 2-3 sentences, ONE question. Must be meaningfully different from what you've already said.`),
+            new HumanMessage(`[SYSTEM OVERRIDE] Your response is semantically identical to what you've been saying all session. You are STUCK IN A LOOP. Write a COMPLETELY DIFFERENT response. Change angle entirely: if you've been asking questions, make a statement. If gentle, be blunt. If exploring feelings, issue a direct challenge. 2-3 sentences, ONE question. Must be meaningfully different from your last 5 responses.`),
           ];
           const dedupRetry = await model.invoke(dedupMessages);
           const dedupContent = typeof dedupRetry.content === 'string' ? dedupRetry.content : JSON.stringify(dedupRetry.content);
@@ -385,6 +267,18 @@ WISDOM INTEGRATION (CRITICAL):
       } catch (dedupErr) {
         console.warn('[Marcus] Dedup check failed (non-critical):', dedupErr);
       }
+    }
+
+    // ─── HARD TEMPLATE ENFORCEMENT ───
+    // If hopelessness level 4 (crisis), force crisis resources into response
+    if (hopelessnessLevel >= 4 && !content.includes('988')) {
+      console.log('[Marcus] 🆘 Crisis resources missing from response — force-injecting');
+      content += '\n\nBrother — 988 Suicide & Crisis Lifeline: call or text 988. Crisis Text Line: text HOME to 741741. A real human needs to hear what you just told me.';
+    }
+    // If hopelessness level 3, ensure external support is mentioned
+    if (hopelessnessLevel === 3 && !content.toLowerCase().includes('therapist') && !content.toLowerCase().includes('counselor') && !content.toLowerCase().includes('help')) {
+      console.log('[Marcus] ⚠️ Support suggestion missing from L3 response — force-injecting');
+      content += ' What you\'re describing — a real person, a counselor or therapist, can reach places I can\'t. That\'s not weakness. That\'s knowing when to call in reinforcements.';
     }
 
     ctx.marcusResponse = content;
