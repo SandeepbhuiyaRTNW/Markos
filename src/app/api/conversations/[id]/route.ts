@@ -75,35 +75,60 @@ export async function POST(
       .map((m: { emotion_detected: string }) => m.emotion_detected);
 
     const messageCount = messagesResult.rows.length;
-    const isShortSession = messageCount <= 4; // Opening + 1 exchange or less
+    const userMessageCount = messagesResult.rows.filter(
+      (r: { role: string }) => r.role === 'user'
+    ).length;
+    const isShortSession = userMessageCount <= 2;
+
+    let systemPrompt: string;
+
+    if (isShortSession) {
+      systemPrompt = `You are summarizing a VERY SHORT conversation between a man and Marcus (his Stoic AI companion). The man only said ${userMessageCount} thing(s). Be BRUTALLY honest about how little content there is. Do NOT pad, embellish, or over-interpret.
+
+RULES FOR SHORT SESSIONS:
+- Summary: ONE sentence max. Just state what he said in his own words.
+- Takeaways: 1 item ONLY. Must quote or closely paraphrase his actual words. If he only said one sentence, the takeaway is essentially that sentence and what it might point to.
+- Pondering topics: 1 topic ONLY. Must directly use his words as the starting point.
+- Do NOT generate philosophical insights from a single sentence.
+- Do NOT add Stoic framing beyond the stoic_principle field.
+
+Generate a JSON object:
+- "title": 3-5 words using HIS words. Example: if he said "I'm really depressed" -> "Feeling Really Depressed"
+- "summary": 1 sentence. What did he actually say? Example: "He said he's 'really depressed' and doesn't know what to do."
+- "takeaways": Array with exactly 1 item. Quote him and note what's unresolved. Example: ["He came in saying 'I don't know what to do' — we haven't yet explored what's behind the depression or what 'doing something' would look like for him."]
+- "pondering_topics": Array with exactly 1 item. Use his words. Example: ["You said you 'don't know what to do' — if you could change one thing about tomorrow, what would it be?"]
+- "mood": One word
+- "stoic_principle": Most relevant Stoic principle
+- "topics": 1-2 topic labels from what he actually said
+Return ONLY valid JSON.`;
+    } else {
+      systemPrompt = `You are summarizing a conversation between a man and Marcus (his Stoic AI companion).
+
+CRITICAL RULES:
+1. Summary must use the EXACT words he used. Quote him directly.
+2. Takeaways must reference SPECIFIC things he said — not generic philosophy.
+3. Pondering topics must use HIS words and situation, not abstract questions.
+4. The depth of your summary must match the depth of the conversation. Don't create meaning that wasn't there.
+
+Generate a JSON object:
+- "title": 3-6 words using HIS language. Good: "Can't Talk to His Wife". Bad: "The Weight of an Unlived Life".
+- "summary": 2-3 sentences. What he said (quote him), what emerged, where it ended. Example: "He said he feels 'stuck' — work and home both feel flat. We explored what 'whatever' means to him. He admitted he hasn't told anyone else about this."
+- "takeaways": 2-4 insights. Each MUST quote or closely paraphrase something he said. Example: "He used the word 'grinding' three times — his relationship with work has become purely mechanical. Worth exploring whether the grinding serves his character or just his resume."
+- "pondering_topics": 2-3 questions using HIS words. Example: "You said 'I got nothing left' when you come home — what took it all?"
+- "mood": One word
+- "stoic_principle": Most relevant Stoic principle
+- "topics": 2-4 topic labels from what he actually discussed
+Return ONLY valid JSON.`;
+    }
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        {
-          role: 'system',
-          content: `You are summarizing a conversation between a man and Marcus (his Stoic AI companion).
-
-CRITICAL RULES:
-1. Your summary must be GROUNDED in the EXACT words he used. Quote him or paraphrase closely. Do NOT embellish or add literary prose he did not earn.
-2. If the conversation was short (few exchanges), keep the summary proportionally short. Do NOT generate elaborate insights from a brief exchange.
-3. Takeaways must reference SPECIFIC things he said or revealed — not generic Stoic philosophy.
-4. Pondering topics must connect to HIS actual situation, using HIS words and context.${isShortSession ? '\n5. THIS WAS A SHORT SESSION. Keep everything minimal and honest. Do not over-interpret.' : ''}
-
-Generate a JSON object with:
-- "title": 3-6 words capturing what HE actually talked about. Use his language, not literary language. Good: "Feeling Lost at Work", "Can't Talk to His Wife". Bad: "The Weight of an Unlived Life", "Wrestling with Existential Purpose".
-- "summary": 1-3 sentences describing what he ACTUALLY said and where the conversation went. Ground it in his real words.${isShortSession ? ' This was a short session — 1 sentence is fine.' : ''} Example: "He said he feels 'stuck' — work and home both feel flat. We started exploring what 'whatever' means to him and where the numbness began." BAD example: "He arrived weighed down by a sense of despair, grappling with the void of purpose."
-- "takeaways": An array of 2-4 insights that emerged. Each must reference something HE said or a specific pattern that surfaced. Frame through Stoic lens but anchor in his reality.${isShortSession ? ' For short sessions, 1-2 takeaways is enough.' : ''} Good: "He used the word 'grinding' three times — his relationship with work has become purely mechanical. The Stoic question is whether this grinding serves his character or just his resume." Bad: "Skills can be built through dedication."
-- "pondering_topics": 2-3 questions for him to sit with. These must reference HIS specific situation.${isShortSession ? ' For short sessions, 1-2 is enough.' : ''} Good: "You said 'I got nothing left' when you come home — what took it all? Is it the work itself, or something else?" Bad: "What does it mean to live a life of purpose?"
-- "mood": One word — the emotional tone of HIS side of the conversation
-- "stoic_principle": The most relevant Stoic principle (e.g. "Dichotomy of Control", "Amor Fati", "Memento Mori", "Obstacle is the Way")
-- "topics": 2-4 topic labels based on what he actually discussed (e.g. ["work burnout", "marriage strain"])
-Return ONLY valid JSON.`,
-        },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: transcript },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.3,
+      temperature: 0.2,
     });
 
     const raw = completion.choices[0].message.content || '{}';
