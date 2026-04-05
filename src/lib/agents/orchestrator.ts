@@ -36,16 +36,18 @@ async function enrichNode(state: OrchestratorStateType): Promise<Partial<Orchest
   const { ctx } = state;
   const historyStr = ctx.conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n');
 
-  // Phase 1: Fetch memory + KWML profile from DB (fast, ~75ms)
+  // Phase 1: Fetch memory + KWML profile + session count from DB (fast, ~75ms)
   // This feeds the understanding agent with real context about the man.
   const memoryDone = trackAgent(ctx, 'memory-agent');
   try {
-    const [memCtx, kwmlCtx] = await Promise.all([
+    const [memCtx, kwmlCtx, sessionResult] = await Promise.all([
       getMemoryContext(ctx.userId),
       getKWMLContext(ctx.userId),
+      query(`SELECT COUNT(*) as cnt FROM conversations WHERE user_id = $1`, [ctx.userId]),
     ]);
     ctx.memoryContext = memCtx;
     ctx.kwmlProfile = kwmlCtx;
+    ctx.sessionCount = parseInt(sessionResult.rows[0]?.cnt || '0', 10);
   } catch (error) {
     recordError(ctx, 'memory-agent', error);
   } finally {

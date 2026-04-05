@@ -12,6 +12,7 @@ import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
 type AppView = 'analytics' | 'voice' | 'session-detail' | 'session-notes';
+type InputMode = 'choice' | 'voice' | 'text';
 
 interface SessionNotesData {
   title?: string;
@@ -46,6 +47,8 @@ export default function Home() {
   const [refreshSidebar, setRefreshSidebar] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [textInput, setTextInput] = useState('');
+  const [inputMode, setInputMode] = useState<InputMode>('choice');
+  const [textSending, setTextSending] = useState(false);
   const [sessionNotes, setSessionNotes] = useState<SessionNotesData | null>(null);
   const [endingSession, setEndingSession] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
@@ -87,7 +90,7 @@ export default function Home() {
       .catch(() => setCheckingOnboarding(false));
   }, [userId]);
 
-  const fetchOpening = useCallback(async () => {
+  const fetchOpening = useCallback(async (mode: InputMode = 'voice') => {
     if (!userId || !onboardingComplete) return;
     if (viewRef.current !== 'voice') return;
     if (fetchingOpeningRef.current) return;
@@ -95,20 +98,40 @@ export default function Home() {
     setOpeningLoading(true);
     setOpeningMessage(null);
     try {
-      const r = await fetch(`/api/conversation/opening?userId=${userId}`);
-      const convId = r.headers.get('X-Conversation-Id');
-      const marcusText = decodeURIComponent(r.headers.get('X-Marcus-Text') || '');
-      if (convId) setConversationId(convId);
-      if (marcusText) setOpeningMessage(marcusText);
-      setRefreshSidebar((p) => p + 1);
-      const audioBuffer = await r.arrayBuffer();
-      if (audioBuffer.byteLength > 0) {
-        const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audio.onended = () => URL.revokeObjectURL(url);
-        audio.play().catch((e) => console.warn('Opening audio play error:', e));
+      const isTextMode = mode === 'text';
+      const url = `/api/conversation/opening?userId=${userId}${isTextMode ? '&skipTts=true' : ''}`;
+      const r = await fetch(url);
+
+      if (isTextMode) {
+        // Text mode: expect JSON response
+        const contentType = r.headers.get('Content-Type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await r.json();
+          if (data.conversationId) setConversationId(data.conversationId);
+          if (data.marcusText) setOpeningMessage(data.marcusText);
+        } else {
+          // Fallback: audio response with headers
+          const convId = r.headers.get('X-Conversation-Id');
+          const marcusText = decodeURIComponent(r.headers.get('X-Marcus-Text') || '');
+          if (convId) setConversationId(convId);
+          if (marcusText) setOpeningMessage(marcusText);
+        }
+      } else {
+        // Voice mode: expect audio response
+        const convId = r.headers.get('X-Conversation-Id');
+        const marcusText = decodeURIComponent(r.headers.get('X-Marcus-Text') || '');
+        if (convId) setConversationId(convId);
+        if (marcusText) setOpeningMessage(marcusText);
+        const audioBuffer = await r.arrayBuffer();
+        if (audioBuffer.byteLength > 0) {
+          const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
+          const blobUrl = URL.createObjectURL(blob);
+          const audio = new Audio(blobUrl);
+          audio.onended = () => URL.revokeObjectURL(blobUrl);
+          audio.play().catch((e) => console.warn('Opening audio play error:', e));
+        }
       }
+      setRefreshSidebar((p) => p + 1);
     } catch (err) {
       console.error('Opening fetch error:', err);
     } finally {
@@ -209,9 +232,39 @@ export default function Home() {
     setSessionNotes(null);
     setSelectedConvId(null);
     setSidebarOpen(false);
+    setInputMode('choice');
     setView('voice');
     viewRef.current = 'voice';
-    fetchOpening();
+  };
+
+  const handleChooseMode = (mode: 'voice' | 'text') => {
+    setInputMode(mode);
+    fetchOpening(mode);
+  };
+
+  const sendTextMessage = async () => {
+    if (!textInput.trim() || textSending || !userId) return;
+    const message = textInput.trim();
+    setTextInput('');
+    setTextSending(true);
+    setState('processing');
+    try {
+      const res = await fetch('/api/conversation/text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, conversationId, message }),
+      });
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      const data = await res.json();
+      if (data.conversationId && !conversationId) setConversationId(data.conversationId);
+      setTranscripts((prev) => [...prev, { user: message, marcus: data.marcusText }]);
+      setRefreshSidebar((p) => p + 1);
+    } catch (err) {
+      console.error('Text send error:', err);
+    } finally {
+      setTextSending(false);
+      setState('idle');
+    }
   };
 
   const handleEndSession = async () => {
@@ -552,110 +605,165 @@ export default function Home() {
               </div>
             </div>
           ) : (
-            /* ─── Voice UI ─── */
+            /* ─── Session UI ─── */
             <div className="flex-1 flex flex-col h-full">
-              {/* Chat-style transcript area */}
-              <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-6">
-                <div className="max-w-2xl mx-auto space-y-4">
-                  {/* Opening message from Marcus */}
-                  {openingLoading && (
-                    <div className="flex justify-start fade-in">
-                      <div className="marcus-message message-bubble">
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" />
-                          <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" style={{ animationDelay: '0.15s' }} />
-                          <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
-                        </div>
+              {/* Mode Selection */}
+              {inputMode === 'choice' && !openingMessage && !openingLoading && transcripts.length === 0 && (
+                <div className="flex-1 flex flex-col items-center justify-center py-20 text-center fade-in-up">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#a3785e]/10 to-transparent border border-[#a3785e]/10 flex items-center justify-center mb-6">
+                    <span className="text-2xl font-light text-[#a3785e]">M</span>
+                  </div>
+                  <p className="text-sm font-medium text-foreground mb-1">How would you like to connect?</p>
+                  <p className="text-xs text-muted-foreground/50 mb-8">Choose your preferred input for this session</p>
+                  <div className="flex gap-4">
+                    <button
+                      onClick={() => handleChooseMode('voice')}
+                      className="flex flex-col items-center gap-3 px-8 py-6 rounded-2xl border border-border hover:border-[#a3785e]/30 hover:bg-[#a3785e]/5 transition-all group"
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-[#a3785e]/8 flex items-center justify-center group-hover:bg-[#a3785e]/15 transition-colors">
+                        <Mic className="w-6 h-6 text-[#a3785e]/60" />
                       </div>
-                    </div>
-                  )}
-                  {openingMessage && !openingLoading && (
-                    <div className="flex justify-start fade-in">
-                      <div className="marcus-message message-bubble">
-                        <p className="text-sm leading-relaxed">{openingMessage}</p>
+                      <span className="text-sm font-medium text-foreground">Voice</span>
+                      <span className="text-[11px] text-muted-foreground/50">Speak naturally</span>
+                    </button>
+                    <button
+                      onClick={() => handleChooseMode('text')}
+                      className="flex flex-col items-center gap-3 px-8 py-6 rounded-2xl border border-border hover:border-[#a3785e]/30 hover:bg-[#a3785e]/5 transition-all group"
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-[#a3785e]/8 flex items-center justify-center group-hover:bg-[#a3785e]/15 transition-colors">
+                        <Send className="w-5 h-5 text-[#a3785e]/60" />
                       </div>
-                    </div>
-                  )}
-
-                  {/* Conversation transcript */}
-                  {transcripts.map((t, i) => (
-                    <div key={i} className="space-y-3 fade-in">
-                      <div className="flex justify-end">
-                        <div className="user-message message-bubble">
-                          <p className="text-sm leading-relaxed">{t.user}</p>
-                        </div>
-                      </div>
-                      <div className="flex justify-start">
-                        <div className="marcus-message message-bubble">
-                          <p className="text-sm leading-relaxed">{t.marcus}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Processing indicator */}
-                  {state === 'processing' && (
-                    <div className="flex justify-start fade-in">
-                      <div className="marcus-message message-bubble">
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" />
-                          <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" style={{ animationDelay: '0.15s' }} />
-                          <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Empty state */}
-                  {!openingMessage && !openingLoading && transcripts.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-20 text-center fade-in-up">
-                      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#a3785e]/10 to-transparent border border-[#a3785e]/10 flex items-center justify-center mb-6">
-                        <Mic className="w-7 h-7 text-[#a3785e]/40" />
-                      </div>
-                      <p className="text-sm text-muted-foreground mb-1">Ready when you are</p>
-                      <p className="text-xs text-muted-foreground/50">Tap the orb below or type a message</p>
-                    </div>
-                  )}
-
-                  <div ref={messagesEndRef} />
+                      <span className="text-sm font-medium text-foreground">Text</span>
+                      <span className="text-[11px] text-muted-foreground/50">Type your thoughts</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* Chat-style transcript area (visible after mode is chosen) */}
+              {inputMode !== 'choice' && (
+                <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-6">
+                  <div className="max-w-2xl mx-auto space-y-4">
+                    {/* Opening message from Marcus */}
+                    {openingLoading && (
+                      <div className="flex justify-start fade-in">
+                        <div className="marcus-message message-bubble">
+                          <div className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" />
+                            <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" style={{ animationDelay: '0.15s' }} />
+                            <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {openingMessage && !openingLoading && (
+                      <div className="flex justify-start fade-in">
+                        <div className="marcus-message message-bubble">
+                          <p className="text-sm leading-relaxed">{openingMessage}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Conversation transcript */}
+                    {transcripts.map((t, i) => (
+                      <div key={i} className="space-y-3 fade-in">
+                        <div className="flex justify-end">
+                          <div className="user-message message-bubble">
+                            <p className="text-sm leading-relaxed">{t.user}</p>
+                          </div>
+                        </div>
+                        <div className="flex justify-start">
+                          <div className="marcus-message message-bubble">
+                            <p className="text-sm leading-relaxed">{t.marcus}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Processing indicator */}
+                    {state === 'processing' && (
+                      <div className="flex justify-start fade-in">
+                        <div className="marcus-message message-bubble">
+                          <div className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" />
+                            <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" style={{ animationDelay: '0.15s' }} />
+                            <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div ref={messagesEndRef} />
+                  </div>
+                </div>
+              )}
 
               {/* Bottom controls */}
-              <div className="border-t border-border bg-white px-4 lg:px-8 py-4">
-                <div className="max-w-2xl mx-auto">
-                  {/* Voice Orb + Status */}
-                  <div className="flex flex-col items-center gap-3 mb-4">
-                    <VoiceOrb
-                      onStateChange={setState}
-                      onTranscript={handleTranscript}
-                      userId={userId}
-                      conversationId={conversationId}
-                      onConversationId={setConversationId}
-                      state={state}
-                    />
-                    <p className="text-[11px] tracking-wider uppercase text-muted-foreground/50">
-                      {statusLabel[state]}
-                    </p>
+              {inputMode !== 'choice' && (
+                <div className="border-t border-border bg-white px-4 lg:px-8 py-4">
+                  <div className="max-w-2xl mx-auto">
+                    {inputMode === 'voice' ? (
+                      <>
+                        {/* Voice Orb + Status */}
+                        <div className="flex flex-col items-center gap-3 mb-4">
+                          <VoiceOrb
+                            onStateChange={setState}
+                            onTranscript={handleTranscript}
+                            userId={userId}
+                            conversationId={conversationId}
+                            onConversationId={setConversationId}
+                            state={state}
+                          />
+                          <p className="text-[11px] tracking-wider uppercase text-muted-foreground/50">
+                            {statusLabel[state]}
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* Text Input */}
+                        <div className="flex items-center gap-3 mb-4">
+                          <Input
+                            value={textInput}
+                            onChange={(e) => setTextInput(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendTextMessage()}
+                            placeholder="Type your message to Marcus..."
+                            disabled={textSending}
+                            className="flex-1 h-12 bg-white border-border text-foreground placeholder:text-muted-foreground/50 rounded-xl px-5 text-sm"
+                          />
+                          <button
+                            onClick={sendTextMessage}
+                            disabled={textSending || !textInput.trim()}
+                            className="h-12 w-12 rounded-xl flex items-center justify-center bg-[#44403c] hover:bg-[#57534e] text-white transition-all disabled:opacity-40"
+                          >
+                            {textSending ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Send className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                    {/* End Session button */}
+                    {(transcripts.length > 0 || openingMessage) && conversationId && (
+                      <div className="flex justify-center mt-2">
+                        <button
+                          onClick={handleEndSession}
+                          disabled={endingSession}
+                          className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-secondary transition-all disabled:opacity-50"
+                        >
+                          {endingSession ? (
+                            <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Ending session…</>
+                          ) : (
+                            <><Shield className="w-3.5 h-3.5" /> End Session</>
+                          )}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {/* End Session button — only visible when there are transcripts */}
-                  {(transcripts.length > 0 || openingMessage) && conversationId && (
-                    <div className="flex justify-center mt-2">
-                      <button
-                        onClick={handleEndSession}
-                        disabled={endingSession}
-                        className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-secondary transition-all disabled:opacity-50"
-                      >
-                        {endingSession ? (
-                          <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Ending session…</>
-                        ) : (
-                          <><Send className="w-3.5 h-3.5" /> End Session</>
-                        )}
-                      </button>
-                    </div>
-                  )}
                 </div>
-              </div>
+              )}
             </div>
           )}
         </main>

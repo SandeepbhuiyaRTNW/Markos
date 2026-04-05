@@ -28,9 +28,23 @@ export async function storeMemory(
   );
 
   if (existing.rows.length > 0) {
+    // Confidence reinforcement: if the same key is stored again with a similar value, boost confidence
+    const existingRow = await query(
+      `SELECT value, confidence FROM memory_layers WHERE id = $1`,
+      [existing.rows[0].id]
+    );
+    let newConfidence = confidence;
+    if (existingRow.rows.length > 0) {
+      const oldVal = (existingRow.rows[0].value || '').toLowerCase();
+      const newVal = value.toLowerCase();
+      // If value is similar or the same, reinforce confidence (max 1.0)
+      if (oldVal === newVal || oldVal.includes(newVal) || newVal.includes(oldVal)) {
+        newConfidence = Math.min(1.0, (existingRow.rows[0].confidence || 0.5) + 0.1);
+      }
+    }
     await query(
       `UPDATE memory_layers SET value = $1, confidence = $2, updated_at = NOW(), source_message_id = $3 WHERE id = $4`,
-      [value, confidence, sourceMessageId, existing.rows[0].id]
+      [value, newConfidence, sourceMessageId, existing.rows[0].id]
     );
   } else {
     await query(
@@ -42,26 +56,61 @@ export async function storeMemory(
 }
 
 export async function getMemoryContext(userId: string): Promise<string> {
-  const result = await query(
-    `SELECT layer_number, layer_name, key, value, confidence
-     FROM memory_layers WHERE user_id = $1
-     ORDER BY layer_number, confidence DESC`,
-    [userId]
-  );
+  // Fetch memories and session count in parallel
+  const [memResult, sessionResult] = await Promise.all([
+    query(
+      `SELECT layer_number, layer_name, key, value, confidence, updated_at
+       FROM memory_layers WHERE user_id = $1
+       ORDER BY layer_number, confidence DESC`,
+      [userId]
+    ),
+    query(
+      `SELECT COUNT(*) as cnt FROM conversations WHERE user_id = $1`,
+      [userId]
+    ),
+  ]);
 
-  if (result.rows.length === 0) return 'No memories stored for this user yet.';
+  const sessionCount = parseInt(sessionResult.rows[0]?.cnt || '0', 10);
 
-  const layers: Record<number, string[]> = {};
-  for (const row of result.rows) {
-    if (!layers[row.layer_number]) layers[row.layer_number] = [];
-    layers[row.layer_number].push(`${row.key}: ${row.value} (confidence: ${row.confidence})`);
+  if (memResult.rows.length === 0) {
+    return sessionCount > 0
+      ? `Session count: ${sessionCount}. No structured memories stored yet.`
+      : 'No memories stored for this user yet.';
   }
 
-  let context = '';
+  // Organize by layer
+  const layers: Record<number, Array<{ key: string; value: string; confidence: number; updatedAt: string }>> = {};
+  const highlights: string[] = [];
+
+  for (const row of memResult.rows) {
+    if (!layers[row.layer_number]) layers[row.layer_number] = [];
+    layers[row.layer_number].push({
+      key: row.key,
+      value: row.value,
+      confidence: parseFloat(row.confidence),
+      updatedAt: row.updated_at,
+    });
+    // Collect high-confidence facts as highlights
+    if (parseFloat(row.confidence) >= 0.8) {
+      highlights.push(`${row.key}: ${row.value}`);
+    }
+  }
+
+  let context = `SESSIONS TOGETHER: ${sessionCount}\nTOTAL MEMORIES: ${memResult.rows.length}`;
+
+  // High-confidence highlights summary
+  if (highlights.length > 0) {
+    context += `\n\nKEY FACTS (high confidence):\n${highlights.slice(0, 10).map(h => `- ${h}`).join('\n')}`;
+  }
+
+  // Detailed layers
   for (const [layerNum, entries] of Object.entries(layers)) {
     const layerName = MEMORY_LAYERS[parseInt(layerNum) as keyof typeof MEMORY_LAYERS];
-    context += `\n[Layer ${layerNum} - ${layerName}]\n`;
-    context += entries.join('\n') + '\n';
+    context += `\n\n[Layer ${layerNum} - ${layerName}]`;
+    for (const entry of entries) {
+      const conf = entry.confidence >= 0.8 ? 'strong' : entry.confidence >= 0.5 ? 'moderate' : 'weak';
+      context += `\n${entry.key}: ${entry.value} (${conf})`;
+    }
   }
 
   return context;

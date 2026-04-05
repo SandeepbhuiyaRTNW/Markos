@@ -6,6 +6,7 @@
  */
 
 import { retrieveWisdom, retrieveQuestion } from '../rag/retriever';
+import type { QuestionRetrievalContext } from '../rag/retriever';
 import type { MCPContext } from './mcp-context';
 import { trackAgent, recordError } from './mcp-context';
 
@@ -19,10 +20,29 @@ export async function runRAGAgent(ctx: MCPContext): Promise<void> {
       .map(m => `${m.role}: ${m.content}`)
       .join('\n');
 
+    // Build question retrieval context from enrichment data
+    // Determine active shadow from KWML reading
+    const kwml = ctx.kwmlReading;
+    let activeShadow: string | undefined;
+    if (kwml?.shadowActive) {
+      const shadowMap: Record<string, string | null> = {
+        king: kwml.kingShadow, warrior: kwml.warriorShadow,
+        magician: kwml.magicianShadow, lover: kwml.loverShadow,
+      };
+      activeShadow = shadowMap[kwml.dominant]?.toLowerCase() || undefined;
+    }
+
+    const qCtx: QuestionRetrievalContext = {
+      sessionCount: ctx.sessionCount || 1,
+      emotionDetected: ctx.understanding?.primary_emotion || undefined,
+      archetype: kwml?.dominant || undefined,
+      shadow: activeShadow,
+    };
+
     // Run book search (with re-ranking) and question search in parallel
     const [wisdom, questions] = await Promise.all([
       retrieveWisdom(ctx.userMessage, 8, conversationContext || undefined),
-      retrieveQuestion(ctx.userMessage, undefined, undefined, 3),
+      retrieveQuestion(ctx.userMessage, undefined, undefined, 3, qCtx),
     ]);
 
     ctx.ragContext = wisdom;

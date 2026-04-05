@@ -22,6 +22,9 @@ export interface MCPContext {
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
   userName: string | null;
 
+  // --- Enrichment State ---
+  sessionCount: number;           // total sessions for this user (populated by memory phase)
+
   // --- Agent Results (written by individual agents) ---
   ragContext: string | null;
   questionSuggestions: string[];
@@ -55,6 +58,7 @@ export function createMCPContext(params: {
     userMessage: params.userMessage,
     conversationHistory: params.conversationHistory,
     userName: params.userName ?? null,
+    sessionCount: 0,
     ragContext: null,
     questionSuggestions: [],
     memoryContext: null,
@@ -115,7 +119,11 @@ The Silence: ${ctx.understanding.layer5_the_silence}`);
   }
 
   if (ctx.questionSuggestions.length > 0) {
-    parts.push(`## SUGGESTED QUESTIONS\n${ctx.questionSuggestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}`);
+    const trustLabel = ctx.sessionCount <= 2 ? 'NEW (sessions 1-2: surface-level only)'
+      : ctx.sessionCount <= 5 ? 'DEVELOPING (sessions 3-5: can deepen gently)'
+      : ctx.sessionCount <= 15 ? 'ESTABLISHED (sessions 5-15: can challenge and reveal patterns)'
+      : 'DEEP (sessions 15+: shadow work and direct confrontation allowed)';
+    parts.push(`## SUGGESTED QUESTIONS (Trust: ${trustLabel}, Session #${ctx.sessionCount})\n${ctx.questionSuggestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n\nIMPORTANT: These questions are pre-filtered for the current trust level. Do NOT ask questions that go deeper than the trust level allows. If this is an early session, keep questions at the surface — clarifying, opening, exploring. Do NOT jump to challenging or confrontational questions.`);
   }
 
   return parts.join('\n\n');
