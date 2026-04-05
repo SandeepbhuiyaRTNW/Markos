@@ -159,10 +159,11 @@ body {
 }
 
 /* ─── Scrollbar (thin, light) ─── */
-.scrollbar-thin::-webkit-scrollbar { width: 5px; }
+.scrollbar-thin::-webkit-scrollbar { width: 5px; height: 5px; }
 .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.08); border-radius: 9999px; }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.15); }
+.scrollbar-thin { scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.08) transparent; }
 
 *::-webkit-scrollbar { width: 5px; }
 *::-webkit-scrollbar-track { background: transparent; }

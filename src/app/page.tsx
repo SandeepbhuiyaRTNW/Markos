@@ -781,45 +781,46 @@ export default function Home() {
 
               {/* Step 1b: Pick which session to continue from */}
               {inputMode === 'pick-session' && (
-                <div className="flex-1 flex flex-col items-center justify-center py-12 text-center fade-in-up">
+                <div className="flex-1 flex flex-col items-center justify-center py-12 text-center fade-in-up overflow-hidden">
                   <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#a3785e]/10 to-transparent border border-[#a3785e]/10 flex items-center justify-center mb-6">
                     <span className="text-2xl font-light text-[#a3785e]">M</span>
                   </div>
                   <p className="text-sm font-medium text-foreground mb-1">Continue from which conversation?</p>
-                  <p className="text-xs text-muted-foreground/50 mb-6">Pick the thread you want to pick up</p>
-                  <div className="flex flex-col gap-3 w-full max-w-md">
-                    {recentSessions.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => handlePickSession(s.id)}
-                        className="flex items-start gap-3 px-4 py-4 rounded-xl border border-border hover:border-[#a3785e]/30 hover:bg-[#a3785e]/5 transition-all text-left group"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-[#a3785e]/8 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-[#a3785e]/15 transition-colors">
-                          <span className="text-xs font-medium text-[#a3785e]/60">{s.sessionNumber}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          {/* Title + date */}
-                          <div className="flex items-baseline gap-2">
-                            <p className="text-sm font-medium text-foreground truncate">{s.title}</p>
-                            <span className="text-[10px] text-muted-foreground/40 shrink-0">
+                  <p className="text-xs text-muted-foreground/50 mb-6">Scroll to browse · Click to pick up</p>
+                  {/* Horizontal scrollable cards */}
+                  <div className="w-full overflow-x-auto pb-4 px-4 scrollbar-thin">
+                    <div className="flex gap-3 w-max mx-auto">
+                      {recentSessions.map((s) => (
+                        <button
+                          key={s.id}
+                          onClick={() => handlePickSession(s.id)}
+                          className="flex flex-col items-start gap-2 px-4 py-4 rounded-xl border border-border hover:border-[#a3785e]/30 hover:bg-[#a3785e]/5 transition-all text-left group w-[260px] shrink-0"
+                        >
+                          {/* Session number + date */}
+                          <div className="flex items-center justify-between w-full">
+                            <div className="w-7 h-7 rounded-lg bg-[#a3785e]/8 flex items-center justify-center group-hover:bg-[#a3785e]/15 transition-colors">
+                              <span className="text-[11px] font-medium text-[#a3785e]/60">{s.sessionNumber}</span>
+                            </div>
+                            <span className="text-[10px] text-muted-foreground/40">
                               {new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                             </span>
                           </div>
+                          {/* Title */}
+                          <p className="text-sm font-medium text-foreground truncate w-full">{s.title}</p>
                           {/* Summary */}
                           {s.summary && (
-                            <p className="text-[12px] text-muted-foreground/60 mt-1 line-clamp-2 leading-relaxed">{s.summary}</p>
+                            <p className="text-[11px] text-muted-foreground/50 line-clamp-2 leading-relaxed">{s.summary}</p>
                           )}
-                          {/* Pondering preview — what they'd continue into */}
+                          {/* Pondering preview */}
                           {s.ponderingPreview && (
-                            <div className="mt-2 flex gap-1.5 items-start">
+                            <div className="mt-auto pt-2 border-t border-border/50 w-full flex gap-1.5 items-start">
                               <span className="text-[10px] text-[#a3785e]/50 mt-0.5 shrink-0">↳</span>
-                              <p className="text-[11px] text-[#a3785e]/60 italic leading-relaxed">{s.ponderingPreview}</p>
+                              <p className="text-[10px] text-[#a3785e]/50 italic leading-relaxed line-clamp-2">{s.ponderingPreview}</p>
                             </div>
                           )}
-                        </div>
-                        <svg className="w-4 h-4 text-muted-foreground/20 shrink-0 mt-1 group-hover:text-[#a3785e]/50 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" /></svg>
-                      </button>
-                    ))}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <button
                     onClick={() => { setContinueFromId(null); setInputMode('choice'); }}
