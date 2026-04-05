@@ -103,7 +103,10 @@ export async function GET(req: NextRequest) {
         [userId, conversationId]
       ),
     ]);
-    const hasMemory = !memoryContext.includes('No memories stored');
+    // Determine if we have REAL memories (not just session count metadata)
+    const hasMemory = !memoryContext.includes('No memories stored')
+      && !memoryContext.includes('No structured memories stored')
+      && memoryContext.includes('[Layer');  // actual memory layers present
     const prevMessages = prevResult.rows.reverse();
     const hasPrevHistory = prevMessages.length > 0;
 
@@ -131,10 +134,10 @@ export async function GET(req: NextRequest) {
     if (lastPondering.length > 0) {
       // Returning user with pondering topics from last session
       openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION\nYou are speaking first. The man has just arrived. He was given specific topics to ponder since your last conversation. Reference one of the pondering topics DIRECTLY — ask him if he had time to sit with it, what came up for him when he thought about it. Be specific, not generic. Keep it to 2-3 sentences. End with ONE question about his reflection. Do NOT start with "Brother" — vary your openings.${continuitySection}${recentSection}`;
-    } else if (hasMemory) {
-      openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION\nYou are speaking first. The man has just arrived. Reference something SPECIFIC from your memory — a struggle, a pattern, a commitment — so he knows you have been thinking about him. Keep it to 2-3 sentences. End with ONE grounded question. Do NOT start with "Brother" — vary your openings.${continuitySection}${recentSection}`;
+    } else if (hasMemory && hasPrevHistory) {
+      openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION\nYou are speaking first. The man has just arrived. Reference something SPECIFIC from the memory context below — a struggle, a pattern, a commitment — so he knows you have been thinking about him. ONLY reference things that are explicitly stated in your memory context. Do NOT invent or assume any memories. Keep it to 2-3 sentences. End with ONE grounded question. Do NOT start with "Brother" — vary your openings.${continuitySection}${recentSection}`;
     } else {
-      openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION\nThis is your first conversation with this man. Speak first. Set the tone for what this relationship will become. Welcome him with weight and purpose — not warmth for warmth's sake, but genuine gravity. 2-3 sentences maximum. End with ONE question that begins to open him up. Do NOT start with "Brother" — vary your openings.`;
+      openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION\nThis is your first conversation with this man. You have NO prior memory of him — do NOT pretend you remember anything or reference any past sessions. Speak first. Set the tone for what this relationship will become. Welcome him with weight and purpose — not warmth for warmth's sake, but genuine gravity. 2-3 sentences maximum. End with ONE question that begins to open him up. Do NOT start with "Brother" — vary your openings. CRITICAL: Do NOT say "I remember" or reference anything from past conversations — there are none.`;
     }
 
     const systemPrompt = buildSystemPrompt({
