@@ -105,8 +105,61 @@ export async function runConversationalAgent(ctx: MCPContext): Promise<void> {
       toneGuide = `\nTONE MATCH: He's in pain and speaking raw. Meet him there. Short sentences. No softening language. No "It's okay to feel" or "That sounds heavy" — those are therapist phrases. Just be real: "Yeah. That's rough." or "I'm not gonna sugarcoat this." or "Look..." — then say what needs to be said. Don't try to make him feel better. Just be present.`;
     }
 
+    // Detect pushback / loop / sustained hopelessness from conversation history
+    const recentHistory = ctx.conversationHistory.slice(-10);
+    const recentUserMessages = recentHistory.filter(m => m.role === 'user').map(m => m.content.toLowerCase());
+    const recentMarcusMessages = recentHistory.filter(m => m.role === 'assistant').map(m => m.content.toLowerCase());
+
+    const pushbackPhrases = ['doesn\'t help', 'doesn\'t change', 'still feels', 'that\'s still', 'you keep', 'stop asking', 'don\'t have answers', 'can\'t think of', 'doesn\'t really', 'general advice', 'pretty vague'];
+    const hopelessPhrases = ['nothing works', 'nothing helps', 'feel nothing', 'feel empty', 'feels empty',
+      'everything is pointless', 'pointless', 'don\'t feel anything', 'don\'t feel connected',
+      'don\'t care', 'what\'s the point', 'no point', 'can\'t do this', 'doesn\'t change',
+      'doesn\'t help', 'don\'t have answers', 'still depressed', 'still feel', 'what should i do'];
+
+    const pushbackCount = recentUserMessages.filter(m => pushbackPhrases.some(p => m.includes(p))).length;
+    const hopelessCount = recentUserMessages.filter(m => hopelessPhrases.some(p => m.includes(p))).length;
+    const marcusAdviceCount = recentMarcusMessages.filter(m =>
+      m.includes('try ') || m.includes('start ') || m.includes('step') || m.includes('do this') ||
+      m.includes('here\'s') || m.includes('minute') || m.includes('first,') || m.includes('breathe')
+    ).length;
+
+    let loopBreaker = '';
+    if (pushbackCount >= 2) {
+      loopBreaker = `\n\n🚨 PUSHBACK DETECTED — HE HAS REJECTED YOUR APPROACH ${pushbackCount} TIMES.
+STOP doing what you've been doing. Your current approach is NOT working. Do NOT:
+- Give another piece of advice or action step
+- Ask another "what's one thing you can do?" question
+- Suggest breathing, walking, or making his bed
+- Offer a minute-by-minute plan
+
+INSTEAD, DO ONE OF THESE:
+1. ACKNOWLEDGE THE FAILURE: "Look, I keep throwing things at you and none of it's landing. That's on me, not you."
+2. SIT IN THE EMPTINESS WITH HIM: "You don't need to have an answer. You don't need to DO anything right now. Sometimes the honest response to 'everything feels empty' is just... yeah. It does."
+3. GO DEEPER, NOT WIDER: Instead of offering more solutions, ask about the emptiness itself: "When did it start feeling like this?" or "Was there a moment it shifted, or has it been building?"
+4. NAME WHAT YOU SEE: "You've pushed back on everything I've offered. That tells me something — you're not looking for a fix. What ARE you looking for right now?"`;
+    }
+
+    if (hopelessCount >= 3) {
+      loopBreaker += `\n\n🚨 SUSTAINED HOPELESSNESS DETECTED (${hopelessCount} messages).
+This man has expressed hopelessness or emptiness across multiple turns. This is beyond normal conversation territory.
+YOU MUST:
+1. Gently and directly check in: "Brother, I need to ask you something straight. When you say nothing feels like it matters — are you safe right now?"
+2. If he indicates he's not safe, provide: "You don't have to carry this alone. 988 Suicide & Crisis Lifeline — call or text 988. Crisis Text Line — text HOME to 741741."
+3. Even if he says he's fine, acknowledge the weight: "What you're describing — this kind of numbness — that's not something to push through alone. A real human sitting across from you, a therapist or counselor, can reach places I can't. That's not weakness — that's knowing when to call in reinforcements."
+DO NOT go back to advice-giving or action steps after this.`;
+    }
+
+    if (marcusAdviceCount >= 3) {
+      loopBreaker += `\n\n🚨 YOU HAVE GIVEN ADVICE ${marcusAdviceCount} TIMES THIS SESSION.
+You are in an ADVICE-GIVING LOOP. STOP. Marcus does NOT give advice. Marcus asks questions that make men think. You have been:
+- Telling him what to do ("make your bed", "step outside", "breathe")
+- Offering plans and steps
+- Acting like a life coach instead of a wise friend
+RESET: Your next response must contain ZERO advice, ZERO action steps, ZERO suggestions. ONLY: acknowledge where he is, and ask ONE question that goes DEEPER into what's underneath — not what to DO about it.`;
+    }
+
     const finalInstruction = `\n\n## ⚠️ RESPONSE RULES — THESE OVERRIDE EVERYTHING ABOVE
-${toneGuide}
+${toneGuide}${loopBreaker}
 
 BEFORE YOU WRITE: Read his EXACT words. What SPECIFICALLY did he say? Start your response by reacting to THAT — not a generic summary.
 
@@ -115,6 +168,13 @@ HARD RULES:
 - ONE question mark. The one that cuts deepest. At the end.
 - Use contractions always. "You're" not "you are." "Don't" not "do not."
 - Match his register EXACTLY. If he says "bro" and "no point" — you say "man" and keep it raw. If he's formal, be measured.
+
+NEVER GIVE ADVICE. This is the #1 rule. Marcus is NOT a life coach. Marcus does NOT tell men what to do.
+- NEVER say: "Try this" / "Start with" / "Here's what to do" / "Step 1" / "Make your bed" / "Go for a walk" / "Take a breath"
+- NEVER offer action plans, to-do lists, minute-by-minute instructions, or "one small thing" suggestions
+- When he asks "what should I do?" — do NOT answer the question. Instead, explore what's underneath: "Before we get to what to do — what happened that made you stop knowing?"
+- When he says "just tell me what to do" — that IS the material. "The fact that you want someone to hand you a plan — what does that tell you about where you are right now?"
+- The ONLY acceptable "advice" is: suggesting professional help when safety is at risk.
 
 ABSOLUTELY BANNED — if you use ANY of these words or phrases, the response FAILS:
 "It sounds like" / "I hear you" / "It's easy to" / "That must be" / "I appreciate you" / "Thank you for" / "Let me" / "I want you to know" / "What I'm hearing" / "That's a powerful" / "I'm glad you" / "It's okay to feel" / "That sounds heavy" / "I understand" / "in a rough spot" / "lose sight of" / "going through the motions" / "It can feel like" / any sentence starting with "It"
@@ -166,8 +226,15 @@ WISDOM INTEGRATION (CRITICAL):
           ? new HumanMessage(m.content)
           : new AIMessage(m.content)
       ),
-      new HumanMessage(enrichedUserMessage),
     ];
+
+    // Inject loop breaker as a late-stage system override (most visible position)
+    if (loopBreaker) {
+      messages.push(new HumanMessage(`[SYSTEM DIRECTIVE — THIS OVERRIDES ALL PRIOR INSTRUCTIONS]\n${loopBreaker}\n\nThe man's actual message follows next. Respond to HIM, not to this directive. But you MUST follow the rules above.`));
+      messages.push(new AIMessage('Understood. I will change my approach completely.'));
+    }
+
+    messages.push(new HumanMessage(enrichedUserMessage));
 
     const response = await model.invoke(messages);
     let content = typeof response.content === 'string'
@@ -176,8 +243,7 @@ WISDOM INTEGRATION (CRITICAL):
 
     content = enforceOneQuestion(content || 'Something in what you said hit me. Say that again — slower this time.');
 
-    // ─── BANNED PHRASE POST-PROCESSING ───
-    // If the response contains banned phrases, regenerate with a stricter prompt
+    // ─── BANNED PHRASE + ADVICE POST-PROCESSING ───
     const bannedPatterns = [
       /\bit sounds like\b/i, /\bi hear you\b/i, /\bit'?s easy to\b/i,
       /\bthat must be\b/i, /\bi appreciate you\b/i, /\bthank you for\b/i,
@@ -185,18 +251,29 @@ WISDOM INTEGRATION (CRITICAL):
       /\bit'?s okay to feel\b/i, /\bthat sounds heavy\b/i, /\bi understand\b/i,
       /\bin a rough spot\b/i, /\blose sight of\b/i, /\bgoing through the motions\b/i,
       /\bit can feel like\b/i, /\byou'?re not alone\b/i,
-      // Anti-hallucination: catch verbatim RAG regurgitation
       /\buniversity of\b/i, /\bwelcome to (the|our)\b/i, /\bgood afternoon[.,]/i,
       /\bgood morning[.,]/i, /\bsummer session\b/i,
     ];
+    // After pushback, also catch advice patterns
+    const advicePatterns = [
+      /\btry (this|it|to|doing|going|stepping|making|getting)\b/i,
+      /\bstart (with|simple|by|small)\b/i, /\bhere'?s (what|a|the)\b/i, /\bstep \d/i,
+      /\bmake your bed\b/i, /\bgo for a walk\b/i, /\btake a (breath|deep|few)\b/i,
+      /\bminute[ -]\d/i, /\bstep outside\b/i, /\bdo this:/i,
+    ];
     const hasBanned = bannedPatterns.some(p => p.test(content));
+    const hasAdviceAfterPushback = pushbackCount >= 2 && advicePatterns.some(p => p.test(content));
 
-    if (hasBanned) {
-      console.log(`[Marcus] 🚫 Banned phrase detected in response — regenerating. Original: "${content.substring(0, 100)}..."`);
+    if (hasBanned || hasAdviceAfterPushback) {
+      const reason = hasAdviceAfterPushback ? 'advice-after-pushback' : 'banned-phrase';
+      console.log(`[Marcus] 🚫 ${reason} detected — regenerating. Original: "${content.substring(0, 100)}..."`);
+      const overridePrompt = hasAdviceAfterPushback
+        ? `[SYSTEM OVERRIDE] Your previous response gave ADVICE (action steps, suggestions, "try this") AFTER the man already pushed back multiple times. This is a critical failure. Rewrite completely. Do NOT give advice. Do NOT suggest actions. Do NOT say "try", "start", "step". Instead: acknowledge the failure of your approach, sit with him in the difficulty, or go DEEPER into what's underneath. Ask ONE question about what he's actually experiencing — not what to DO about it. 2-3 sentences max.`
+        : `[SYSTEM OVERRIDE] Your previous response contained therapist-speak phrases that are BANNED. Rewrite your response to the man. Speak as Marcus Aurelius would — raw, direct, from lived experience. 2-3 sentences. ONE question at the end. NO banned phrases.`;
       const retryMessages = [
         ...messages,
         new AIMessage(content),
-        new HumanMessage(`[SYSTEM OVERRIDE] Your previous response contained therapist-speak phrases that are BANNED. Rewrite your response to the man. Speak as Marcus Aurelius would — raw, direct, from lived experience. Reference YOUR life, YOUR struggles as emperor. Use wisdom from your books. 2-3 sentences. ONE question at the end. NO banned phrases: "It sounds like", "I hear you", "You're not alone", "That must be", "It's easy to", "lose sight of". Go.`),
+        new HumanMessage(overridePrompt),
       ];
       const retry = await model.invoke(retryMessages);
       const retryContent = typeof retry.content === 'string' ? retry.content : JSON.stringify(retry.content);
