@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
   try {
     const userId = req.nextUrl.searchParams.get('userId');
     const skipTts = req.nextUrl.searchParams.get('skipTts') === 'true';
+    const sessionType = req.nextUrl.searchParams.get('sessionType') || 'continue'; // 'continue' | 'fresh'
 
     if (!userId) {
       return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
@@ -78,8 +79,8 @@ export async function GET(req: NextRequest) {
       sessionNumber = parseInt(countResult.rows[0].cnt, 10) + 1;
 
       const created = await query(
-        `INSERT INTO conversations (user_id, session_number) VALUES ($1, $2) RETURNING id`,
-        [userId, sessionNumber]
+        `INSERT INTO conversations (user_id, session_number, metadata) VALUES ($1, $2, $3) RETURNING id`,
+        [userId, sessionNumber, JSON.stringify({ sessionType })]
       );
       conversationId = created.rows[0].id;
     }
@@ -131,8 +132,16 @@ export async function GET(req: NextRequest) {
     }
 
     let openingInstruction: string;
-    if (lastPondering.length > 0) {
-      // Returning user with pondering topics from last session
+    if (sessionType === 'fresh') {
+      // Fresh topic — Marcus knows the man but starts a new thread
+      const nameGreeting = userName ? `You know this man as ${userName}. ` : '';
+      openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION (NEW TOPIC)
+${nameGreeting}He has chosen to start a NEW topic today — do NOT reference previous conversations, past struggles, or pondering topics. He wants a clean start on something different.
+Your job: Open with warmth and curiosity. Acknowledge that today is about something new. Invite him to bring whatever is on his mind RIGHT NOW.
+Keep it to 2-3 sentences. End with ONE open question like "What's on your mind today?" or "What brought you here today?"
+Do NOT say "I remember" or reference past sessions. Do NOT start with "Brother" — vary your openings.`;
+    } else if (lastPondering.length > 0) {
+      // Returning user with pondering topics from last session — continue thread
       openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION\nYou are speaking first. The man has just arrived. He was given specific topics to ponder since your last conversation. Reference one of the pondering topics DIRECTLY — ask him if he had time to sit with it, what came up for him when he thought about it. Be specific, not generic. Keep it to 2-3 sentences. End with ONE question about his reflection. Do NOT start with "Brother" — vary your openings.${continuitySection}${recentSection}`;
     } else if (hasMemory && hasPrevHistory) {
       openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION\nYou are speaking first. The man has just arrived. Reference something SPECIFIC from the memory context below — a struggle, a pattern, a commitment — so he knows you have been thinking about him. ONLY reference things that are explicitly stated in your memory context. Do NOT invent or assume any memories. Keep it to 2-3 sentences. End with ONE grounded question. Do NOT start with "Brother" — vary your openings.${continuitySection}${recentSection}`;

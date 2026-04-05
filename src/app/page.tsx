@@ -12,7 +12,8 @@ import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
 type AppView = 'analytics' | 'voice' | 'session-detail' | 'session-notes';
-type InputMode = 'choice' | 'voice' | 'text';
+type InputMode = 'session-type' | 'choice' | 'voice' | 'text';
+type SessionType = 'continue' | 'fresh';
 
 interface SessionNotesData {
   title?: string;
@@ -47,7 +48,8 @@ export default function Home() {
   const [refreshSidebar, setRefreshSidebar] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [textInput, setTextInput] = useState('');
-  const [inputMode, setInputMode] = useState<InputMode>('choice');
+  const [inputMode, setInputMode] = useState<InputMode>('session-type');
+  const [sessionType, setSessionType] = useState<SessionType>('continue');
   const [textSending, setTextSending] = useState(false);
   const [sessionNotes, setSessionNotes] = useState<SessionNotesData | null>(null);
   const [endingSession, setEndingSession] = useState(false);
@@ -99,7 +101,8 @@ export default function Home() {
     setOpeningMessage(null);
     try {
       const isTextMode = mode === 'text';
-      const url = `/api/conversation/opening?userId=${userId}${isTextMode ? '&skipTts=true' : ''}`;
+      const sessionTypeParam = sessionType === 'fresh' ? '&sessionType=fresh' : '';
+      const url = `/api/conversation/opening?userId=${userId}${isTextMode ? '&skipTts=true' : ''}${sessionTypeParam}`;
       const r = await fetch(url);
 
       if (isTextMode) {
@@ -138,7 +141,7 @@ export default function Home() {
       setOpeningLoading(false);
       fetchingOpeningRef.current = false;
     }
-  }, [userId, onboardingComplete]);
+  }, [userId, onboardingComplete, sessionType]);
 
   const handleSendCode = async () => {
     if (!email || !email.includes('@')) { setAuthError('Please enter a valid email.'); return; }
@@ -232,9 +235,15 @@ export default function Home() {
     setSessionNotes(null);
     setSelectedConvId(null);
     setSidebarOpen(false);
-    setInputMode('choice');
+    setInputMode('session-type');
+    setSessionType('continue');
     setView('voice');
     viewRef.current = 'voice';
+  };
+
+  const handleChooseSessionType = (type: SessionType) => {
+    setSessionType(type);
+    setInputMode('choice');
   };
 
   const handleChooseMode = (mode: 'voice' | 'text') => {
@@ -608,6 +617,40 @@ export default function Home() {
             /* ─── Session UI ─── */
             <div className="flex-1 flex flex-col h-full">
               {/* Mode Selection */}
+              {/* Step 1: Session Type Selection */}
+              {inputMode === 'session-type' && !openingMessage && !openingLoading && transcripts.length === 0 && (
+                <div className="flex-1 flex flex-col items-center justify-center py-20 text-center fade-in-up">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#a3785e]/10 to-transparent border border-[#a3785e]/10 flex items-center justify-center mb-6">
+                    <span className="text-2xl font-light text-[#a3785e]">M</span>
+                  </div>
+                  <p className="text-sm font-medium text-foreground mb-1">How do you want to start?</p>
+                  <p className="text-xs text-muted-foreground/50 mb-8">Pick up where you left off, or begin something new</p>
+                  <div className="flex gap-4">
+                    <button
+                      onClick={() => handleChooseSessionType('continue')}
+                      className="flex flex-col items-center gap-3 px-8 py-6 rounded-2xl border border-border hover:border-[#a3785e]/30 hover:bg-[#a3785e]/5 transition-all group max-w-[180px]"
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-[#a3785e]/8 flex items-center justify-center group-hover:bg-[#a3785e]/15 transition-colors">
+                        <svg className="w-5 h-5 text-[#a3785e]/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      </div>
+                      <span className="text-sm font-medium text-foreground">Continue</span>
+                      <span className="text-[11px] text-muted-foreground/50 leading-tight">Pick up where we left off</span>
+                    </button>
+                    <button
+                      onClick={() => handleChooseSessionType('fresh')}
+                      className="flex flex-col items-center gap-3 px-8 py-6 rounded-2xl border border-border hover:border-[#a3785e]/30 hover:bg-[#a3785e]/5 transition-all group max-w-[180px]"
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-[#a3785e]/8 flex items-center justify-center group-hover:bg-[#a3785e]/15 transition-colors">
+                        <svg className="w-5 h-5 text-[#a3785e]/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" /></svg>
+                      </div>
+                      <span className="text-sm font-medium text-foreground">New Topic</span>
+                      <span className="text-[11px] text-muted-foreground/50 leading-tight">Start something different</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2: Voice/Text Selection */}
               {inputMode === 'choice' && !openingMessage && !openingLoading && transcripts.length === 0 && (
                 <div className="flex-1 flex flex-col items-center justify-center py-20 text-center fade-in-up">
                   <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#a3785e]/10 to-transparent border border-[#a3785e]/10 flex items-center justify-center mb-6">
@@ -641,7 +684,7 @@ export default function Home() {
               )}
 
               {/* Chat-style transcript area (visible after mode is chosen) */}
-              {inputMode !== 'choice' && (
+              {inputMode !== 'choice' && inputMode !== 'session-type' && (
                 <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-6">
                   <div className="max-w-2xl mx-auto space-y-4">
                     {/* Opening message from Marcus */}
