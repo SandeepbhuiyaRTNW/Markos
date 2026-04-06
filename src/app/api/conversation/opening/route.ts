@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     const userId = req.nextUrl.searchParams.get('userId');
     const skipTts = req.nextUrl.searchParams.get('skipTts') === 'true';
     const sessionType = req.nextUrl.searchParams.get('sessionType') || 'continue';
-    const continueFrom = req.nextUrl.searchParams.get('continueFrom'); // specific session ID to continue from
+    const continueFrom = req.nextUrl.searchParams.get('continueFrom');
 
     if (!userId) {
       return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
@@ -33,12 +33,14 @@ export async function GET(req: NextRequest) {
     const userName: string | null = userResult.rows[0].name || null;
 
     // ─── RATE-LIMIT: Prevent ghost session creation ───
-    // If a conversation was created for this user within the last 30 seconds, reuse it
+    // Only reuse if same continueFrom + sessionType (prevents switching sessions within 30s returning stale data)
     const recentResult = await query(
       `SELECT id, session_number FROM conversations
        WHERE user_id = $1 AND started_at > NOW() - INTERVAL '30 seconds'
+         AND (parent_session_id IS NOT DISTINCT FROM $2)
+         AND (metadata->>'sessionType' IS NOT DISTINCT FROM $3)
        ORDER BY started_at DESC LIMIT 1`,
-      [userId]
+      [userId, continueFrom || null, sessionType]
     );
 
     let conversationId: string;
@@ -136,6 +138,8 @@ export async function GET(req: NextRequest) {
     const lastPondering: string[] = lastSession?.pondering_topics || [];
     const lastTitle = (lastSession?.metadata as Record<string, unknown>)?.title || '';
 
+
+
     // Build the opening prompt using the full Marcus persona
     const recentSection = hasPrevHistory
       ? `\n\nLAST SESSION EXCHANGE (for continuity):\n${prevMessages.map((m: { role: string; content: string }) => `${m.role === 'marcus' ? 'Marcus' : 'User'}: ${m.content}`).join('\n')}`
@@ -152,15 +156,39 @@ export async function GET(req: NextRequest) {
 
     let openingInstruction: string;
     if (sessionType === 'fresh') {
-      // Fresh topic — Marcus knows the man but starts a new thread
       const nameGreeting = userName ? `You know this man as ${userName}. ` : '';
       openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION (NEW TOPIC)
 ${nameGreeting}He has chosen to start a NEW topic today — do NOT reference previous conversations, past struggles, or pondering topics. He wants a clean start on something different.
 Your job: Open with warmth and curiosity. Acknowledge that today is about something new. Invite him to bring whatever is on his mind RIGHT NOW.
 Keep it to 2-3 sentences. End with ONE open question like "What's on your mind today?" or "What brought you here today?"
 Do NOT say "I remember" or reference past sessions. Do NOT start with "Brother" — vary your openings.`;
+    } else if (continueFrom) {
+      // ─── CONTINUING FROM A SPECIFIC SESSION ───
+      // The user explicitly chose this session to continue from.
+      // ONLY reference this session's data, not general memory.
+      if (lastPondering.length > 0) {
+        openingInstruction = `\n\n## YOUR TASK — CONTINUE FROM A SPECIFIC SESSION
+He has chosen to CONTINUE from a previous conversation titled "${lastTitle}".
+CRITICAL: Reference ONLY the pondering topics and takeaways from THAT session. Do NOT reference other sessions or general memory.
+
+SESSION TO CONTINUE FROM:
+${continuitySection}
+${recentSection}
+
+Open by referencing one of the pondering topics DIRECTLY. Ask him if he had time to sit with it. Be specific — use his words.
+2-3 sentences. End with ONE question. Do NOT start with "Brother" — vary your openings.`;
+      } else {
+        openingInstruction = `\n\n## YOUR TASK — CONTINUE FROM A SPECIFIC SESSION
+He has chosen to CONTINUE from a previous conversation titled "${lastTitle}".
+CRITICAL: Reference ONLY what was discussed in THAT session. Do NOT reference other sessions or general memory.
+
+LAST SESSION EXCHANGE:
+${recentSection}
+
+Open by referencing something specific from that conversation. What did he say? What was he working through? Ask him how things have been since then.
+2-3 sentences. End with ONE question. Do NOT start with "Brother" — vary your openings.`;
+      }
     } else if (lastPondering.length > 0) {
-      // Returning user with pondering topics from last session — continue thread
       openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION\nYou are speaking first. The man has just arrived. He was given specific topics to ponder since your last conversation. Reference one of the pondering topics DIRECTLY — ask him if he had time to sit with it, what came up for him when he thought about it. Be specific, not generic. Keep it to 2-3 sentences. End with ONE question about his reflection. Do NOT start with "Brother" — vary your openings.${continuitySection}${recentSection}`;
     } else if (hasMemory && hasPrevHistory) {
       openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION\nYou are speaking first. The man has just arrived. Reference something SPECIFIC from the memory context below — a struggle, a pattern, a commitment — so he knows you have been thinking about him. ONLY reference things that are explicitly stated in your memory context. Do NOT invent or assume any memories. Keep it to 2-3 sentences. End with ONE grounded question. Do NOT start with "Brother" — vary your openings.${continuitySection}${recentSection}`;

@@ -69,13 +69,18 @@ export async function GET(req: NextRequest) {
       ? s.pondering_topics[0].substring(0, 100) + (s.pondering_topics[0].length > 100 ? '…' : '')
       : null;
 
+    // Full takeaways for the dropdown
+    const takeaways = (md.takeaways as string[]) || s.pondering_topics || [];
+    const ponderingTopics = s.pondering_topics || [];
+
     return {
       id: s.id,
       sessionNumber: s.session_number,
       title,
-      summary,
+      summary: s.summary || null, // full summary, not truncated
       ponderingPreview,
-      ponderingCount: s.pondering_topics?.length || 0,
+      ponderingTopics, // full list for dropdown
+      takeaways,       // full list for dropdown
       date: s.ended_at || s.started_at,
       sessionType: md.sessionType === 'fresh' ? 'fresh' : 'continue',
     };

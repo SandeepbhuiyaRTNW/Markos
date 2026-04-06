@@ -62,9 +62,10 @@ export default function Home() {
   const [continueFromId, setContinueFromId] = useState<string | null>(null);
   const [recentSessions, setRecentSessions] = useState<Array<{
     id: string; sessionNumber: number; title: string; summary: string | null;
-    ponderingPreview: string | null; ponderingCount: number;
+    ponderingPreview: string | null; ponderingTopics: string[]; takeaways: string[];
     date: string; sessionType: string;
   }>>([]);
+  const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [loadingRecent, setLoadingRecent] = useState(false);
   const [textSending, setTextSending] = useState(false);
   const [sessionNotes, setSessionNotes] = useState<SessionNotesData | null>(null);
@@ -255,6 +256,7 @@ export default function Home() {
     setInputMode('session-type');
     setSessionType('continue');
     setContinueFromId(null);
+    setExpandedSessionId(null);
     setRecentSessions([]);
     setView('voice');
     viewRef.current = 'voice';
@@ -786,40 +788,89 @@ export default function Home() {
                     <span className="text-2xl font-light text-[#a3785e]">M</span>
                   </div>
                   <p className="text-sm font-medium text-foreground mb-1">Continue from which conversation?</p>
-                  <p className="text-xs text-muted-foreground/50 mb-6">Scroll to browse · Click to pick up</p>
+                  <p className="text-xs text-muted-foreground/50 mb-6">Expand to see where we left off · Click &quot;Continue this&quot; to pick up</p>
                   {/* Horizontal scrollable cards */}
                   <div className="w-full overflow-x-auto pb-4 px-4 scrollbar-thin">
-                    <div className="flex gap-3 w-max mx-auto">
-                      {recentSessions.map((s) => (
-                        <button
-                          key={s.id}
-                          onClick={() => handlePickSession(s.id)}
-                          className="flex flex-col items-start gap-2 px-4 py-4 rounded-xl border border-border hover:border-[#a3785e]/30 hover:bg-[#a3785e]/5 transition-all text-left group w-[260px] shrink-0"
-                        >
-                          {/* Session number + date */}
-                          <div className="flex items-center justify-between w-full">
-                            <div className="w-7 h-7 rounded-lg bg-[#a3785e]/8 flex items-center justify-center group-hover:bg-[#a3785e]/15 transition-colors">
-                              <span className="text-[11px] font-medium text-[#a3785e]/60">{s.sessionNumber}</span>
+                    <div className="flex gap-3 w-max mx-auto items-start">
+                      {recentSessions.map((s) => {
+                        const isExpanded = expandedSessionId === s.id;
+                        return (
+                          <div
+                            key={s.id}
+                            className={`flex flex-col items-start rounded-xl border transition-all text-left shrink-0 ${
+                              isExpanded
+                                ? 'w-[320px] border-[#a3785e]/30 bg-[#a3785e]/5'
+                                : 'w-[260px] border-border hover:border-[#a3785e]/20'
+                            }`}
+                          >
+                            {/* Card header — always visible */}
+                            <div className="px-4 py-4 w-full">
+                              <div className="flex items-center justify-between w-full mb-2">
+                                <div className="w-7 h-7 rounded-lg bg-[#a3785e]/8 flex items-center justify-center">
+                                  <span className="text-[11px] font-medium text-[#a3785e]/60">{s.sessionNumber}</span>
+                                </div>
+                                <span className="text-[10px] text-muted-foreground/40">
+                                  {new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                </span>
+                              </div>
+                              <p className="text-sm font-medium text-foreground truncate w-full">{s.title}</p>
+                              {s.summary && (
+                                <p className="text-[11px] text-muted-foreground/50 line-clamp-2 leading-relaxed mt-1">{s.summary}</p>
+                              )}
                             </div>
-                            <span className="text-[10px] text-muted-foreground/40">
-                              {new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                            </span>
+
+                            {/* Expand/collapse toggle */}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setExpandedSessionId(isExpanded ? null : s.id); }}
+                              className="w-full px-4 py-2 text-[11px] text-[#a3785e]/60 hover:text-[#a3785e]/80 transition-colors flex items-center gap-1.5 border-t border-border/30"
+                            >
+                              <svg className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                              {isExpanded ? 'Hide details' : 'Where we left off'}
+                            </button>
+
+                            {/* Expanded dropdown */}
+                            {isExpanded && (
+                              <div className="px-4 pb-4 w-full space-y-3 border-t border-border/30 pt-3 fade-in-up">
+                                {/* Takeaways */}
+                                {s.takeaways.length > 0 && (
+                                  <div>
+                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mb-1.5">Key Takeaways</p>
+                                    <ul className="space-y-1.5">
+                                      {s.takeaways.map((t, i) => (
+                                        <li key={i} className="flex gap-2 text-[11px] text-muted-foreground/60 leading-relaxed">
+                                          <span className="text-[#a3785e]/40 mt-0.5 shrink-0">→</span>
+                                          <span>{t}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                                {/* Pondering topics */}
+                                {s.ponderingTopics.length > 0 && (
+                                  <div>
+                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[#a3785e]/50 mb-1.5">Left to Ponder</p>
+                                    <ul className="space-y-1.5">
+                                      {s.ponderingTopics.map((p, i) => (
+                                        <li key={i} className="flex gap-2 text-[11px] text-[#a3785e]/50 italic leading-relaxed">
+                                          <span className="not-italic shrink-0">✦</span>
+                                          <span>{p}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                                {/* Continue button */}
+                                <button
+                                  onClick={() => handlePickSession(s.id)}
+                                  className="w-full mt-2 py-2 rounded-lg bg-[#a3785e]/10 hover:bg-[#a3785e]/20 text-[#a3785e] text-xs font-medium transition-colors"
+                                >
+                                  Continue this conversation →
+                                </button>
+                              </div>
+                            )}
                           </div>
-                          {/* Title */}
-                          <p className="text-sm font-medium text-foreground truncate w-full">{s.title}</p>
-                          {/* Summary */}
-                          {s.summary && (
-                            <p className="text-[11px] text-muted-foreground/50 line-clamp-2 leading-relaxed">{s.summary}</p>
-                          )}
-                          {/* Pondering preview */}
-                          {s.ponderingPreview && (
-                            <div className="mt-auto pt-2 border-t border-border/50 w-full flex gap-1.5 items-start">
-                              <span className="text-[10px] text-[#a3785e]/50 mt-0.5 shrink-0">↳</span>
-                              <p className="text-[10px] text-[#a3785e]/50 italic leading-relaxed line-clamp-2">{s.ponderingPreview}</p>
-                            </div>
-                          )}
-                        </button>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                   <button
