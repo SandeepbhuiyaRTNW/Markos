@@ -116,6 +116,68 @@ export async function getMemoryContext(userId: string): Promise<string> {
   return context;
 }
 
+/**
+ * Search past user messages for specific details that may not be in memory layers.
+ * Uses embedding similarity to find relevant past statements.
+ */
+export async function searchPastMessages(
+  userId: string,
+  searchQuery: string,
+  limit: number = 5,
+): Promise<string[]> {
+  try {
+    // Get embedding for search query
+    const embResp = await openai.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: searchQuery,
+      dimensions: 256,
+    });
+    const queryEmb = embResp.data[0].embedding;
+
+    // Get recent user messages (last 100)
+    const msgResult = await query(
+      `SELECT m.content, m.created_at, c.session_number
+       FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       WHERE c.user_id = $1 AND m.role = 'user' AND length(m.content) > 10
+       ORDER BY m.created_at DESC LIMIT 100`,
+      [userId]
+    );
+
+    if (msgResult.rows.length === 0) return [];
+
+    // Embed all messages
+    const contents = msgResult.rows.map(r => r.content);
+    const msgEmbResp = await openai.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: contents,
+      dimensions: 256,
+    });
+
+    // Score by similarity
+    const scored = msgEmbResp.data.map((d, i) => {
+      let dot = 0, magA = 0, magB = 0;
+      for (let j = 0; j < queryEmb.length; j++) {
+        dot += queryEmb[j] * d.embedding[j];
+        magA += queryEmb[j] * queryEmb[j];
+        magB += d.embedding[j] * d.embedding[j];
+      }
+      const sim = dot / (Math.sqrt(magA) * Math.sqrt(magB) + 1e-10);
+      return { content: contents[i], session: msgResult.rows[i].session_number, sim };
+    });
+
+    // Return top matches above threshold
+    return scored
+      .filter(s => s.sim > 0.45)
+      .sort((a, b) => b.sim - a.sim)
+      .slice(0, limit)
+      .map(s => `[Session #${s.session}] "${s.content}"`);
+  } catch (err) {
+    console.warn('[Memory] searchPastMessages failed:', err);
+    return [];
+  }
+}
+
 export async function extractMemories(
   userId: string,
   userMessage: string,
@@ -131,22 +193,32 @@ export async function extractMemories(
         content: `Extract memory-worthy facts from this conversation exchange.
 Return JSON with a "memories" key containing an array of objects. Each object must have:
   - layer_number: integer 1-7
-  - key: short label (e.g. "name", "job", "core_struggle")
-  - value: the actual fact as a concise string
+  - key: short label (e.g. "name", "job", "core_struggle", "wife_threat")
+  - value: the actual fact — USE HIS EXACT WORDS for high-impact statements
   - confidence: float 0.0-1.0
+
+CRITICAL RULES:
+1. PRESERVE SPECIFICS — do NOT generalize. "Wife will divorce me" must stay as "wife will divorce me", not become "marriage tension".
+2. HIGH-IMPACT DETAILS get priority: threats, ultimatums, crises, specific events, specific names, specific fears, specific dreams.
+3. Use HIS words in the value field, not your interpretation. If he said "my wife will divorce me if I become a chef" — store exactly that.
+4. Each specific fact gets its OWN memory entry. Don't combine "wants to be a chef" and "wife threatens divorce" into one entry.
 
 Memory Layers:
 1-Identity: name, age, job, values, beliefs, personality traits
-2-Relationships: partner, family, friends, colleagues, key people
+2-Relationships: partner, family, friends, colleagues, key people. INCLUDE: specific things they said/did, threats, support, conflicts
 3-Goals: aspirations, targets, dreams, what he wants to build
-4-Challenges: struggles, fears, obstacles, what holds him back
+4-Challenges: struggles, fears, obstacles, what holds him back. INCLUDE: specific threats, ultimatums, deadlines, consequences
 5-Decision Patterns: how he tends to decide, recurring avoidance or action patterns
 6-Wins: achievements, progress, breakthroughs, positive moments
 7-KWML Profile: archetypal expressions observed (King/Warrior/Magician/Lover)
 
 Only extract CLEAR, STATED facts — not interpretations. If nothing memory-worthy exists, return {"memories": []}.
 
-Example: {"memories": [{"layer_number": 4, "key": "core_struggle", "value": "shuts down emotionally when wife tries to talk", "confidence": 0.9}]}`
+Example: {"memories": [
+  {"layer_number": 2, "key": "wife_ultimatum", "value": "wife will divorce him if he pursues becoming a chef", "confidence": 1.0},
+  {"layer_number": 3, "key": "dream", "value": "wants to become a chef and create a food truck", "confidence": 1.0},
+  {"layer_number": 4, "key": "core_fear", "value": "afraid of losing marriage if he follows his dream", "confidence": 0.9}
+]}`
       },
       {
         role: 'user',

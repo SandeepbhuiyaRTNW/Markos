@@ -13,6 +13,7 @@ import type { MCPContext } from './mcp-context';
 import { trackAgent, recordError, buildContextSummary } from './mcp-context';
 import { analyzeConversation, computeTrajectoryDrift } from './conversation-state';
 import type { ConversationState } from './conversation-state';
+import { searchPastMessages } from '../memory/memory-manager';
 
 /** Crisis keywords that must trigger safety-first response */
 const CRISIS_PATTERNS = [
@@ -180,6 +181,21 @@ WISDOM INTEGRATION (CRITICAL):
       }
     } else {
       console.log(`[Marcus] ⚠️ No RAG context available for: "${ctx.userMessage.substring(0, 60)}..."`);
+    }
+
+    // ─── MEMORY RECALL SEARCH ───
+    // When the user asks a recall question, search past messages directly
+    const recallPatterns = /do you (remember|know|recall)|what did i (say|tell|mention)|did i (say|tell|mention)|what.*(wife|husband|partner|boss|dad|mom|father|mother).*(say|do|threaten|tell)|remember when|from (our|last|previous) (talk|session|conversation)/i;
+    if (recallPatterns.test(ctx.userMessage) && ctx.userId) {
+      try {
+        const pastMessages = await searchPastMessages(ctx.userId, ctx.userMessage, 5);
+        if (pastMessages.length > 0) {
+          enrichedUserMessage += `\n\n[MEMORY RECALL — These are EXACT quotes from his previous sessions. Use them to answer his question accurately. Do NOT say "I don't remember" if the answer is here.]\n${pastMessages.join('\n')}`;
+          console.log(`[Marcus] 🧠 Memory recall: found ${pastMessages.length} relevant past messages`);
+        }
+      } catch (err) {
+        console.warn('[Marcus] Memory recall search failed:', err);
+      }
     }
 
     const messages = [
