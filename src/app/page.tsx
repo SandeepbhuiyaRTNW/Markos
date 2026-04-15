@@ -340,6 +340,24 @@ export default function Home() {
   const handleGoToAnalytics = () => { setView('analytics'); setSelectedConvId(null); setSessionNotes(null); };
   const handleSelectSession = (id: string) => { setSelectedConvId(id); setView('session-detail'); setSidebarOpen(false); };
 
+  // Continue a conversation directly from the dashboard — goes straight to voice/text choice
+  const handleContinueSession = (sessionId: string) => {
+    if (fetchingOpeningRef.current) return;
+    setConversationId(null);
+    setTranscripts([]);
+    setOpeningMessage(null);
+    setSessionNotes(null);
+    setSelectedConvId(null);
+    setSidebarOpen(false);
+    setContinueFromId(sessionId);
+    setSessionType('continue');
+    setExpandedSessionId(null);
+    setRecentSessions([]);
+    setInputMode('choice'); // Skip session-type and pick-session — go straight to voice/text choice
+    setView('voice');
+    viewRef.current = 'voice';
+  };
+
   const statusLabel: Record<VoiceState, string> = {
     idle: 'Tap the orb to speak', listening: 'Listening…', processing: 'Reflecting…', speaking: 'Marcus is speaking…',
   };
@@ -583,7 +601,7 @@ export default function Home() {
           {view === 'session-detail' && selectedConvId ? (
             <ConversationView conversationId={selectedConvId} onBack={handleGoToAnalytics} />
           ) : view === 'analytics' ? (
-            <AnalyticsDashboard userId={userId} onSelectSession={handleSelectSession} />
+            <AnalyticsDashboard userId={userId} onSelectSession={handleSelectSession} onContinueSession={handleContinueSession} />
           ) : view === 'session-notes' && sessionNotes ? (
             /* ─── Session Notes (post end-session) ─── */
             <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-8">
@@ -988,6 +1006,7 @@ export default function Home() {
                             conversationId={conversationId}
                             onConversationId={setConversationId}
                             state={state}
+                            disabled={state === 'processing' || state === 'speaking'}
                           />
                           <p className="text-[11px] tracking-wider uppercase text-muted-foreground/50">
                             {statusLabel[state]}
@@ -1002,14 +1021,14 @@ export default function Home() {
                             value={textInput}
                             onChange={(e) => setTextInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendTextMessage()}
-                            placeholder="Type your message to Marcus..."
-                            disabled={textSending}
-                            className="flex-1 h-12 bg-white border-border text-foreground placeholder:text-muted-foreground/50 rounded-xl px-5 text-sm"
+                            placeholder={state === 'processing' ? 'Marcus is thinking...' : state === 'speaking' ? 'Marcus is speaking...' : 'Type your message to Marcus...'}
+                            disabled={textSending || state === 'processing' || state === 'speaking'}
+                            className="flex-1 h-12 bg-white border-border text-foreground placeholder:text-muted-foreground/50 rounded-xl px-5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                           <button
                             onClick={sendTextMessage}
-                            disabled={textSending || !textInput.trim()}
-                            className="h-12 w-12 rounded-xl flex items-center justify-center bg-[#44403c] hover:bg-[#57534e] text-white transition-all disabled:opacity-40"
+                            disabled={textSending || !textInput.trim() || state === 'processing' || state === 'speaking'}
+                            className="h-12 w-12 rounded-xl flex items-center justify-center bg-[#44403c] hover:bg-[#57534e] text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             {textSending ? (
                               <Loader2 className="w-4 h-4 animate-spin" />

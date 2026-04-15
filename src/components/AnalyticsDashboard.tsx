@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Mic, MessageSquare, BarChart2, Flame, ChevronRight, Lightbulb, BookOpen } from 'lucide-react';
+import { Mic, MessageSquare, BarChart2, Flame, ChevronRight, Lightbulb, BookOpen, PlayCircle } from 'lucide-react';
 
 interface Topic { label: string; count: number; }
 interface WeeklyUsage { week: string; sessions: number; }
@@ -21,10 +21,12 @@ interface AnalyticsData {
   weeklyUsage: WeeklyUsage[]; lastSessionNotes: LastSessionNotes | null;
 }
 interface AnalyticsDashboardProps {
-  userId: string; onSelectSession: (id: string) => void;
+  userId: string;
+  onSelectSession: (id: string) => void;
+  onContinueSession?: (id: string) => void;
 }
 
-export default function AnalyticsDashboard({ userId, onSelectSession }: AnalyticsDashboardProps) {
+export default function AnalyticsDashboard({ userId, onSelectSession, onContinueSession }: AnalyticsDashboardProps) {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -158,18 +160,32 @@ export default function AnalyticsDashboard({ userId, onSelectSession }: Analytic
           {(data?.conversations ?? []).length > 0 ? (
             <div className="space-y-2">
               {(data?.conversations ?? []).map((s) => (
-                <button key={s.id} onClick={() => onSelectSession(s.id)} className="w-full text-left glass-card px-5 py-4 group flex items-center gap-3 hover:border-[#a3785e]/20 transition-all">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary/60 text-muted-foreground/40 font-mono shrink-0">{s.session_number}</span>
-                      <span className="text-[13px] font-medium text-foreground/90 truncate flex-1">{getTitle(s)}</span>
-                      <span className="text-[11px] text-muted-foreground/40 shrink-0">{formatDate(s)}</span>
+                <div key={s.id} className="glass-card px-5 py-4 group hover:border-[#a3785e]/20 transition-all">
+                  <button onClick={() => onSelectSession(s.id)} className="w-full text-left flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary/60 text-muted-foreground/40 font-mono shrink-0">{s.session_number}</span>
+                        <span className="text-[13px] font-medium text-foreground/90 truncate flex-1">{getTitle(s)}</span>
+                        <span className="text-[11px] text-muted-foreground/40 shrink-0">{formatDate(s)}</span>
+                      </div>
+                      {s.summary && <p className="text-[11px] text-muted-foreground/40 line-clamp-2 leading-relaxed mt-0.5">{s.summary}</p>}
+                      {typeof s.metadata?.mood === 'string' && <span className="inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full bg-[#a3785e]/8 text-[#a3785e]/60">{s.metadata.mood}</span>}
                     </div>
-                    {s.summary && <p className="text-[11px] text-muted-foreground/40 line-clamp-2 leading-relaxed mt-0.5">{s.summary}</p>}
-                    {typeof s.metadata?.mood === 'string' && <span className="inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full bg-[#a3785e]/8 text-[#a3785e]/60">{s.metadata.mood}</span>}
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-[#a3785e]/60 transition-colors shrink-0" />
-                </button>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-[#a3785e]/60 transition-colors shrink-0" />
+                  </button>
+                  {/* Continue conversation button — only for ended sessions */}
+                  {s.session_ended && onContinueSession && (
+                    <div className="mt-3 pt-3 border-t border-border/30">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onContinueSession(s.id); }}
+                        className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-[#a3785e]/8 hover:bg-[#a3785e]/15 text-[#a3785e] text-xs font-medium transition-all"
+                      >
+                        <PlayCircle className="w-3.5 h-3.5" />
+                        Continue this conversation
+                      </button>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           ) : !loading ? (

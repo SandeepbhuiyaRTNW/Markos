@@ -13,6 +13,7 @@ interface VoiceOrbProps {
   conversationId: string | null;
   onConversationId: (id: string) => void;
   state: VoiceState;
+  disabled?: boolean;
 }
 
 export default function VoiceOrb({
@@ -22,6 +23,7 @@ export default function VoiceOrb({
   conversationId,
   onConversationId,
   state,
+  disabled = false,
 }: VoiceOrbProps) {
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -96,7 +98,11 @@ export default function VoiceOrb({
     }
   }, [isRecording]);
 
-  const handleClick = () => { isRecording ? stopRecording() : startRecording(); };
+  const handleClick = () => {
+    // Don't allow interaction while Marcus is processing or speaking
+    if (disabled || state === 'processing' || state === 'speaking') return;
+    isRecording ? stopRecording() : startRecording();
+  };
 
   const orbClass = state === 'listening' ? 'orb-listening'
     : state === 'speaking' ? 'orb-speaking'
@@ -124,9 +130,11 @@ export default function VoiceOrb({
       {/* Main orb */}
       <button
         onClick={handleClick}
+        disabled={disabled || state === 'processing' || state === 'speaking'}
         className={cn(
           'relative w-20 h-20 rounded-full flex items-center justify-center',
-          'transition-all duration-500 focus:outline-none cursor-pointer',
+          'transition-all duration-500 focus:outline-none',
+          (disabled || state === 'processing' || state === 'speaking') ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
           orbClass
         )}
         style={{
