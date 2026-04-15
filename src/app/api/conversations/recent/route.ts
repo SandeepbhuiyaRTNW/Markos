@@ -12,7 +12,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'userId required' }, { status: 400 });
   }
 
-  // Get recent ended sessions with at least 1 user message
+  // Get ALL ended sessions with at least 1 user message — show every conversation
+  // the user has had so they can continue from ANY of them
   const result = await query(
     `SELECT
       c.id,
@@ -29,12 +30,10 @@ export async function GET(req: NextRequest) {
        AND c.session_ended = true
        AND EXISTS (SELECT 1 FROM messages WHERE conversation_id = c.id AND role = 'user')
      ORDER BY c.ended_at DESC
-     LIMIT 10`,
+     LIMIT 20`,
     [userId]
   );
 
-  // Build thread-aware list: show the latest session in each thread
-  // A "thread" is a chain of parent_session_id references
   interface SessionRow {
     id: string; session_number: number; started_at: string; ended_at: string;
     summary: string | null; pondering_topics: string[] | null;
@@ -44,12 +43,9 @@ export async function GET(req: NextRequest) {
 
   const sessions = result.rows as SessionRow[];
 
-  // Find thread heads (sessions that aren't continued by any other session in the list)
-  const continuedFromIds = new Set(sessions.map(s => s.parent_session_id).filter(Boolean));
-  const threadHeads = sessions.filter(s => !continuedFromIds.has(s.id));
-
-  // Format for the UI
-  const formatted = threadHeads.slice(0, 5).map(s => {
+  // Show ALL sessions — no thread deduplication. The user should be able to
+  // continue from ANY past conversation, not just the latest in a chain.
+  const formatted = sessions.map(s => {
     const md = (s.metadata || {}) as Record<string, unknown>;
     const metaTitle = md.title as string | undefined;
 
