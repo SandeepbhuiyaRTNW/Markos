@@ -268,7 +268,7 @@ export async function runConversationalAgent(ctx: MCPContext): Promise<void> {
     const model = createMarcusModel();
 
     const understandingSummary = ctx.understanding
-      ? `Emotion: ${ctx.understanding.primary_emotion} | Depth: ${ctx.understanding.depth_level}/5 | Pattern: ${ctx.understanding.layer3_pattern} | The Man: ${ctx.understanding.layer4_the_man} | The Silence: ${ctx.understanding.layer5_the_silence}`
+      ? `Emotion: ${ctx.understanding.primary_emotion} | Depth: ${ctx.understanding.depth_level}/5 | Trajectory: ${ctx.understanding.emotional_trajectory || 'flat'}\nPattern: ${ctx.understanding.layer3_pattern}\nThe Man: ${ctx.understanding.layer4_the_man}\nThe Silence: ${ctx.understanding.layer5_the_silence}${ctx.understanding.depth_opportunity ? `\nDepth Move: ${ctx.understanding.depth_opportunity}` : ''}${ctx.understanding.silence_question ? `\nSilence Question: "${ctx.understanding.silence_question}"` : ''}`
       : undefined;
 
     const systemPrompt = buildSystemPrompt({
@@ -305,17 +305,44 @@ export async function runConversationalAgent(ctx: MCPContext): Promise<void> {
     // ─── STYLE PREFERENCE DETECTION (mid-session) ───
     const styleOverride = detectStyleRequest(ctx.userMessage, ctx.conversationHistory);
 
+    // ─── DEPTH ESCALATION ENGINE ───
+    const depthLevel = ctx.understanding?.depth_level || 1;
+    const emotionalTrajectory = ctx.understanding?.emotional_trajectory || 'flat';
+    const exchangeCount = ctx.conversationHistory.filter(m => m.role === 'user').length;
+    const stuckAtSurface = depthLevel <= 2 && exchangeCount >= 3;
+    const silenceQuestion = ctx.understanding?.silence_question || '';
+    const depthOpportunity = ctx.understanding?.depth_opportunity || '';
+
+    let depthEscalation = '';
+    if (stuckAtSurface && !styleOverride) {
+      depthEscalation = `\n\n🔴 DEPTH ESCALATION ALERT: This conversation has been at surface level (depth ${depthLevel}/5) for ${exchangeCount} exchanges. You MUST go deeper NOW. Do NOT continue asking surface questions or staying at the level of facts/events.
+USE THIS MOVE: ${depthOpportunity || 'Pivot from WHAT happened to what it COST him. "You told me what happened. But what did it take from you?"'}
+${silenceQuestion ? `OR ASK THIS (the question he cannot ask himself): "${silenceQuestion}"` : ''}
+The conversation will NOT deepen unless YOU take it there. He is waiting for you to be brave enough to ask the real question.`;
+    }
+    if (emotionalTrajectory === 'retreating' && depthLevel >= 2) {
+      depthEscalation += `\n\n⚠️ HE IS RETREATING — pulling back from depth he just showed. Do NOT let him. Gently name what you see: "Something just shifted. A minute ago you were in it — now you're pulling back. What just happened?"`;
+    }
+
+    // Depth-responsive length rules
+    const lengthRule = depthLevel <= 2
+      ? '2-3 sentences. This is VOICE. Keep it tight at the surface — earn the right to say more.'
+      : depthLevel === 3
+        ? '3-4 sentences. The conversation has reached real depth. You have earned room to say more. Use it to reflect, connect to pattern, and go deeper.'
+        : '3-5 sentences. This is sacred ground. The moment deserves space. Honor the depth — do not rush past it.';
+
     const finalInstruction = `\n\n## ⚠️ RESPONSE RULES — THESE OVERRIDE EVERYTHING ABOVE
-${toneGuide}${loopBreaker}${styleOverride}
+${toneGuide}${loopBreaker}${styleOverride}${depthEscalation}
 
 BEFORE YOU WRITE: Read his EXACT words. What SPECIFICALLY did he say? Start your response by reacting to THAT — not a generic summary.
 
 HARD RULES:
-- 2-3 sentences MAX. This is VOICE. Under 15 seconds spoken. No exceptions.
+- ${lengthRule}
 - AT MOST one question mark. You do NOT have to end with a question. Sometimes a statement, a truth, a challenge, or just sitting with him is more powerful. Vary your endings.
 - Use contractions always. "You're" not "you are." "Don't" not "do not."
 - Match his register EXACTLY. If he says "bro" and "no point" — you say "man" and keep it raw. If he's formal, be measured.
 - If he asked you to stop asking questions or just listen — NO question marks at all. Zero. Just be present.
+- When you ask a question, prefer the CALIBRATED questions from the agent analysis over making up your own. Those questions are specifically designed for this man in this moment.
 
 ADVICE RULES — PHASE-BASED (current phase: ${conversationPhase.toUpperCase()}):
 ${conversationPhase === 'understand' ? `PHASE 1: UNDERSTAND — You are still learning what's going on. Do NOT give advice, suggestions, or action steps.

@@ -113,21 +113,69 @@ export function buildContextSummary(ctx: MCPContext): string {
     parts.push(`## KWML PROFILE\n${ctx.kwmlProfile}`);
   }
 
+  // ─── UNDERSTANDING ANALYSIS (enhanced with depth cues) ───
   if (ctx.understanding) {
-    parts.push(`## UNDERSTANDING ANALYSIS
-Emotion: ${ctx.understanding.primary_emotion}
-Depth: ${ctx.understanding.depth_level}/5
-Pattern: ${ctx.understanding.layer3_pattern}
-The Man: ${ctx.understanding.layer4_the_man}
-The Silence: ${ctx.understanding.layer5_the_silence}`);
+    const u = ctx.understanding;
+    const depthLevel = u.depth_level || 1;
+
+    parts.push(`## UNDERSTANDING ANALYSIS — WHAT IS REALLY HAPPENING
+Emotion: ${u.primary_emotion} | Depth: ${depthLevel}/5 | Trajectory: ${u.emotional_trajectory || 'flat'}
+Pattern: ${u.layer3_pattern}
+The Man: ${u.layer4_the_man}
+
+### THE SILENCE (Layer 5 — what he is NOT saying):
+${u.layer5_the_silence}
+${u.silence_question ? `\n### THE QUESTION HE CANNOT ASK HIMSELF:\n"${u.silence_question}"\nThis is the question that would crack him open. You do NOT have to ask it verbatim — but move TOWARD it.` : ''}
+${u.depth_opportunity ? `\n### YOUR DEPTH MOVE:\n${u.depth_opportunity}\nThis is your specific opportunity to take this conversation deeper. USE IT.` : ''}`);
+
+    // ─── DEPTH-RESPONSIVE INSTRUCTIONS ───
+    let depthDirective = '';
+    if (depthLevel <= 1) {
+      depthDirective = `## ⚠️ DEPTH LEVEL: SURFACE (${depthLevel}/5)
+The conversation is still at the surface. He is giving you facts, events, logistics — not feelings, meanings, or identity.
+YOUR JOB: Go UNDERNEATH what he said. Do NOT stay at the surface with him. Reflect what he said, then pivot to what it MEANS to him.
+- Instead of responding to the event, respond to the COST of the event: "That happened. But what did it cost you?"
+- Instead of asking "what happened next?", ask "what did that do to you?"
+- Use the Face-Saving Emotion Bridge: find his cognitive frame and use it as a bridge to emotion.
+- If he is being intellectual, say: "You are analyzing this like a problem to solve. But underneath the analysis — what is actually hurting?"`;
+    } else if (depthLevel === 2) {
+      depthDirective = `## DEPTH LEVEL: EMOTIONAL (${depthLevel}/5)
+He is starting to name feelings. Good. But do NOT settle here. Emotion is the doorway, not the destination.
+YOUR JOB: Connect the emotion to a PATTERN or IDENTITY question.
+- "You said you feel angry. When did angry become your default? Was it always there, or did something teach you that?"
+- Look for the pattern in Layer 3. If one is detected, NAME it gently: "I notice something — every time you talk about X, you end up at Y. What do you think that is about?"`;
+    } else if (depthLevel === 3) {
+      depthDirective = `## DEPTH LEVEL: PATTERN (${depthLevel}/5)
+The conversation is reaching real territory — patterns, recurring themes, the shape of his life. Honor this depth.
+YOUR JOB: Connect the pattern to his IDENTITY. Who has this pattern made him? Who would he be without it?
+- You can allow 3-5 sentences here. The moment deserves room.
+- Challenge gently: "This pattern you are describing — it has been running your life. But you built it for a reason. What was it protecting you from?"`;
+    } else if (depthLevel >= 4) {
+      depthDirective = `## DEPTH LEVEL: IDENTITY / CORE TRUTH (${depthLevel}/5)
+He is at the deepest level. This is sacred ground. He is questioning who he IS, not just what happened.
+YOUR JOB: Be PRESENT. Do not try to fix, redirect, or rush past this. You can go 4-6 sentences if the moment demands it.
+- Mirror his truth back to him: "What you just said — do you hear yourself? That is the most honest thing you have told me."
+- Sit with the weight. Do NOT immediately pivot to "so what are you going to do about it?" Let the revelation breathe.
+- If he is confronting something painful about himself, HONOR it: "That takes real courage to say out loud."`;
+    }
+    if (depthDirective) parts.push(depthDirective);
   }
 
+  // ─── QUESTION SUGGESTIONS (now MANDATORY, not optional) ───
   if (ctx.questionSuggestions.length > 0) {
     const trustLabel = ctx.sessionCount <= 2 ? 'NEW (sessions 1-2: surface-level only)'
       : ctx.sessionCount <= 5 ? 'DEVELOPING (sessions 3-5: can deepen gently)'
       : ctx.sessionCount <= 15 ? 'ESTABLISHED (sessions 5-15: can challenge and reveal patterns)'
       : 'DEEP (sessions 15+: shadow work and direct confrontation allowed)';
-    parts.push(`## SUGGESTED QUESTIONS (Trust: ${trustLabel}, Session #${ctx.sessionCount})\n${ctx.questionSuggestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n\nIMPORTANT: These questions are pre-filtered for the current trust level. Do NOT ask questions that go deeper than the trust level allows. If this is an early session, keep questions at the surface — clarifying, opening, exploring. Do NOT jump to challenging or confrontational questions.`);
+    parts.push(`## YOUR QUESTIONS FOR THIS MOMENT (Trust: ${trustLabel}, Session #${ctx.sessionCount})
+These questions are specifically retrieved for THIS man in THIS moment. They are calibrated to his trust level, emotional state, and archetype.
+
+PRIMARY QUESTION (use this or adapt it — do NOT ignore it):
+→ ${ctx.questionSuggestions[0]}
+
+${ctx.questionSuggestions.length > 1 ? `ALTERNATIVES (if the primary doesn't fit the moment):\n${ctx.questionSuggestions.slice(1).map((q, i) => `${i + 2}. ${q}`).join('\n')}` : ''}
+
+INSTRUCTION: If you ask a question in your response, it should be one of these (adapted to the moment) OR the silence_question from the understanding analysis. Do NOT make up a generic question when you have these calibrated ones available. These are the difference between a surface conversation and a deep one.`);
   }
 
   return parts.join('\n\n');
