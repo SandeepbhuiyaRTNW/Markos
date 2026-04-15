@@ -26,8 +26,8 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 });
 
-const CHUNK_SIZE = 1500;
-const CHUNK_OVERLAP = 200;
+const TARGET_CHUNK_SIZE = 1200; // target, not hard limit — we respect paragraph boundaries
+const MAX_CHUNK_SIZE = 1800;    // absolute max before we force-split
 const BATCH_SIZE = 20;
 
 /**
@@ -53,17 +53,74 @@ const CURATED_BOOKS: [string, string, string][] = [
   ['books/POSITIVE PSYCHOLOGY & FLOURISHING/flourish_seligman.pdf', 'Flourish - Martin Seligman', 'perma'],
 ];
 
-function chunkText(text: string, chunkSize: number, overlap: number): string[] {
+/**
+ * Clean raw extracted text:
+ * - Strip control chars, excessive whitespace
+ * - Remove common PDF artifacts (page numbers, headers/footers, copyright lines)
+ * - Normalize paragraph breaks
+ */
+function cleanText(raw: string): string {
+  return raw
+    // Remove control chars
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')
+    // Normalize line breaks: collapse 3+ newlines into 2 (paragraph break)
+    .replace(/\n{3,}/g, '\n\n')
+    // Remove standalone page numbers (lines that are just a number)
+    .replace(/\n\s*\d{1,4}\s*\n/g, '\n')
+    // Remove common header/footer patterns
+    .replace(/^.*(?:copyright|all rights reserved|published by|isbn|library of congress).*$/gim, '')
+    // Collapse multiple spaces
+    .replace(/ {2,}/g, ' ')
+    .trim();
+}
+
+/**
+ * Paragraph-aware chunking:
+ * 1. Split text into paragraphs (double newline)
+ * 2. Group paragraphs into chunks up to TARGET_CHUNK_SIZE
+ * 3. If a single paragraph exceeds MAX_CHUNK_SIZE, split at sentence boundaries
+ * 4. Never cut mid-sentence
+ */
+function chunkText(text: string, _chunkSize?: number, _overlap?: number): string[] {
+  const cleaned = cleanText(text);
+  const paragraphs = cleaned.split(/\n\n+/).map(p => p.trim()).filter(p => p.length > 20);
   const chunks: string[] = [];
-  let start = 0;
-  while (start < text.length) {
-    const end = Math.min(start + chunkSize, text.length);
-    const chunk = text.slice(start, end).trim();
-    // Clean up: remove excessive whitespace and control characters
-    const cleaned = chunk.replace(/\s+/g, ' ').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
-    if (cleaned.length > 50) chunks.push(cleaned);
-    start += chunkSize - overlap;
+  let currentChunk = '';
+
+  for (const para of paragraphs) {
+    // If adding this paragraph would exceed target and we have content, flush
+    if (currentChunk.length > 0 && currentChunk.length + para.length + 2 > TARGET_CHUNK_SIZE) {
+      chunks.push(currentChunk.trim());
+      currentChunk = '';
+    }
+
+    // If a single paragraph is too large, split at sentence boundaries
+    if (para.length > MAX_CHUNK_SIZE) {
+      if (currentChunk.length > 0) {
+        chunks.push(currentChunk.trim());
+        currentChunk = '';
+      }
+      const sentences = para.match(/[^.!?]+[.!?]+[\s"]*/g) || [para];
+      let sentenceChunk = '';
+      for (const sentence of sentences) {
+        if (sentenceChunk.length + sentence.length > TARGET_CHUNK_SIZE && sentenceChunk.length > 0) {
+          chunks.push(sentenceChunk.trim());
+          sentenceChunk = '';
+        }
+        sentenceChunk += sentence;
+      }
+      if (sentenceChunk.trim().length > 20) {
+        currentChunk = sentenceChunk;
+      }
+    } else {
+      currentChunk += (currentChunk ? '\n\n' : '') + para;
+    }
   }
+
+  if (currentChunk.trim().length > 20) {
+    chunks.push(currentChunk.trim());
+  }
+
   return chunks;
 }
 
@@ -100,8 +157,9 @@ async function extractTextFromPDF(pdfBuffer: Buffer, filename: string): Promise<
 }
 
 async function main() {
+  const reingest = process.argv.includes('--reingest');
   console.log('=== mrkos.ai Book Ingestion Pipeline ===');
-  console.log(`Processing ${CURATED_BOOKS.length} curated books\n`);
+  console.log(`Processing ${CURATED_BOOKS.length} curated books${reingest ? ' (REINGEST MODE — replacing all chunks)' : ''}\n`);
 
   let totalChunks = 0;
   let successCount = 0;
@@ -115,12 +173,13 @@ async function main() {
       `SELECT COUNT(*) FROM embeddings WHERE source_title = $1 AND source_type = 'book'`,
       [title]
     );
-    if (parseInt(existing.rows[0].count) > 0) {
+    if (parseInt(existing.rows[0].count) > 0 && !reingest) {
       console.log(`  ✓ Already ingested (${existing.rows[0].count} chunks), skipping`);
       totalChunks += parseInt(existing.rows[0].count);
       successCount++;
       continue;
     }
+    // NOTE: if reingest, we delete AFTER successful download + chunking (see below)
 
     // Download from S3
     try {
@@ -141,8 +200,14 @@ async function main() {
       console.log(`  Extracted ${text.length.toLocaleString()} characters`);
 
       // Chunk
-      const chunks = chunkText(text, CHUNK_SIZE, CHUNK_OVERLAP);
+      const chunks = chunkText(text);
       console.log(`  Split into ${chunks.length} chunks`);
+
+      // If reingest, delete OLD chunks only AFTER successful download + chunking
+      if (reingest && parseInt(existing.rows[0].count) > 0) {
+        console.log(`  🔄 Deleting ${existing.rows[0].count} old chunks (download + chunking succeeded)...`);
+        await pool.query(`DELETE FROM embeddings WHERE source_title = $1 AND source_type = 'book'`, [title]);
+      }
 
       // Embed and store in batches
       for (let i = 0; i < chunks.length; i += BATCH_SIZE) {

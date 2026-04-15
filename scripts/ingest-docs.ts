@@ -21,8 +21,8 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD,
   ssl: { rejectUnauthorized: false },
 });
-const CHUNK_SIZE = 1500;
-const CHUNK_OVERLAP = 200;
+const TARGET_CHUNK_SIZE = 1200;
+const MAX_CHUNK_SIZE = 1800;
 const BATCH_SIZE = 20;
 const DOCS_DIR = join(__dirname, '..', 'Additional docs', 'Docs');
 
@@ -50,16 +50,42 @@ const DOCS: DocEntry[] = [
   },
 ];
 
+/**
+ * Paragraph-aware chunking for docs (same logic as books chunker).
+ */
 function chunkText(text: string): string[] {
+  const cleaned = text
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/ {2,}/g, ' ')
+    .trim();
+
+  const paragraphs = cleaned.split(/\n\n+/).map(p => p.trim()).filter(p => p.length > 20);
   const chunks: string[] = [];
-  let start = 0;
-  while (start < text.length) {
-    const end = Math.min(start + CHUNK_SIZE, text.length);
-    const chunk = text.slice(start, end).trim();
-    const cleaned = chunk.replace(/  +/g, ' ');
-    if (cleaned.length > 50) chunks.push(cleaned);
-    start += CHUNK_SIZE - CHUNK_OVERLAP;
+  let currentChunk = '';
+
+  for (const para of paragraphs) {
+    if (currentChunk.length > 0 && currentChunk.length + para.length + 2 > TARGET_CHUNK_SIZE) {
+      chunks.push(currentChunk.trim());
+      currentChunk = '';
+    }
+    if (para.length > MAX_CHUNK_SIZE) {
+      if (currentChunk.length > 0) { chunks.push(currentChunk.trim()); currentChunk = ''; }
+      const sentences = para.match(/[^.!?]+[.!?]+[\s"]*/g) || [para];
+      let sentenceChunk = '';
+      for (const sentence of sentences) {
+        if (sentenceChunk.length + sentence.length > TARGET_CHUNK_SIZE && sentenceChunk.length > 0) {
+          chunks.push(sentenceChunk.trim());
+          sentenceChunk = '';
+        }
+        sentenceChunk += sentence;
+      }
+      if (sentenceChunk.trim().length > 20) currentChunk = sentenceChunk;
+    } else {
+      currentChunk += (currentChunk ? '\n\n' : '') + para;
+    }
   }
+  if (currentChunk.trim().length > 20) chunks.push(currentChunk.trim());
   return chunks;
 }
 
@@ -78,6 +104,11 @@ async function extractDocxText(filepath: string): Promise<string> {
   return result.value;
 }
 
+/**
+ * Extract XLSX as structured rows — each row becomes a natural-language entry.
+ * Column headers become labels. So instead of "CE-DEEP-003 | What would it mean..."
+ * we get "Question ID: CE-DEEP-003. Category: Core Emotions. Question: What would it mean..."
+ */
 function extractXlsxText(filepath: string): string {
   const workbook = XLSX.readFile(filepath);
   const allText: string[] = [];
@@ -86,14 +117,20 @@ function extractXlsxText(filepath: string): string {
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
       defval: '',
     });
+    const headers = Object.keys(rows[0] || {});
     for (const row of rows) {
-      const vals = Object.values(row)
-        .map((v) => String(v))
-        .filter((v) => v.trim().length > 0);
-      if (vals.length > 0) allText.push(vals.join(' | '));
+      const parts: string[] = [];
+      for (const h of headers) {
+        const val = String(row[h] || '').trim();
+        if (val.length > 0) {
+          parts.push(`${h}: ${val}`);
+        }
+      }
+      if (parts.length > 0) allText.push(parts.join('. '));
     }
   }
-  return allText.join('\n');
+  // For question banks, each row is its own "paragraph" — the chunker will group them naturally
+  return allText.join('\n\n');
 }
 
 async function ingestDoc(doc: DocEntry): Promise<number> {
@@ -103,9 +140,14 @@ async function ingestDoc(doc: DocEntry): Promise<number> {
     "SELECT COUNT(*) FROM embeddings WHERE source_title = $1 AND source_type = 'doc'",
     [doc.title]
   );
-  if (parseInt(existing.rows[0].count) > 0) {
+  const reingest = process.argv.includes('--reingest');
+  if (parseInt(existing.rows[0].count) > 0 && !reingest) {
     console.log('  Already ingested (' + existing.rows[0].count + ' chunks), skipping');
     return parseInt(existing.rows[0].count);
+  }
+  if (reingest && parseInt(existing.rows[0].count) > 0) {
+    console.log('  🔄 Deleting ' + existing.rows[0].count + ' old chunks...');
+    await pool.query("DELETE FROM embeddings WHERE source_title = $1 AND source_type = 'doc'", [doc.title]);
   }
   console.log('  Extracting text from ' + doc.filename + '...');
   let text: string;
