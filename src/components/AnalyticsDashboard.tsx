@@ -173,8 +173,8 @@ export default function AnalyticsDashboard({ userId, onSelectSession, onContinue
                     </div>
                     <ChevronRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-[#a3785e]/60 transition-colors shrink-0" />
                   </button>
-                  {/* Continue conversation button — only for ended sessions */}
-                  {s.session_ended && onContinueSession && (
+                  {/* Continue conversation button — available for ALL sessions */}
+                  {onContinueSession && (
                     <div className="mt-3 pt-3 border-t border-border/30">
                       <button
                         onClick={(e) => { e.stopPropagation(); onContinueSession(s.id); }}
