@@ -178,6 +178,77 @@ export async function searchPastMessages(
   }
 }
 
+/**
+ * Build a narrative session history from ALL past sessions.
+ * Returns a structured summary of the journey so far, not just the last session.
+ */
+export async function getSessionHistory(userId: string): Promise<string> {
+  try {
+    const result = await query(
+      `SELECT session_number, summary, metadata, takeaways, pondering_topics, ended_at
+       FROM conversations
+       WHERE user_id = $1 AND session_ended = true AND summary IS NOT NULL
+       ORDER BY ended_at ASC
+       LIMIT 20`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return 'No previous sessions. This is the beginning of your relationship.';
+    }
+
+    let history = `YOU HAVE HAD ${result.rows.length} PREVIOUS SESSION(S) WITH THIS MAN.\n\nSESSION-BY-SESSION JOURNEY:\n`;
+
+    for (const row of result.rows) {
+      const md = (row.metadata || {}) as Record<string, unknown>;
+      const title = (md.title as string) || `Session ${row.session_number}`;
+      const date = row.ended_at ? new Date(row.ended_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+
+      history += `\n--- Session #${row.session_number} (${date}): "${title}" ---\n`;
+      if (row.summary) history += `What happened: ${row.summary}\n`;
+
+      const takeaways: string[] = row.takeaways || [];
+      if (takeaways.length > 0) {
+        history += `Key takeaways: ${takeaways.join(' | ')}\n`;
+      }
+
+      const pondering: string[] = row.pondering_topics || [];
+      if (pondering.length > 0) {
+        history += `Left him pondering: ${pondering.join(' | ')}\n`;
+      }
+    }
+
+    history += `\n--- END OF SESSION HISTORY ---\n`;
+    history += `Use this history to recognize patterns across sessions, reference specific past conversations naturally, and show that you remember the full arc of his journey — not just isolated moments.`;
+
+    return history;
+  } catch (err) {
+    console.warn('[Memory] getSessionHistory failed:', err);
+    return 'Session history unavailable.';
+  }
+}
+
+/**
+ * Get user style preferences from memory layers.
+ * These are conversational preferences the user has expressed (e.g., "stop asking questions").
+ */
+export async function getStylePreferences(userId: string): Promise<string> {
+  try {
+    const result = await query(
+      `SELECT key, value FROM memory_layers
+       WHERE user_id = $1 AND key LIKE 'style_%'
+       ORDER BY updated_at DESC`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) return '';
+
+    return result.rows.map(r => `- ${r.value}`).join('\n');
+  } catch {
+    return '';
+  }
+}
+
 export async function extractMemories(
   userId: string,
   userMessage: string,
@@ -256,6 +327,27 @@ Example: {"memories": [
     }
   } catch (e) {
     console.error('[Memory] Extraction failed:', e);
+  }
+
+  // ─── STYLE PREFERENCE DETECTION ───
+  // Detect if the user expressed preferences about how Marcus should communicate
+  try {
+    const stylePatterns: Array<{ pattern: RegExp; key: string; value: string }> = [
+      { pattern: /stop asking (me )?questions/i, key: 'style_no_questions', value: 'He asked Marcus to stop ending responses with questions. Respect this.' },
+      { pattern: /just listen/i, key: 'style_just_listen', value: 'He wants Marcus to listen without asking questions or giving advice. Just be present.' },
+      { pattern: /don'?t (end|finish).*(question)/i, key: 'style_no_ending_questions', value: 'He does not want responses to end with questions.' },
+      { pattern: /don'?t (give me|need).*(advice|wisdom|high level)/i, key: 'style_no_advice', value: 'He does not want unsolicited advice or high-level wisdom. Just be real and present.' },
+      { pattern: /can you just (be here|listen|hear me)/i, key: 'style_presence', value: 'He wants presence and active listening, not probing or guiding.' },
+    ];
+
+    for (const { pattern, key, value } of stylePatterns) {
+      if (pattern.test(userMessage)) {
+        await storeMemory(userId, 5, key, value, 0.95, messageId);
+        console.log(`[Memory] 🎯 Style preference stored: ${key}`);
+      }
+    }
+  } catch (e) {
+    console.warn('[Memory] Style preference detection failed:', e);
   }
 }
 

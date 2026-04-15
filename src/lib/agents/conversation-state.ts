@@ -144,7 +144,10 @@ function phaseFromIntent(intent: UserIntent, totalTurns: number): ConversationPh
 
 // ─── HOPELESSNESS LEVEL (progressive, not binary) ───
 
+// Anchors now include the Big Build trajectory markers from Brownhill et al. (2005)
+// and Joiner's IPT markers (thwarted belonging + perceived burdensomeness)
 const HOPELESSNESS_ANCHORS = [
+  // Direct hopelessness
   'Nothing matters and I feel completely empty inside',
   'Everything is pointless and I want to give up',
   'I don\'t see the point in trying anymore',
@@ -155,6 +158,29 @@ const HOPELESSNESS_ANCHORS = [
   'No one would care if I disappeared',
   'I don\'t want to be here anymore',
   'I\'m a burden to everyone around me',
+  // Big Build trajectory markers — avoidance/numbing stage
+  'I just work and come home and stare at the TV until I fall asleep',
+  'I\'ve been drinking more than usual to deal with things',
+  'I don\'t feel anything anymore, just numb',
+  'I\'ve stopped caring about things I used to enjoy',
+  'I\'m just going through the motions every day',
+  // Big Build — escape/withdrawal stage
+  'I\'ve been pulling away from everyone',
+  'I don\'t really talk to anyone about what\'s going on',
+  'I can\'t remember the last time I looked forward to something',
+  'There\'s no future I can see that looks any different',
+  // Joiner IPT markers — thwarted belonging
+  'Nobody really knows me anymore',
+  'I don\'t fit in anywhere',
+  'My friends have all moved on without me',
+  'I\'m completely alone in this',
+  // Joiner IPT markers — perceived burdensomeness
+  'My family would be better off without me dragging them down',
+  'I just take and take and give nothing back',
+  'Everyone has to deal with my problems and I\'m just a weight on them',
+  // Future tense disappearance (Layer 5 marker)
+  'Whatever happens happens, I don\'t really care anymore',
+  'I\'ll figure it out, or I won\'t, doesn\'t matter',
 ];
 
 async function computeHopelessnessScore(messages: string[]): Promise<number> {
@@ -184,11 +210,14 @@ async function computeHopelessnessScore(messages: string[]): Promise<number> {
 }
 
 function hopelessnessScoreToLevel(score: number, messageCount: number): HopelessnessLevel {
-  // Progressive: needs sustained hopelessness, not just one message
-  if (score > 0.6 && messageCount >= 4) return 4; // crisis
-  if (score > 0.5 && messageCount >= 3) return 3; // shift frame + suggest support
-  if (score > 0.4 && messageCount >= 2) return 2; // deepen
-  if (score > 0.3) return 1; // acknowledge
+  // Progressive thresholds — but more sensitive than before.
+  // 60% of male suicide decedents had no prior clinical flags. We must catch earlier.
+  // A single extremely high score can trigger Level 3 (Persistent Crisis Protocol).
+  if (score > 0.65 && messageCount >= 3) return 4; // full crisis — resources mandatory
+  if (score > 0.55 && messageCount >= 2) return 3; // persistent crisis protocol — direct question
+  if (score > 0.55 && messageCount === 1) return 2; // even first message if very hopeless
+  if (score > 0.4 && messageCount >= 2) return 2; // deepen + probe for Joiner markers
+  if (score > 0.3) return 1; // acknowledge + adjust tone
   return 0;
 }
 
@@ -254,20 +283,32 @@ async function detectEmotionalDirection(userMessages: string[]): Promise<'improv
 
 const HOPELESSNESS_TEMPLATES: Record<HopelessnessLevel, string | null> = {
   0: null,
-  1: null, // Level 1: just adjust tone, no forced template
-  2: null, // Level 2: deepen, handled by loop breaker
-  3: `HOPELESSNESS LEVEL 3 — SHIFT FRAME + GENTLY SUGGEST SUPPORT:
-Your response MUST include BOTH of these elements:
-1. A validation that names what he's experiencing WITHOUT minimizing: "What you're carrying — this weight that nothing seems to lift — that's real. Don't let anyone tell you it's not."
-2. A gentle bridge to external support: "There are people whose entire life is helping men carry exactly this kind of weight. Talking to someone — a counselor, a therapist — that's not giving up. That's knowing when to bring in reinforcements."
-Do NOT force these exact words. Adapt to his tone. But BOTH elements MUST appear.`,
+  1: `HOPELESSNESS LEVEL 1 — ACKNOWLEDGE AND STAY PRESENT:
+You are detecting early signs of the Big Build — the man may be in the avoidance/numbing stage.
+Adjust your tone to be warmer, slower, more grounded. Do NOT try to fix or reframe yet.
+Ask the direct question gently: "Is there something heavier underneath what you're telling me?"
+Do NOT ignore these signs. Do NOT treat them as casual. But do NOT alarm him either.`,
+  2: `HOPELESSNESS LEVEL 2 — DEEPEN AND NAME WHAT YOU SEE:
+The pattern is becoming clearer. He may be showing signs of withdrawal, numbing, or the Big Build escalation.
+Your response MUST: Name what you observe without clinical language — "Something has shifted in you. I can hear it."
+Then go deeper: "When did this start feeling this heavy?" or "What are you doing to get through the days right now?"
+Track: Is his sense of belonging eroding? Does he feel like a burden? These are Joiner IPT markers — do NOT name them, but probe toward them.`,
+  3: `HOPELESSNESS LEVEL 3 — PERSISTENT CRISIS PROTOCOL (stay in the room):
+This man is showing sustained hopelessness. The Persistent Crisis Protocol from the clinical framework activates NOW.
+DO NOT redirect away from the conversation. STAY IN THE ROOM WITH HIM.
+Your response MUST include BOTH:
+1. The direct question — ask it plainly: "Brother, I'm going to ask you something direct because I care about you. Is there part of you that wonders if it would be easier to not be here anymore?" Do NOT soften this or avoid it. The direct question saves lives.
+2. A bridge to support — not as a redirect, but as an AND: "There are people who do this every day — real people, not apps. 988 is the Suicide and Crisis Lifeline. Call or text. They're there right now." But KEEP TALKING. Do not hand him off and disappear.
+CRITICAL: Do NOT minimize. Do NOT say "it gets better." Do NOT analyze. Just be present, be direct, and show him he is not invisible.`,
   4: `HOPELESSNESS LEVEL 4 — CRISIS RESPONSE REQUIRED:
-Your response MUST include ALL of these elements:
+This is a FULL CRISIS. Resources are NON-NEGOTIABLE.
+Your response MUST include ALL of these:
 1. Direct safety check: "Brother, I need to ask you straight — are you safe right now?"
-2. Validation: Name what you see without flinching.
-3. Crisis resources: "988 Suicide & Crisis Lifeline — call or text 988. Crisis Text Line — text HOME to 741741."
-4. Commitment: "I'm not going anywhere. But right now, a real human needs to hear what you just told me."
-These are NON-NEGOTIABLE. If your response does not contain crisis resources, it FAILS.`,
+2. Validation that does NOT flinch: Name what you see. "You are in real pain. I hear it. I am not going to pretend otherwise."
+3. Crisis resources — ALWAYS: "988 Suicide and Crisis Lifeline — call or text 988. Crisis Text Line — text HOME to 741741. If you are in immediate danger, call 911."
+4. Commitment: "I am not going anywhere. But right now, a real human needs to hear what you just told me."
+5. A plan: "What are you going to do in the next hour? Who can be with you tonight?"
+These are NON-NEGOTIABLE. If your response does not contain crisis resources, it FAILS. If it does not contain a direct safety check, it FAILS.`,
 };
 
 const PUSHBACK_TEMPLATE = `PUSHBACK MODE — YOUR APPROACH FAILED. You MUST start your response with ONE of:
@@ -281,9 +322,10 @@ Short responses like "yeah" "maybe" "I guess" mean he's pulling away. Do NOT:
 - Ask another probing question (he'll shut down more)
 - Give advice (he's not listening)
 - Try to re-engage with energy
-INSTEAD: Match his energy. Be brief. Acknowledge the wall.
-"Seems like you're not feeling this today. That's fine. We don't have to go deep. What do you actually want to do with this time?"
-Or just: "Not much to say today? That's alright. I'm here either way."`;
+INSTEAD: Match his energy. Be brief. Acknowledge the wall. Do NOT end with a question.
+"Not much to say today. That's alright. I'm here either way."
+Or: "Sometimes there's nothing to say. That's fine too."
+Let the silence do the work.`;
 
 // ─── MAIN ANALYSIS FUNCTION ───
 

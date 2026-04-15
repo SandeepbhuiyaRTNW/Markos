@@ -13,7 +13,7 @@ import { createMCPContext, trackAgent, recordError } from './mcp-context';
 import { runRAGAgent } from './rag-agent';
 import { runConversationalAgent } from './conversational-agent';
 import { analyzeUnderstanding } from '../understanding/stack';
-import { getMemoryContext, extractMemories } from '../memory/memory-manager';
+import { getMemoryContext, extractMemories, getSessionHistory, getStylePreferences } from '../memory/memory-manager';
 import { detectKWML, getKWMLContext, saveKWMLProfile } from '../kwml/detector';
 import { query } from '../db';
 
@@ -36,18 +36,22 @@ async function enrichNode(state: OrchestratorStateType): Promise<Partial<Orchest
   const { ctx } = state;
   const historyStr = ctx.conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n');
 
-  // Phase 1: Fetch memory + KWML profile + session count from DB (fast, ~75ms)
+  // Phase 1: Fetch memory + KWML profile + session count + session history from DB (fast, ~75ms)
   // This feeds the understanding agent with real context about the man.
   const memoryDone = trackAgent(ctx, 'memory-agent');
   try {
-    const [memCtx, kwmlCtx, sessionResult] = await Promise.all([
+    const [memCtx, kwmlCtx, sessionResult, sessHistory, stylePrefs] = await Promise.all([
       getMemoryContext(ctx.userId),
       getKWMLContext(ctx.userId),
       query(`SELECT COUNT(*) as cnt FROM conversations WHERE user_id = $1`, [ctx.userId]),
+      getSessionHistory(ctx.userId),
+      getStylePreferences(ctx.userId),
     ]);
     ctx.memoryContext = memCtx;
     ctx.kwmlProfile = kwmlCtx;
     ctx.sessionCount = parseInt(sessionResult.rows[0]?.cnt || '0', 10);
+    ctx.sessionHistory = sessHistory;
+    ctx.stylePreferences = stylePrefs;
   } catch (error) {
     recordError(ctx, 'memory-agent', error);
   } finally {

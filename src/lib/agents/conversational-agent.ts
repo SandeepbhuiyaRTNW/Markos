@@ -15,25 +15,142 @@ import { analyzeConversation, computeTrajectoryDrift } from './conversation-stat
 import type { ConversationState } from './conversation-state';
 import { searchPastMessages } from '../memory/memory-manager';
 
-/** Crisis keywords that must trigger safety-first response */
-const CRISIS_PATTERNS = [
+// ─── CRISIS DETECTION SYSTEM ───
+// Tiered: IMMEDIATE (hard intercept) vs ELEVATED (flag + adjust response)
+// Categories: suicide, violence/homicide, domestic violence, substance crisis, passive indicators
+
+type CrisisType = 'suicide' | 'violence_toward_others' | 'domestic_violence_perpetrating' | 'domestic_violence_victim' | 'substance_crisis' | 'passive_crisis' | null;
+
+/** IMMEDIATE crisis patterns — hard intercept, safety response required */
+const SUICIDE_PATTERNS = [
   /\b(suicid|kill\s*my\s*self|end\s*(my|it|things)|checking\s*out|better\s*off\s*(without|dead))\b/i,
   /\b(want\s*to\s*die|don'?t\s*want\s*to\s*(be\s*here|live|exist|wake\s*up))\b/i,
   /\b(self[\s-]*harm|cut\s*my\s*self|hurt\s*my\s*self)\b/i,
-  /\b(no\s*(point|reason)\s*(in\s*)?living)\b/i,
+  /\b(no\s*(point|reason)\s*(in\s*)?(living|going\s*on|being\s*here))\b/i,
+  /\b(put\s*a\s*(bullet|gun)|blow\s*my\s*(head|brains))\b/i,
+  /\b(jump\s*(off|from)|hang\s*my\s*self|overdose|take\s*(all\s*the|too\s*many)\s*pills)\b/i,
+  /\b(wouldn'?t\s*miss\s*me|world\s*(is\s*)?better\s*without|nobody\s*(would\s*)?(care|notice))\b/i,
+  /\b(giving\s*(away|everything)|getting\s*(my\s*)?(affairs|things)\s*in\s*order)\b/i,
+  /\b(wrote\s*(a\s*)?(note|letter)\s*(to|for)\s*(my|the)\s*(kids|family|wife))\b/i,
+  /\b(made\s*(my|a)\s*(peace|plan)|have\s*a\s*plan)\b/i,
+  /\b(i'?m\s*(a\s*)?burden|burden\s*(to|on)\s*(everyone|my|them))\b/i,
 ];
 
-function isCrisis(message: string): boolean {
-  return CRISIS_PATTERNS.some(p => p.test(message));
+/** Violence toward others — IMMEDIATE intercept */
+const VIOLENCE_PATTERNS = [
+  /\b(kill\s*(her|him|them|my\s*(wife|husband|partner|boss|kid)))\b/i,
+  /\b(shoot\s*(her|him|them|my|the))\b/i,
+  /\b(i'?ve?\s*got\s*a\s*(gun|weapon|knife|pistol|rifle))\b/i,
+  /\b(bought\s*a\s*(gun|weapon|knife))\b/i,
+  /\b(going\s*to\s*(hurt|harm|murder|stab|strangle|choke))\b/i,
+  /\b(she'?s?\s*(going\s*to|gonna)\s*pay)\b/i,
+  /\b(i'?ll?\s*(make|teach)\s*(her|him|them)\s*(a\s*lesson|sorry|pay))\b/i,
+  /\b(want\s*(to|him|her)\s*(dead|gone|eliminated))\b/i,
+  /\b(plan\s*to\s*(hurt|harm|kill|attack))\b/i,
+];
+
+/** Domestic violence — being perpetrated */
+const DV_PERPETRATING_PATTERNS = [
+  /\b(i\s*(hit|slapped|punched|shoved|pushed|choked|strangled|beat)\s*(her|him|my\s*(wife|partner|kid)))\b/i,
+  /\b(i\s*(threw|broke)\s*(something|things)\s*(at|near))\b/i,
+  /\b(i\s*lost\s*(it|control)\s*and\s*(hit|hurt|grabbed))\b/i,
+  /\b(put\s*my\s*hands\s*(on|around)\s*(her|him|his|their))\b/i,
+];
+
+/** Domestic violence — being experienced (victim) */
+const DV_VICTIM_PATTERNS = [
+  /\b((she|he)\s*(hit|slapped|punched|shoved|pushed|choked|beat)\s*me)\b/i,
+  /\b((she|he)\s*(threatens?|threatened)\s*(to\s*)?(kill|hurt)\s*me)\b/i,
+  /\b(i'?m\s*(afraid|scared)\s*(of|for)\s*(my\s*)?(life|safety))\b/i,
+  /\b((she|he)\s*(has|got|keeps)\s*a\s*(gun|weapon|knife))\b/i,
+];
+
+/** Active substance crisis — IMMEDIATE */
+const SUBSTANCE_CRISIS_PATTERNS = [
+  /\b(drunk\s*(right\s*now|and\s*(driving|going\s*to\s*drive)))\b/i,
+  /\b(took\s*too\s*many\s*pills)\b/i,
+  /\b(overdos(e|ed|ing))\b/i,
+  /\b(mixing\s*(pills|drugs|alcohol|meds))\b/i,
+  /\b(about\s*to\s*(drink|use|take)\s*(and\s*)?drive)\b/i,
+];
+
+/** Passive crisis indicators — elevate concern, don't hard intercept */
+const PASSIVE_CRISIS_PATTERNS = [
+  /\b(what'?s\s*the\s*point)\b/i,
+  /\b(nothing\s*(matters|changes|helps|works))\b/i,
+  /\b(so\s*tired\s*of\s*(everything|this|living|trying|fighting))\b/i,
+  /\b(can'?t\s*(do\s*this|keep\s*(going|doing\s*this)|take\s*(it|this|any\s*more)))\b/i,
+  /\b(i'?m\s*(done|finished|through|over\s*it))\b/i,
+  /\b(no\s*one\s*(cares|would\s*(miss|notice)))\b/i,
+  /\b(feel\s*(like\s*)?(disappearing|vanishing|fading))\b/i,
+  /\b(gave\s*away|settling\s*my\s*(affairs|debts))\b/i,
+];
+
+function detectCrisisType(message: string): CrisisType {
+  if (SUICIDE_PATTERNS.some(p => p.test(message))) return 'suicide';
+  if (VIOLENCE_PATTERNS.some(p => p.test(message))) return 'violence_toward_others';
+  if (DV_PERPETRATING_PATTERNS.some(p => p.test(message))) return 'domestic_violence_perpetrating';
+  if (DV_VICTIM_PATTERNS.some(p => p.test(message))) return 'domestic_violence_victim';
+  if (SUBSTANCE_CRISIS_PATTERNS.some(p => p.test(message))) return 'substance_crisis';
+  if (PASSIVE_CRISIS_PATTERNS.some(p => p.test(message))) return 'passive_crisis';
+  return null;
 }
 
-const CRISIS_RESPONSE = `Brother, I need to stop everything and be direct with you. What you just described — those thoughts — I take them seriously. You are not a burden. Your children will never be better off without their father. I know it feels that way right now, but that is the pain talking, not the truth.
+// ─── TIERED CRISIS RESPONSES ───
 
-I need you to do one thing for me right now: call or text 988. That is the Suicide & Crisis Lifeline. They are available 24/7 and they will talk with you — no judgment.
+const CRISIS_RESPONSES: Record<string, string> = {
+  suicide: `Brother, I need to stop everything right now. What you just said — I hear it. I take it seriously. This is not something I will gloss over or move past.
 
-You can also text HOME to 741741 (Crisis Text Line) if calling feels too hard.
+You are in pain. Real pain. And pain like that can make the mind see only one way out when there are others you cannot see right now.
 
-I am here. I am not going anywhere. But right now, you need someone who can be with you in real time. Will you reach out to them?`;
+I need you to do one thing: call or text 988. That is the Suicide and Crisis Lifeline. They are there 24/7 — real people, no judgment. You can also text HOME to 741741.
+
+If you are in immediate danger right now — call 911.
+
+I am not going anywhere. But you need someone who can be with you in real time right now. Your life matters. Will you make that call?`,
+
+  violence_toward_others: `Brother — stop. I need to be completely direct with you right now.
+
+What you just described — hurting someone, using a weapon, acting on this anger — that is a line you cannot come back from. I know the rage feels justified. I know it feels like the only power you have left. But acting on it will destroy your life and theirs. There is no version of this that ends well for you.
+
+If you are in danger of hurting someone right now, call 911. Not to turn yourself in — to stop something you will regret for the rest of your life.
+
+If the urge is strong but you have not acted: call the 988 Suicide and Crisis Lifeline at 988. They help with ALL crises, not just suicide. Or text HOME to 741741.
+
+Step away from the situation. Leave the room. Leave the house. Put distance between you and whatever this is. Right now. The anger will pass. What you do in the next ten minutes will not.`,
+
+  domestic_violence_perpetrating: `Brother, I need to stop you right here. What you just described — putting your hands on someone — that crosses a line that no amount of anger, frustration, or pain justifies.
+
+I am not here to shame you. I am here to be honest with you. And the honest truth is: this will escalate if you do not get help now. Not next week. Now.
+
+Call the National Domestic Violence Hotline at 1-800-799-7233. They help everyone involved — including men who know they need to stop. You can also text START to 88788.
+
+If you are still in the situation: leave the room. Leave the house. Put physical distance between you and the other person. That is the first step. Everything else comes after you are separated.
+
+Coming back to me and talking — that matters. But a real human needs to be part of this. Will you make that call?`,
+
+  domestic_violence_victim: `Brother, what you just described — that is not okay. No one has the right to put their hands on you or threaten your safety. I need you to hear that clearly.
+
+You are not weak for being in this situation. You are not less of a man because someone is hurting you. But you need support right now that goes beyond what I can give you.
+
+National Domestic Violence Hotline: 1-800-799-7233 or text START to 88788. They help men too. No judgment.
+
+If you are in immediate danger right now — call 911. Your safety comes first.
+
+Is there somewhere safe you can go tonight? A friend, a family member, anyone you trust?`,
+
+  substance_crisis: `Brother, I need you to stop and listen to me right now. What you just described is a medical emergency.
+
+If you have taken too many pills or mixed substances — call 911 immediately. Do not wait. Do not try to ride it out.
+
+If you are about to drive after drinking — do not get in that car. Call anyone. A friend. A cab. An Uber. 911. The car is not an option right now.
+
+Poison Control: 1-800-222-1222 if you have taken something.
+988 Suicide and Crisis Lifeline: call or text 988 for immediate support.
+911 for any medical emergency.
+
+I am here. But your body needs real help right now. Will you make that call?`,
+};
 
 /** Create the Marcus ChatOpenAI model — uses gpt-4o for maximum persona depth */
 function createMarcusModel() {
@@ -45,6 +162,48 @@ function createMarcusModel() {
     frequencyPenalty: 0.5,
     openAIApiKey: process.env.OPENAI_API_KEY,
   });
+}
+
+/**
+ * Detect if the user has requested a change in conversational style.
+ * Returns a directive string to inject into the system prompt, or empty string.
+ */
+function detectStyleRequest(
+  currentMessage: string,
+  history: Array<{ role: string; content: string }>
+): string {
+  const allUserMessages = [
+    ...history.filter(m => m.role === 'user').map(m => m.content),
+    currentMessage,
+  ];
+
+  // Check recent user messages (last 5) for style requests
+  const recentMessages = allUserMessages.slice(-5);
+  const combined = recentMessages.join(' ').toLowerCase();
+
+  const noQuestionPatterns = [
+    /stop asking (me )?questions/i,
+    /don'?t (end|finish) (with|every|anything).*(question)/i,
+    /just listen/i,
+    /can you just (be here|listen|hear me)/i,
+    /i don'?t (need|want) (you to |your )?(ask|question|analyze|rationalize|justify)/i,
+    /no (more )?questions/i,
+    /don'?t ask me/i,
+    /stop (with the |the )?question/i,
+  ];
+
+  const wantsListening = noQuestionPatterns.some(p => p.test(combined));
+
+  if (wantsListening) {
+    return `\n\n🚨 STYLE OVERRIDE — HE HAS ASKED YOU TO STOP ASKING QUESTIONS OR JUST LISTEN.
+This is a DIRECT REQUEST from him. It overrides ALL other instructions about questions.
+- Do NOT end your response with a question mark. ZERO question marks.
+- Instead: reflect, validate, sit with him, say "Tell me more" or "Keep going" or "I'm here."
+- You can make statements of truth, offer presence, or challenge — but NO QUESTIONS until he invites them back.
+- This is NOT optional. Ignoring this makes you a bad listener, not a wise friend.`;
+  }
+
+  return '';
 }
 
 /**
@@ -67,17 +226,43 @@ function enforceOneQuestion(text: string): string {
   return idx >= 0 ? text.slice(0, idx + 1).trimEnd() : text;
 }
 
+/**
+ * Strip ALL questions from a response — used when the user has asked Marcus to stop asking questions.
+ * Converts question sentences into statements or removes trailing questions.
+ */
+function stripAllQuestions(text: string): string {
+  // Split into sentences, remove any that are pure questions (end with ?)
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  const filtered = sentences.filter(s => {
+    const trimmed = s.trim();
+    // Keep sentences that don't end with ?
+    if (!trimmed.endsWith('?')) return true;
+    // Remove pure question sentences, but keep if it's the only sentence
+    return false;
+  });
+  // If we stripped everything, convert the last question to a statement
+  if (filtered.length === 0 && sentences.length > 0) {
+    return sentences[sentences.length - 1].replace(/\?$/, '.').trim();
+  }
+  return filtered.join(' ').trim();
+}
+
 /** Run the conversational agent — generates Marcus's response */
 export async function runConversationalAgent(ctx: MCPContext): Promise<void> {
   const done = trackAgent(ctx, 'conversational-agent');
   try {
     // ─── CRISIS INTERCEPT ───
-    if (isCrisis(ctx.userMessage)) {
-      ctx.marcusResponse = CRISIS_RESPONSE;
+    const crisisType = detectCrisisType(ctx.userMessage);
+    if (crisisType && crisisType !== 'passive_crisis') {
+      ctx.marcusResponse = CRISIS_RESPONSES[crisisType] || CRISIS_RESPONSES.suicide;
       ctx.responseEmotion = 'crisis';
       ctx.responseArchetype = '';
-      console.log('[Marcus] ⚠️ CRISIS DETECTED — safety response triggered');
+      console.log(`[Marcus] ⚠️ CRISIS DETECTED (${crisisType}) — safety response triggered`);
       return;
+    }
+    // Flag passive crisis for the conversation state engine to handle
+    if (crisisType === 'passive_crisis') {
+      console.log('[Marcus] ⚠️ Passive crisis indicators detected — flagging for hopelessness escalation');
     }
 
     const model = createMarcusModel();
@@ -92,6 +277,8 @@ export async function runConversationalAgent(ctx: MCPContext): Promise<void> {
       ragContext: ctx.ragContext || undefined,
       kwmlContext: ctx.kwmlProfile || undefined,
       understandingContext: understandingSummary,
+      stylePreferences: ctx.stylePreferences || undefined,
+      sessionHistory: ctx.sessionHistory || undefined,
     });
 
     const contextSummary = buildContextSummary(ctx);
@@ -115,16 +302,20 @@ export async function runConversationalAgent(ctx: MCPContext): Promise<void> {
     );
     const { phase: conversationPhase, loopBreaker, pushbackCount, hopelessnessLevel } = convState;
 
+    // ─── STYLE PREFERENCE DETECTION (mid-session) ───
+    const styleOverride = detectStyleRequest(ctx.userMessage, ctx.conversationHistory);
+
     const finalInstruction = `\n\n## ⚠️ RESPONSE RULES — THESE OVERRIDE EVERYTHING ABOVE
-${toneGuide}${loopBreaker}
+${toneGuide}${loopBreaker}${styleOverride}
 
 BEFORE YOU WRITE: Read his EXACT words. What SPECIFICALLY did he say? Start your response by reacting to THAT — not a generic summary.
 
 HARD RULES:
 - 2-3 sentences MAX. This is VOICE. Under 15 seconds spoken. No exceptions.
-- ONE question mark. The one that cuts deepest. At the end.
+- AT MOST one question mark. You do NOT have to end with a question. Sometimes a statement, a truth, a challenge, or just sitting with him is more powerful. Vary your endings.
 - Use contractions always. "You're" not "you are." "Don't" not "do not."
 - Match his register EXACTLY. If he says "bro" and "no point" — you say "man" and keep it raw. If he's formal, be measured.
+- If he asked you to stop asking questions or just listen — NO question marks at all. Zero. Just be present.
 
 ADVICE RULES — PHASE-BASED (current phase: ${conversationPhase.toUpperCase()}):
 ${conversationPhase === 'understand' ? `PHASE 1: UNDERSTAND — You are still learning what's going on. Do NOT give advice, suggestions, or action steps.
@@ -221,7 +412,13 @@ WISDOM INTEGRATION (CRITICAL):
       ? response.content
       : JSON.stringify(response.content);
 
-    content = enforceOneQuestion(content || 'Something in what you said hit me. Say that again — slower this time.');
+    content = content || 'Something in what you said hit me. Say that again — slower this time.';
+    // If user asked to stop questions, strip ALL question marks from the response
+    if (styleOverride) {
+      content = stripAllQuestions(content);
+    } else {
+      content = enforceOneQuestion(content);
+    }
 
     // ─── BANNED PHRASE + ADVICE POST-PROCESSING ───
     const bannedPatterns = [
@@ -248,8 +445,8 @@ WISDOM INTEGRATION (CRITICAL):
       const reason = hasAdviceAfterPushback ? 'advice-after-pushback' : 'banned-phrase';
       console.log(`[Marcus] 🚫 ${reason} detected — regenerating. Original: "${content.substring(0, 100)}..."`);
       const overridePrompt = hasAdviceAfterPushback
-        ? `[SYSTEM OVERRIDE] Your previous response gave ADVICE (action steps, suggestions, "try this") AFTER the man already pushed back multiple times. This is a critical failure. Rewrite completely. Do NOT give advice. Do NOT suggest actions. Do NOT say "try", "start", "step". Instead: acknowledge the failure of your approach, sit with him in the difficulty, or go DEEPER into what's underneath. Ask ONE question about what he's actually experiencing — not what to DO about it. 2-3 sentences max.`
-        : `[SYSTEM OVERRIDE] Your previous response contained therapist-speak phrases that are BANNED. Rewrite your response to the man. Speak as Marcus Aurelius would — raw, direct, from lived experience. 2-3 sentences. ONE question at the end. NO banned phrases.`;
+        ? `[SYSTEM OVERRIDE] Your previous response gave ADVICE (action steps, suggestions, "try this") AFTER the man already pushed back multiple times. This is a critical failure. Rewrite completely. Do NOT give advice. Do NOT suggest actions. Do NOT say "try", "start", "step". Instead: acknowledge the failure of your approach, sit with him in the difficulty, or go DEEPER into what's underneath. 2-3 sentences max. You may end with a question OR a statement — vary it.`
+        : `[SYSTEM OVERRIDE] Your previous response contained therapist-speak phrases that are BANNED. Rewrite your response to the man. Speak as Marcus Aurelius would — raw, direct, from lived experience. 2-3 sentences. End with weight — a question, a challenge, or a truth. NO banned phrases.`;
       const retryMessages = [
         ...messages,
         new AIMessage(content),
@@ -257,7 +454,7 @@ WISDOM INTEGRATION (CRITICAL):
       ];
       const retry = await model.invoke(retryMessages);
       const retryContent = typeof retry.content === 'string' ? retry.content : JSON.stringify(retry.content);
-      content = enforceOneQuestion(retryContent || content);
+      content = styleOverride ? stripAllQuestions(retryContent || content) : enforceOneQuestion(retryContent || content);
       console.log(`[Marcus] ✅ Regenerated response: "${content.substring(0, 100)}..."`);
     }
 
@@ -273,11 +470,11 @@ WISDOM INTEGRATION (CRITICAL):
           const dedupMessages = [
             ...messages,
             new AIMessage(content),
-            new HumanMessage(`[SYSTEM OVERRIDE] Your response is semantically identical to what you've been saying all session. You are STUCK IN A LOOP. Write a COMPLETELY DIFFERENT response. Change angle entirely: if you've been asking questions, make a statement. If gentle, be blunt. If exploring feelings, issue a direct challenge. 2-3 sentences, ONE question. Must be meaningfully different from your last 5 responses.`),
+            new HumanMessage(`[SYSTEM OVERRIDE] Your response is semantically identical to what you've been saying all session. You are STUCK IN A LOOP. Write a COMPLETELY DIFFERENT response. Change angle entirely: if you've been asking questions, make a statement. If gentle, be blunt. If exploring feelings, issue a direct challenge. 2-3 sentences. End differently than your last 5 responses — if they all ended with questions, end with a statement instead. Must be meaningfully different.`),
           ];
           const dedupRetry = await model.invoke(dedupMessages);
           const dedupContent = typeof dedupRetry.content === 'string' ? dedupRetry.content : JSON.stringify(dedupRetry.content);
-          content = enforceOneQuestion(dedupContent || content);
+          content = styleOverride ? stripAllQuestions(dedupContent || content) : enforceOneQuestion(dedupContent || content);
           console.log(`[Marcus] ✅ Dedup regenerated: "${content.substring(0, 100)}..."`);
         }
       } catch (dedupErr) {

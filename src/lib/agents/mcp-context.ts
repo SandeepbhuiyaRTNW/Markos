@@ -24,6 +24,8 @@ export interface MCPContext {
 
   // --- Enrichment State ---
   sessionCount: number;           // total sessions for this user (populated by memory phase)
+  sessionHistory: string | null;  // narrative arc of all past sessions
+  stylePreferences: string | null; // user's communication preferences
 
   // --- Agent Results (written by individual agents) ---
   ragContext: string | null;
@@ -59,6 +61,8 @@ export function createMCPContext(params: {
     conversationHistory: params.conversationHistory,
     userName: params.userName ?? null,
     sessionCount: 0,
+    sessionHistory: null,
+    stylePreferences: null,
     ragContext: null,
     questionSuggestions: [],
     memoryContext: null,

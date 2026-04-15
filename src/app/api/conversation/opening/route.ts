@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { query } from '@/lib/db';
-import { getMemoryContext } from '@/lib/memory/memory-manager';
+import { getMemoryContext, getSessionHistory, getStylePreferences } from '@/lib/memory/memory-manager';
 import { synthesizeSpeech } from '@/lib/voice/tts';
 import { buildSystemPrompt } from '@/lib/agent/system-prompt';
 
@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
           [userId, conversationId]
         );
 
-    const [memoryContext, prevResult, lastSessionResult] = await Promise.all([
+    const [memoryContext, prevResult, lastSessionResult, sessionHistory, stylePrefs] = await Promise.all([
       getMemoryContext(userId),
       continueFrom
         ? query(
@@ -124,6 +124,8 @@ export async function GET(req: NextRequest) {
             [userId, conversationId]
           ),
       lastSessionQuery,
+      getSessionHistory(userId),
+      getStylePreferences(userId),
     ]);
     // Determine if we have REAL memories (not just session count metadata)
     const hasMemory = !memoryContext.includes('No memories stored')
@@ -165,28 +167,28 @@ Do NOT say "I remember" or reference past sessions. Do NOT start with "Brother" 
     } else if (continueFrom) {
       // ─── CONTINUING FROM A SPECIFIC SESSION ───
       // The user explicitly chose this session to continue from.
-      // ONLY reference this session's data, not general memory.
+      // Primary focus is THIS session, but awareness of all sessions is important.
       if (lastPondering.length > 0) {
         openingInstruction = `\n\n## YOUR TASK — CONTINUE FROM A SPECIFIC SESSION
 He has chosen to CONTINUE from a previous conversation titled "${lastTitle}".
-CRITICAL: Reference ONLY the pondering topics and takeaways from THAT session. Do NOT reference other sessions or general memory.
+Your PRIMARY focus should be on THIS session's takeaways and pondering topics. But you also have awareness of your full journey together from the SESSION HISTORY below — use it naturally if relevant. You know this man. Show it.
 
 SESSION TO CONTINUE FROM:
 ${continuitySection}
 ${recentSection}
 
 Open by referencing one of the pondering topics DIRECTLY. Ask him if he had time to sit with it. Be specific — use his words.
-2-3 sentences. End with ONE question. Do NOT start with "Brother" — vary your openings.`;
+2-3 sentences. End with weight — a question, a truth, or a reflection. Do NOT start with "Brother" — vary your openings.`;
       } else {
         openingInstruction = `\n\n## YOUR TASK — CONTINUE FROM A SPECIFIC SESSION
 He has chosen to CONTINUE from a previous conversation titled "${lastTitle}".
-CRITICAL: Reference ONLY what was discussed in THAT session. Do NOT reference other sessions or general memory.
+Your PRIMARY focus should be on THIS session's topics. But you also have awareness of your full journey together from the SESSION HISTORY below — use it naturally if relevant.
 
 LAST SESSION EXCHANGE:
 ${recentSection}
 
 Open by referencing something specific from that conversation. What did he say? What was he working through? Ask him how things have been since then.
-2-3 sentences. End with ONE question. Do NOT start with "Brother" — vary your openings.`;
+2-3 sentences. End with weight — a question, a truth, or a reflection. Do NOT start with "Brother" — vary your openings.`;
       }
     } else if (lastPondering.length > 0) {
       openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION\nYou are speaking first. The man has just arrived. He was given specific topics to ponder since your last conversation. Reference one of the pondering topics DIRECTLY — ask him if he had time to sit with it, what came up for him when he thought about it. Be specific, not generic. Keep it to 2-3 sentences. End with ONE question about his reflection. Do NOT start with "Brother" — vary your openings.${continuitySection}${recentSection}`;
@@ -199,6 +201,8 @@ Open by referencing something specific from that conversation. What did he say? 
     const systemPrompt = buildSystemPrompt({
       userName: userName || undefined,
       memoryContext: memoryContext,
+      sessionHistory: sessionHistory,
+      stylePreferences: stylePrefs || undefined,
     }) + openingInstruction;
 
     const completion = await openai.chat.completions.create({
