@@ -34,7 +34,7 @@ interface DocEntry {
 
 const DOCS: DocEntry[] = [
   {
-    filename: 'mrkos_art_of_understanding_men_v8.docx',
+    filename: 'mrkos_art_of_understanding_men_v9.docx',
     title: 'The Art of Understanding Men - mrkos Internal',
     domain: 'understanding_men',
   },
@@ -44,7 +44,7 @@ const DOCS: DocEntry[] = [
     domain: 'source_library',
   },
   {
-    filename: 'mrkos_intelbase_questions_v8 (1).xlsx',
+    filename: 'mrkos_intelbase_questions_v10.xlsx',
     title: 'mrkos IntelBase Questions',
     domain: 'question_bank',
   },
