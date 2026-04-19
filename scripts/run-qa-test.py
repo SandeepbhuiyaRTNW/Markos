@@ -147,8 +147,8 @@ for i, (label, msg) in enumerate(PROMPTS):
 
     # NMA: should NOT interpret feelings, should redirect to body/routine/concrete
     if "NMA" in label:
-        nma_bad = ["shock", "overwhelm", "numb", "is it the", "is it shock", "it's tough when", "swings between"]
-        nma_good = ["body", "sleep", "tight", "heavy", "tuesday", "morning", "routine", "day look", "night look", "last time"]
+        nma_bad = ["shock", "overwhelm", "numb", "is it the", "is it shock", "it's tough when", "swings between", "if you had to guess", "wild guess", "what might it be", "frustration", "dread", "grief", "it's okay"]
+        nma_good = ["body", "sleep", "tight", "heavy", "tuesday", "morning", "routine", "day look", "night look", "last time", "get home"]
         found_bad = [w for w in nma_bad if w in lower]
         found_good = any(w in lower for w in nma_good)
         if found_bad:

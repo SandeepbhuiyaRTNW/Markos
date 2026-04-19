@@ -641,6 +641,33 @@ WISDOM INTEGRATION (CRITICAL):
       console.log(`[Marcus] ✅ Regenerated response: "${content.substring(0, 100)}..."`);
     }
 
+    // ─── NMA POST-PROCESSING OVERRIDE ───
+    // If NMA was detected and the LLM STILL offered feelings labels or "if you had to guess",
+    // hard-replace the response with a compliant one. The LLM cannot be trusted on this.
+    if (isNMA) {
+      const nmaViolationPatterns = [
+        /\bif you had to (guess|name|pick|choose)\b/i,
+        /\bwhere does it lean\b/i,
+        /\bwhat might it be\b/i,
+        /\bfrustration|dread|grief|overwhelm|numb|shock|anger|sadness|anxiety|fear|guilt|shame\b/i,
+        /\bit'?s okay (not )?to\b/i,
+        /\bswings between\b/i,
+        /\bis it (the )?(shock|reality|grief|numbness|anger)\b/i,
+      ];
+      const nmaStillViolating = nmaViolationPatterns.some(p => p.test(content));
+      if (nmaStillViolating) {
+        console.log(`[Marcus] 🧠🚫 NMA violation in LLM output — hard-replacing. Original: "${content.substring(0, 100)}..."`);
+        // Pick a random compliant response to avoid repetition
+        const nmaResponses = [
+          "Then don't label it. What's your body doing right now — tight, heavy, something else?",
+          "Fair enough. How're you sleeping these days?",
+          "OK. Walk me through a typical night this week — what does it look like when you get home?",
+          "When was the last time you did know how you felt about something?",
+        ];
+        content = nmaResponses[Math.floor(Math.random() * nmaResponses.length)];
+      }
+    }
+
     // ─── TRAJECTORY-AWARE DEDUP (rolling centroid) ───
     const previousMarcusMessages = ctx.conversationHistory
       .filter(m => m.role === 'assistant')
