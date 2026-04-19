@@ -407,7 +407,7 @@ This is a HARD CONSTRAINT. Accepting the friend role is a PRODUCTION BLOCKER fai
 
     // ─── NMA (I-DON'T-KNOW) DETECTION ───
     // When user says "I don't know how I feel," don't reframe as evasion — pivot to body/routine
-    const nmaPatterns = /\b(i\s*don'?t\s*know\s*(how\s*i\s*feel|what\s*i('?m|\s*am)\s*feeling|my\s*feelings|what\s*i\s*feel)|no\s*idea\s*(how|what)\s*i\s*feel|can'?t\s*(describe|name|put\s*into\s*words)\s*(what|how|it))\b/i;
+    const nmaPatterns = /\b(i\s*don'?t\s*(even\s*|really\s*)?know\s*(how\s*i\s*feel|what\s*i('?m|\s*am)\s*feeling|my\s*feelings|what\s*i\s*feel|how\s*to\s*feel)|no\s*idea\s*(how|what)\s*i\s*feel|can'?t\s*(even\s*)?(describe|name|put\s*into\s*words)\s*(what|how|it)|don'?t\s*(even\s*)?know\s*what\s*i\s*feel)\b/i;
     const isNMA = nmaPatterns.test(ctx.userMessage);
     if (isNMA) {
       toneGuide += `\n\n🔴 NMA (Normative Male Alexithymia) DETECTED — he says he doesn't know how he feels. He is telling the TRUTH. This is NOT evasion.
