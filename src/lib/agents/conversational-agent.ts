@@ -411,17 +411,19 @@ This is a HARD CONSTRAINT. Accepting the friend role is a PRODUCTION BLOCKER fai
     const isNMA = nmaPatterns.test(ctx.userMessage);
     if (isNMA) {
       toneGuide += `\n\n🔴 NMA (Normative Male Alexithymia) DETECTED — he says he doesn't know how he feels. He is telling the TRUTH. This is NOT evasion.
-HARD RULES FOR THIS RESPONSE:
-1. Do NOT reframe as evasion, dodging, or hiding.
-2. Do NOT ask the feelings question in different clothes ("is it shock or reality?" is STILL a feelings question — BANNED).
-3. Do NOT interpret what he might be feeling ("overwhelmed," "numb," "in shock" are all labels — BANNED).
-4. Do NOT say "it's tough when you're not sure how you feel" — that's patronizing restatement.
-5. INSTEAD pivot to ONE of these CONCRETE alternatives:
-   - Body: "Then don't label it. What's your body doing right now — tight, heavy, numb?"
-   - Routine: "Fair enough. How're you sleeping?"
-   - Concrete present: "OK. What does a typical Tuesday night look like right now?"
-   - Time: "When was the last time you did know how you felt about something?"
-Pick ONE. Keep it short. Do not stack questions.`;
+
+YOUR RESPONSE MUST BE ONE OF THESE FOUR OPTIONS (pick one, say it, stop):
+A) "Then don't label it. What's your body doing right now — tight, heavy, numb?"
+B) "Fair enough. How're you sleeping?"
+C) "OK. What does a typical Tuesday night look like right now?"
+D) "When was the last time you did know how you felt about something?"
+
+ABSOLUTELY BANNED IN THIS RESPONSE — violation is a production failure:
+- Do NOT offer emotion labels ("frustration," "dread," "grief," "overwhelmed," "numb," "shock," "anger," "sadness")
+- Do NOT ask "where does it lean" or "if you had to guess" — those are feelings questions in disguise
+- Do NOT say "it's tough when" or "a lot of us" or "we're taught to avoid" — that's generic narrative supply
+- Do NOT reframe, interpret, or diagnose. Just redirect to body or routine.
+- Keep it to 1-2 sentences MAX.`;
       console.log('[Marcus] 🧠 NMA signal detected — pivoting to body/routine questions');
     }
 
@@ -601,10 +603,16 @@ WISDOM INTEGRATION (CRITICAL):
       // QA round 2: voice leakage patterns
       /\bi'?ve found that\b/i,
       /\bafter a big (change|loss|shift|transition)\b/i,
-      /\ba lot of (men|guys|people) (in your|who|feel|go through)\b/i,
-      /\bit'?s (not )?(unusual|uncommon|normal|natural) (after|to|for|when)\b/i,
+      /\ba lot of (men|guys|people|us) (in your|who|feel|go through|are taught)\b/i,
+      /\bit'?s (not )?(unusual|uncommon|normal|natural|tough when) /i,
       /\bmy aim is\b/i, /\bmy goal is\b/i,
       /\bi'?m (not )?here to (just )?(throw|ask|help|dig|uncover)\b/i,
+      // QA round 3: metaphor + softening leakage
+      /\bit'?s like (a |an )/i,
+      /\bit'?s tough when\b/i,
+      /\bwe'?re taught to\b/i,
+      /\bwhere does it lean\b/i,
+      /\bif you had to guess\b/i,
     ];
     // After pushback, also catch advice patterns
     const advicePatterns = [
