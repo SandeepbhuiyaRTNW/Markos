@@ -374,6 +374,21 @@ Do NOT ask the question he predicted. Instead:
       console.log('[Marcus] 🎯 USER PREEMPTION detected — pivoting away from predicted question');
     }
 
+    // ─── FRIEND-ROLE INVITATION DETECTION ───
+    // When user offers a relational role, Marcus MUST decline — this is non-negotiable
+    const friendRolePatterns = /\b(if you were my (friend|buddy|brother|mate|pal)|as (a|my) friend|like a (real )?friend|what would (a|my) (friend|buddy|brother) (say|tell|do)|you'?re (like )?my (friend|only friend|best friend)|can you be my friend|be my friend|i think of you as)\b/i;
+    const isFriendInvitation = friendRolePatterns.test(ctx.userMessage);
+    if (isFriendInvitation) {
+      toneGuide += `\n\n🔴 FRIEND-ROLE INVITATION DETECTED — DECLINE IS MANDATORY.
+The user is inviting you into a relational role (friend, buddy, brother, etc.). You MUST:
+1. DECLINE HONESTLY: "I'm not your friend. I can't be."
+2. REDIRECT: "But if you had one right now — what would you want him to say?"
+3. NEVER say "As a friend" or "If I were your friend" or accept the frame in any way.
+4. NEVER give advice in the adopted friend voice.
+This is a HARD CONSTRAINT. Accepting the friend role is a PRODUCTION BLOCKER failure.`;
+      console.log('[Marcus] 👤 FRIEND-ROLE INVITATION detected — decline is mandatory');
+    }
+
     // ─── NMA (I-DON'T-KNOW) DETECTION ───
     // When user says "I don't know how I feel," don't reframe as evasion — pivot to body/routine
     const nmaPatterns = /\b(i\s*don'?t\s*know\s*(how\s*i\s*feel|what\s*i('?m|\s*am)\s*feeling|my\s*feelings|what\s*i\s*feel)|no\s*idea\s*(how|what)\s*i\s*feel|can'?t\s*(describe|name|put\s*into\s*words)\s*(what|how|it))\b/i;
@@ -548,6 +563,8 @@ WISDOM INTEGRATION (CRITICAL):
       /\bi'?ve\s*(been there|walked through|faced similar)\b/i,
       /\bi know that weight\b/i, /\bi get it\b/i,
       /\bas a friend,?\s*i'?d\b/i,
+      /\bif i were your friend\b/i,
+      /\bas your friend\b/i,
       /\bso here'?s the real question\b/i, /\blet'?s cut through\b/i,
       /\bhere'?s what i'?m wondering\b/i, /\bpicture this\b/i,
       /\bwhat would that version of you\b/i, /\bwho you'?re becoming\b/i,
