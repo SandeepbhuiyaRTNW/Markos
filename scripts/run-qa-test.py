@@ -5,7 +5,7 @@ import urllib.request
 import time
 import sys
 
-BASE = "http://localhost:3000/api/test-conversation"
+BASE = "https://main.dw5jxm6iq9fr5.amplifyapp.com/api/test-conversation"
 USER = "c5dd5b0f-2fd9-48c1-b17a-933f6c926d7a"
 
 PROMPTS = [

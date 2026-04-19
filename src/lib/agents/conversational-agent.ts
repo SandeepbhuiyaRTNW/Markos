@@ -161,11 +161,11 @@ Poison Control: 1-800-222-1222 if you have taken something.
 
 I am here. But your body needs real help right now. Will you make that call?`,
 
-  passive_crisis: `Thank you for saying that out loud. That's real, and it matters that you said it.
+  passive_crisis: `That's real. And it matters that you said it out loud.
 
-The thought you're describing — a lot of men in your situation have it. That doesn't make it small. One thing: put 988 in your phone right now. That's the Suicide and Crisis Lifeline — call or text, any time. You can also text HOME to 741741. Not because I think you're about to do anything. Because men in your situation shouldn't be without it.
+One thing: put 988 in your phone right now. That's the Suicide and Crisis Lifeline — call or text, any time. You can also text HOME to 741741. Not because I think you're about to do anything. Because you shouldn't be without it.
 
-Can you tell me more about when that thought shows up — what time of day, what's happening around it?`,
+When does that thought show up — what time of day, what's happening around it?`,
 };
 
 /** Create the Marcus ChatOpenAI model — uses gpt-4o for maximum persona depth */
@@ -374,6 +374,22 @@ Do NOT ask the question he predicted. Instead:
       console.log('[Marcus] 🎯 USER PREEMPTION detected — pivoting away from predicted question');
     }
 
+    // ─── TECHNIQUE/SCRIPT TRANSPARENCY DETECTION ───
+    // When user calls out the structure, Marcus MUST admit it explicitly — no deflection
+    const techniquePatterns = /\b(using\s*(a|some)?\s*(technique|script|pattern|formula|method|system|framework)|feel(s)?\s*like\s*(a\s*)?(script|pattern|technique|formula)|sounds?\s*(like\s*)?(a\s*)?(script|pattern)|are you\s*(just\s*)?(reading|following|running)\s*(a|some)?\s*(script|pattern|playbook)|this\s*(feels|seems)\s*(scripted|rehearsed|formulaic|programmed))\b/i;
+    const isTechniqueChallenge = techniquePatterns.test(ctx.userMessage);
+    if (isTechniqueChallenge) {
+      toneGuide += `\n\n🔴 TECHNIQUE CHALLENGE DETECTED — he's calling out the structure. ADMIT IT EXPLICITLY.
+Your response MUST:
+1. ADMIT the structure directly: "Yeah, kind of. There's structure to how I ask questions. What tipped you off?"
+2. Do NOT deflect with "I'm not just throwing questions at you" or "My aim is to dig beneath the surface" — that's evasion.
+3. Do NOT justify or explain why the structure exists. Just own it plainly.
+4. After admitting, pivot back to HIM with curiosity about what he noticed.
+CORRECT: "Yeah, there's some structure to it. I ask questions in a certain way. What made you notice?"
+WRONG: "I'm not here to just throw questions at you for the sake of it. My aim is to dig beneath the surface."`;
+      console.log('[Marcus] 🔧 TECHNIQUE CHALLENGE detected — must admit structure explicitly');
+    }
+
     // ─── FRIEND-ROLE INVITATION DETECTION ───
     // When user offers a relational role, Marcus MUST decline — this is non-negotiable
     const friendRolePatterns = /\b(if you were my (friend|buddy|brother|mate|pal)|as (a|my) friend|like a (real )?friend|what would (a|my) (friend|buddy|brother) (say|tell|do)|you'?re (like )?my (friend|only friend|best friend)|can you be my friend|be my friend|i think of you as)\b/i;
@@ -394,9 +410,18 @@ This is a HARD CONSTRAINT. Accepting the friend role is a PRODUCTION BLOCKER fai
     const nmaPatterns = /\b(i\s*don'?t\s*know\s*(how\s*i\s*feel|what\s*i('?m|\s*am)\s*feeling|my\s*feelings|what\s*i\s*feel)|no\s*idea\s*(how|what)\s*i\s*feel|can'?t\s*(describe|name|put\s*into\s*words)\s*(what|how|it))\b/i;
     const isNMA = nmaPatterns.test(ctx.userMessage);
     if (isNMA) {
-      toneGuide += `\n\n⚠️ NMA (Normative Male Alexithymia) SIGNAL — he says he doesn't know how he feels. He is telling the TRUTH.
-Do NOT reframe this as evasion, dodging, or hiding. Do NOT ask the feelings question in different clothes.
-INSTEAD pivot to: body ("Where do you notice it in your body?"), routine ("How're you sleeping?"), or concrete present ("What does a typical Tuesday look like right now?").`;
+      toneGuide += `\n\n🔴 NMA (Normative Male Alexithymia) DETECTED — he says he doesn't know how he feels. He is telling the TRUTH. This is NOT evasion.
+HARD RULES FOR THIS RESPONSE:
+1. Do NOT reframe as evasion, dodging, or hiding.
+2. Do NOT ask the feelings question in different clothes ("is it shock or reality?" is STILL a feelings question — BANNED).
+3. Do NOT interpret what he might be feeling ("overwhelmed," "numb," "in shock" are all labels — BANNED).
+4. Do NOT say "it's tough when you're not sure how you feel" — that's patronizing restatement.
+5. INSTEAD pivot to ONE of these CONCRETE alternatives:
+   - Body: "Then don't label it. What's your body doing right now — tight, heavy, numb?"
+   - Routine: "Fair enough. How're you sleeping?"
+   - Concrete present: "OK. What does a typical Tuesday night look like right now?"
+   - Time: "When was the last time you did know how you felt about something?"
+Pick ONE. Keep it short. Do not stack questions.`;
       console.log('[Marcus] 🧠 NMA signal detected — pivoting to body/routine questions');
     }
 
@@ -573,6 +598,13 @@ WISDOM INTEGRATION (CRITICAL):
       /\bstripped of the skin\b/i, /\bscreaming for attention\b/i,
       /\bfog that settles\b/i, /\bsteering the ship\b/i,
       /\bspace with me\b/i, /\bfinding peace\b/i,
+      // QA round 2: voice leakage patterns
+      /\bi'?ve found that\b/i,
+      /\bafter a big (change|loss|shift|transition)\b/i,
+      /\ba lot of (men|guys|people) (in your|who|feel|go through)\b/i,
+      /\bit'?s (not )?(unusual|uncommon|normal|natural) (after|to|for|when)\b/i,
+      /\bmy aim is\b/i, /\bmy goal is\b/i,
+      /\bi'?m (not )?here to (just )?(throw|ask|help|dig|uncover)\b/i,
     ];
     // After pushback, also catch advice patterns
     const advicePatterns = [
