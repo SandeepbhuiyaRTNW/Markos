@@ -74,7 +74,7 @@ const SUBSTANCE_CRISIS_PATTERNS = [
   /\b(about\s*to\s*(drink|use|take)\s*(and\s*)?drive)\b/i,
 ];
 
-/** Passive crisis indicators — elevate concern, don't hard intercept */
+/** Passive crisis indicators — ELEVATED: force 988 + direct inquiry into response */
 const PASSIVE_CRISIS_PATTERNS = [
   /\b(what'?s\s*the\s*point)\b/i,
   /\b(nothing\s*(matters|changes|helps|works))\b/i,
@@ -82,8 +82,18 @@ const PASSIVE_CRISIS_PATTERNS = [
   /\b(can'?t\s*(do\s*this|keep\s*(going|doing\s*this)|take\s*(it|this|any\s*more)))\b/i,
   /\b(i'?m\s*(done|finished|through|over\s*it))\b/i,
   /\b(no\s*one\s*(cares|would\s*(miss|notice)))\b/i,
-  /\b(feel\s*(like\s*)?(disappearing|vanishing|fading))\b/i,
+  /\b((feel|want)\s*(like\s*)?(disappearing|vanishing|fading))\b/i,
+  /\b(want\s*to\s*(disappear|vanish|fade\s*away))\b/i,
   /\b(gave\s*away|settling\s*my\s*(affairs|debts))\b/i,
+  // QA-added: passive ideation patterns that must trigger safety response
+  /\b(not\s*existing)\b/i,
+  /\b(wish\s*i\s*(could|can)\s*(just\s*)?(check\s*out|disappear|not\s*(be|exist)|go\s*away|vanish))\b/i,
+  /\b(just\s*not\s*(be\s*here|exist|be\s*around|wake\s*up))\b/i,
+  /\b(check\s*out\s*(for\s*a\s*while|permanently|from\s*(everything|life|all\s*this)))\b/i,
+  /\b(think\s*about\s*(just\s*)?(not\s*existing|not\s*being\s*here|disappearing|checking\s*out))\b/i,
+  /\b(wouldn'?t\s*(mind|care)\s*(if\s*i\s*)?(not\s*waking|didn'?t\s*wake|just\s*went\s*away))\b/i,
+  /\b(don'?t\s*(really\s*)?(care\s*)?what\s*happens\s*to\s*me)\b/i,
+  /\b(die\s*alone)\b/i,
 ];
 
 function detectCrisisType(message: string): CrisisType {
@@ -150,6 +160,12 @@ Poison Control: 1-800-222-1222 if you have taken something.
 911 for any medical emergency.
 
 I am here. But your body needs real help right now. Will you make that call?`,
+
+  passive_crisis: `Thank you for saying that out loud. That's real, and it matters that you said it.
+
+The thought you're describing — a lot of men in your situation have it. That doesn't make it small. One thing: put 988 in your phone right now. That's the Suicide and Crisis Lifeline — call or text, any time. You can also text HOME to 741741. Not because I think you're about to do anything. Because men in your situation shouldn't be without it.
+
+Can you tell me more about when that thought shows up — what time of day, what's happening around it?`,
 };
 
 /** Create the Marcus ChatOpenAI model — uses gpt-4o for maximum persona depth */
@@ -260,9 +276,33 @@ export async function runConversationalAgent(ctx: MCPContext): Promise<void> {
       console.log(`[Marcus] ⚠️ CRISIS DETECTED (${crisisType}) — safety response triggered`);
       return;
     }
-    // Flag passive crisis for the conversation state engine to handle
+    // Passive crisis: hard intercept with 988 + direct inquiry — NOT just a flag
     if (crisisType === 'passive_crisis') {
-      console.log('[Marcus] ⚠️ Passive crisis indicators detected — flagging for hopelessness escalation');
+      ctx.marcusResponse = CRISIS_RESPONSES.passive_crisis;
+      ctx.responseEmotion = 'crisis';
+      ctx.responseArchetype = '';
+      console.log('[Marcus] ⚠️ PASSIVE CRISIS DETECTED — safety response with 988 triggered');
+      return;
+    }
+
+    // ─── POST-CRISIS RETREAT DETECTION ───
+    // If previous turn was a crisis response and user retreats ("forget I said that", "it's not that bad"),
+    // ensure 988 was offered and gently hold the space — do NOT let the retreat erase the disclosure
+    const prevMarcusMsg = ctx.conversationHistory.length > 0
+      ? ctx.conversationHistory[ctx.conversationHistory.length - 1]
+      : null;
+    const prevWasCrisis = prevMarcusMsg?.role === 'assistant' && prevMarcusMsg.content.includes('988');
+    const retreatPatterns = /\b(forget\s*(i|what\s*i)\s*said|it'?s?\s*not\s*that\s*bad|never\s*mind|i'?m\s*(fine|okay|good)|don'?t\s*worry\s*about\s*(it|that|me)|i\s*was\s*(just\s*)?(kidding|joking|exaggerating)|i\s*didn'?t\s*mean\s*(it|that))\b/i;
+    if (prevWasCrisis && retreatPatterns.test(ctx.userMessage)) {
+      ctx.marcusResponse = `Okay. I hear you pulling back, and that's your right. But what you said before — that was real. I'm not going to pretend you didn't say it.
+
+One thing before we move on: 988 in your phone. Call or text, any time. That's the Suicide and Crisis Lifeline. Not because of right now — because you shouldn't be without it. Done? Good.
+
+What do you want to talk about?`;
+      ctx.responseEmotion = 'crisis';
+      ctx.responseArchetype = '';
+      console.log('[Marcus] ⚠️ POST-CRISIS RETREAT DETECTED — holding space, re-offering 988');
+      return;
     }
 
     const model = createMarcusModel();
@@ -295,6 +335,22 @@ export async function runConversationalAgent(ctx: MCPContext): Promise<void> {
       toneGuide = `\nTONE MATCH: He's in pain and speaking raw. Meet him there. Short sentences. No softening language. No "It's okay to feel" or "That sounds heavy" — those are therapist phrases. Just be real: "Yeah. That's rough." or "I'm not gonna sugarcoat this." or "Look..." — then say what needs to be said. Don't try to make him feel better. Just be present.`;
     }
 
+    // ─── SILENCE-BREAKING DETECTION ───
+    // When a man says "I've never told anyone this" — this is THE mission moment. Force reflection-only.
+    const silenceBreakingPatterns = /\b(never\s*told\s*(anyone|anybody|no\s*one|a\s*soul)|first\s*time\s*(i'?ve\s*)?(said|saying|told|telling)\s*(this|that|anyone)|haven'?t\s*(said|told)\s*(this|that)\s*to\s*(anyone|anybody)|nobody\s*knows\s*this|no\s*one\s*knows\s*this|never\s*said\s*(this|that)\s*(out\s*loud|to\s*anyone|before))\b/i;
+    const isSilenceBreaking = silenceBreakingPatterns.test(ctx.userMessage);
+    if (isSilenceBreaking) {
+      toneGuide += `\n\n🔴 SILENCE-BREAKING MOMENT DETECTED — THIS IS THE MISSION MOMENT.
+He just said something he has NEVER said to anyone. This is sacred ground. Your response MUST be:
+1. REFLECTION ONLY — use his EXACT WORDS back to him. Do not interpret. Do not generalize. Do not universalize.
+2. NO questions (or at MOST one very small, present-tense one at the end).
+3. NO metaphors, NO brand language, NO coaching templates.
+4. 1-2 sentences max. Honor what he said by not burying it under your words.
+CORRECT: "You let it rot. That's a hard sentence to say out loud."
+WRONG: "Letting something rot in silence often stems from fearing the unknown more than what's familiar."`;
+      console.log('[Marcus] 🔔 SILENCE-BREAKING MOMENT detected — forcing reflection-only mode');
+    }
+
     // ─── CONVERSATION STATE ANALYSIS (semantic) ───
     const convState: ConversationState = await analyzeConversation(
       ctx.conversationHistory,
@@ -304,6 +360,30 @@ export async function runConversationalAgent(ctx: MCPContext): Promise<void> {
 
     // ─── STYLE PREFERENCE DETECTION (mid-session) ───
     const styleOverride = detectStyleRequest(ctx.userMessage, ctx.conversationHistory);
+
+    // ─── USER PREEMPTION DETECTION ───
+    // When user predicts what Marcus will say/ask, do NOT ask that question
+    const preemptionPatterns = /\b(i know (what )?you'?(re|ll)\s*(gonna|going to)\s*(ask|say|tell)|you'?(re|ll)\s*probably\s*(gonna|going to)\s*(ask|say|tell)|i know that'?s a question you'?d ask|let me guess.*(you'?(re|ll)|you want)|before you (ask|say))\b/i;
+    const isPreemption = preemptionPatterns.test(ctx.userMessage);
+    if (isPreemption) {
+      toneGuide += `\n\n🔴 USER PREEMPTION DETECTED — he predicted your question.
+Do NOT ask the question he predicted. Instead:
+- Acknowledge he caught you: "Ha. Yeah, that was coming."
+- Then PIVOT to a different angle: "So I won't ask it. What were you gonna answer?" or "Got me. Different question then..."
+- If he stated the answer along with the prediction, engage with HIS answer, not the predicted question.`;
+      console.log('[Marcus] 🎯 USER PREEMPTION detected — pivoting away from predicted question');
+    }
+
+    // ─── NMA (I-DON'T-KNOW) DETECTION ───
+    // When user says "I don't know how I feel," don't reframe as evasion — pivot to body/routine
+    const nmaPatterns = /\b(i\s*don'?t\s*know\s*(how\s*i\s*feel|what\s*i('?m|\s*am)\s*feeling|my\s*feelings|what\s*i\s*feel)|no\s*idea\s*(how|what)\s*i\s*feel|can'?t\s*(describe|name|put\s*into\s*words)\s*(what|how|it))\b/i;
+    const isNMA = nmaPatterns.test(ctx.userMessage);
+    if (isNMA) {
+      toneGuide += `\n\n⚠️ NMA (Normative Male Alexithymia) SIGNAL — he says he doesn't know how he feels. He is telling the TRUTH.
+Do NOT reframe this as evasion, dodging, or hiding. Do NOT ask the feelings question in different clothes.
+INSTEAD pivot to: body ("Where do you notice it in your body?"), routine ("How're you sleeping?"), or concrete present ("What does a typical Tuesday look like right now?").`;
+      console.log('[Marcus] 🧠 NMA signal detected — pivoting to body/routine questions');
+    }
 
     // ─── DEPTH ESCALATION ENGINE ───
     const depthLevel = ctx.understanding?.depth_level || 1;
@@ -360,6 +440,13 @@ conversationPhase === 'align' ? `PHASE 2: ALIGN — You have context. He may or 
 
 ABSOLUTELY BANNED — if you use ANY of these words or phrases, the response FAILS:
 "It sounds like" / "I hear you" / "It's easy to" / "That must be" / "I appreciate you" / "Thank you for" / "Let me" / "I want you to know" / "What I'm hearing" / "That's a powerful" / "I'm glad you" / "It's okay to feel" / "That sounds heavy" / "I understand" / "in a rough spot" / "lose sight of" / "going through the motions" / "It can feel like" / any sentence starting with "It"
+
+ALSO BANNED — NARRATIVE SUPPLY / BRAND / COACHING PATTERNS:
+"You've been dodging" / "everything feels hollow" / "island of your own making" / "door you didn't know existed" / "what you're really saying is" / "stripped of the skin" / "staring down the barrel" / "fog that settles" / "steering the ship" / "walls we build" / "holding the silence" / "screaming for attention"
+"journey" / "transformation" / "space with me" / "safe space" / "voice your truth" / "who you're becoming" / "finding peace" / "holding onto shadows" / "springboard" / "from silence to sun"
+"So here's the real question" / "Let's cut through it" / "Here's what I'm wondering" / "Picture this" / "Here's the thing" / "So ask yourself"
+"What would that version of you look like" / "What would you do if you weren't afraid" / "Who are you becoming" / "What would giving voice to your truth mean"
+"I've been there" / "I know that weight" / "I've walked through my own challenges" / "I get it" (when implying shared modern experience) / "As a friend, I'd tell you"
 
 ALSO BANNED — THERAPY/SELF-HELP VOCABULARY (even if HE uses these words, do NOT mirror them back):
 "boundaries" / "triggers" / "triggering" / "validate" / "validating" / "holding space" / "unpack" / "safe space" / "emotional labor" / "self-care" / "toxic" / "trauma response" / "attachment style" / "avoidant" / "codependent" / "narcissist" / "gaslighting" / "inner child" / "lean into" / "sit with that" / "that resonates" / "powerful share" / "brave share" / "vulnerability is strength" / "do the work"
@@ -457,6 +544,18 @@ WISDOM INTEGRATION (CRITICAL):
       /\bit can feel like\b/i, /\byou'?re not alone\b/i,
       /\buniversity of\b/i, /\bwelcome to (the|our)\b/i, /\bgood afternoon[.,]/i,
       /\bgood morning[.,]/i, /\bsummer session\b/i,
+      // QA-added: narrative supply, fabricated experience, brand language, coaching templates
+      /\bi'?ve\s*(been there|walked through|faced similar)\b/i,
+      /\bi know that weight\b/i, /\bi get it\b/i,
+      /\bas a friend,?\s*i'?d\b/i,
+      /\bso here'?s the real question\b/i, /\blet'?s cut through\b/i,
+      /\bhere'?s what i'?m wondering\b/i, /\bpicture this\b/i,
+      /\bwhat would that version of you\b/i, /\bwho you'?re becoming\b/i,
+      /\bvoice your truth\b/i, /\bholding the silence\b/i,
+      /\bisland of your own making\b/i, /\bstaring down the barrel\b/i,
+      /\bstripped of the skin\b/i, /\bscreaming for attention\b/i,
+      /\bfog that settles\b/i, /\bsteering the ship\b/i,
+      /\bspace with me\b/i, /\bfinding peace\b/i,
     ];
     // After pushback, also catch advice patterns
     const advicePatterns = [
@@ -510,14 +609,14 @@ WISDOM INTEGRATION (CRITICAL):
     }
 
     // ─── HARD TEMPLATE ENFORCEMENT ───
-    // If hopelessness level 4 (crisis), force crisis resources into response
-    if (hopelessnessLevel >= 4 && !content.includes('988')) {
-      console.log('[Marcus] 🆘 Crisis resources missing from response — force-injecting');
+    // If hopelessness level 3+, force 988 crisis resources into response
+    if (hopelessnessLevel >= 3 && !content.includes('988')) {
+      console.log(`[Marcus] 🆘 Crisis resources missing from L${hopelessnessLevel} response — force-injecting 988`);
       content += '\n\nBrother — 988 Suicide & Crisis Lifeline: call or text 988. Crisis Text Line: text HOME to 741741. A real human needs to hear what you just told me.';
     }
-    // If hopelessness level 3, ensure external support is mentioned
-    if (hopelessnessLevel === 3 && !content.toLowerCase().includes('therapist') && !content.toLowerCase().includes('counselor') && !content.toLowerCase().includes('help')) {
-      console.log('[Marcus] ⚠️ Support suggestion missing from L3 response — force-injecting');
+    // If hopelessness level 2, ensure external support is mentioned
+    if (hopelessnessLevel === 2 && !content.toLowerCase().includes('therapist') && !content.toLowerCase().includes('counselor') && !content.toLowerCase().includes('988') && !content.toLowerCase().includes('help')) {
+      console.log('[Marcus] ⚠️ Support suggestion missing from L2 response — force-injecting');
       content += ' What you\'re describing — a real person, a counselor or therapist, can reach places I can\'t. That\'s not weakness. That\'s knowing when to call in reinforcements.';
     }
 

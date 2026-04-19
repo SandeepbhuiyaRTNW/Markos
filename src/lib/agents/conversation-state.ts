@@ -181,6 +181,15 @@ const HOPELESSNESS_ANCHORS = [
   // Future tense disappearance (Layer 5 marker)
   'Whatever happens happens, I don\'t really care anymore',
   'I\'ll figure it out, or I won\'t, doesn\'t matter',
+  // QA-added: passive ideation patterns from Prompt 18 failure
+  'I think about just not existing sometimes',
+  'I wish I could just check out for a while',
+  'Sometimes I wish I could just disappear',
+  'I just want to not be here for a while',
+  'I think about not waking up sometimes',
+  'I don\'t care what happens to me anymore',
+  'I\'m going to die alone',
+  'I just wish I could stop existing',
 ];
 
 async function computeHopelessnessScore(messages: string[]): Promise<number> {
