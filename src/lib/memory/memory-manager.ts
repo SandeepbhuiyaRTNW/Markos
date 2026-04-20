@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { query } from '../db';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); }
 
 export const MEMORY_LAYERS = {
   1: 'Identity',        // Who he is: name, age, values, beliefs
@@ -127,7 +127,7 @@ export async function searchPastMessages(
 ): Promise<string[]> {
   try {
     // Get embedding for search query
-    const embResp = await openai.embeddings.create({
+    const embResp = await getOpenAI().embeddings.create({
       model: 'text-embedding-3-small',
       input: searchQuery,
       dimensions: 256,
@@ -148,7 +148,7 @@ export async function searchPastMessages(
 
     // Embed all messages
     const contents = msgResult.rows.map(r => r.content);
-    const msgEmbResp = await openai.embeddings.create({
+    const msgEmbResp = await getOpenAI().embeddings.create({
       model: 'text-embedding-3-small',
       input: contents,
       dimensions: 256,
@@ -256,7 +256,7 @@ export async function extractMemories(
   messageId: string
 ) {
   // Use GPT to extract memory-worthy information
-  const extraction = await openai.chat.completions.create({
+  const extraction = await getOpenAI().chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [
       {

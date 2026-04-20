@@ -1,10 +1,10 @@
 import OpenAI from 'openai';
 import { query } from '../db';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); }
 
 export async function getEmbedding(text: string): Promise<number[]> {
-  const response = await openai.embeddings.create({
+  const response = await getOpenAI().embeddings.create({
     model: 'text-embedding-3-large',
     input: text,
     dimensions: 3072,
@@ -47,7 +47,7 @@ export async function retrieveWisdom(
           `[${i}] ${r.source_title}: ${r.content.substring(0, 300)}`
         ).join('\n\n');
 
-        const rerank = await openai.chat.completions.create({
+        const rerank = await getOpenAI().chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [
             {

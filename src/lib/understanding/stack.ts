@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); }
 
 export interface UnderstandingAnalysis {
   layer1_words: string;          // What he literally said
@@ -20,7 +20,7 @@ export async function analyzeUnderstanding(
   conversationHistory: string,
   memoryContext: string
 ): Promise<UnderstandingAnalysis> {
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [
       {

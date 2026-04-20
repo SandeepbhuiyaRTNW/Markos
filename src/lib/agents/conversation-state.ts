@@ -5,7 +5,7 @@
  */
 import OpenAI from 'openai';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); }
 
 // ─── TYPES ───
 
@@ -93,7 +93,7 @@ async function getIntentEmbeddings(): Promise<Record<UserIntent, number[][]>> {
       intents.push(intent as UserIntent);
     }
   }
-  const resp = await openai.embeddings.create({
+  const resp = await getOpenAI().embeddings.create({
     model: 'text-embedding-3-small', input: allTexts, dimensions: 256,
   });
   const result: Record<string, number[][]> = {};
@@ -108,7 +108,7 @@ async function getIntentEmbeddings(): Promise<Record<UserIntent, number[][]>> {
 export async function classifyIntent(message: string): Promise<{ intent: UserIntent; confidence: number }> {
   try {
     const anchors = await getIntentEmbeddings();
-    const resp = await openai.embeddings.create({
+    const resp = await getOpenAI().embeddings.create({
       model: 'text-embedding-3-small', input: message, dimensions: 256,
     });
     const msgEmb = resp.data[0].embedding;
@@ -196,7 +196,7 @@ async function computeHopelessnessScore(messages: string[]): Promise<number> {
   if (messages.length === 0) return 0;
   try {
     const allTexts = [...messages, ...HOPELESSNESS_ANCHORS];
-    const resp = await openai.embeddings.create({
+    const resp = await getOpenAI().embeddings.create({
       model: 'text-embedding-3-small', input: allTexts, dimensions: 256,
     });
     const msgEmbs = resp.data.slice(0, messages.length).map(d => d.embedding);
@@ -239,7 +239,7 @@ export async function computeTrajectoryDrift(
   if (previousResponses.length < 2) return 0;
   try {
     const allTexts = [currentResponse, ...previousResponses.slice(-7)];
-    const resp = await openai.embeddings.create({
+    const resp = await getOpenAI().embeddings.create({
       model: 'text-embedding-3-small', input: allTexts, dimensions: 256,
     });
     const currentEmb = resp.data[0].embedding;
@@ -267,7 +267,7 @@ async function detectEmotionalDirection(userMessages: string[]): Promise<'improv
     const negAnchors = ['I feel terrible, hopeless, empty, and nothing is getting better'];
     const posAnchors = ['Things are looking up, I feel better, that actually helped'];
     const allTexts = [...userMessages.slice(-5), ...negAnchors, ...posAnchors];
-    const resp = await openai.embeddings.create({
+    const resp = await getOpenAI().embeddings.create({
       model: 'text-embedding-3-small', input: allTexts, dimensions: 256,
     });
     const msgEmbs = resp.data.slice(0, userMessages.slice(-5).length).map(d => d.embedding);
