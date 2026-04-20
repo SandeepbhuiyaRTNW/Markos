@@ -22,7 +22,7 @@ function detectRegister(message: string): 'formal' | 'casual' | 'raw' | 'neutral
 /** Detect faith context from explicit mentions */
 function detectFaithContext(message: string): string | null {
   const msg = message.toLowerCase();
-  if (/\b(church|jesus|christ|christian|bible|gospel|pastor|pray|prayer|god\s*(help|bless|knows)|lord)\b/.test(msg)) return 'christian';
+  if (/\b(church|jesus|christ|christian|bible|gospel|pastor|pray(ing|er|ed|s)?|god\s*(help|bless|knows)?|lord|faith)\b/.test(msg)) return 'christian';
   if (/\b(mosque|allah|quran|imam|muslim|islam|ramadan|salat|hajj)\b/.test(msg)) return 'muslim';
   if (/\b(synagogue|torah|rabbi|jewish|shabbat|kosher|bar\s*mitzvah)\b/.test(msg)) return 'jewish';
   if (/\b(temple|buddha|buddhist|meditation|dharma|sangha|mindful)\b/.test(msg)) return 'buddhist';
