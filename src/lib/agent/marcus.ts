@@ -1,11 +1,13 @@
 /**
  * Marcus Agent Entry Point
  *
- * Routes through the multi-agent orchestrator system.
+ * Routes through the V2 multi-agent orchestrator system (6-tier architecture).
  * Maintains the same interface for the API route.
+ * Fallback: if V2 fails, falls back to V1 orchestrator.
  */
 
-import { processWithAgents } from '../agents/orchestrator';
+import { processWithAgents } from '../agents/orchestrator-v2';
+import { processWithAgents as processWithAgentsV1 } from '../agents/orchestrator';
 
 interface ConversationMessage {
   role: 'user' | 'assistant';
@@ -24,12 +26,24 @@ export async function processMessage(
   agentTimings: Record<string, number>;
   errors: Array<{ agent: string; error: string }>;
 }> {
-  const result = await processWithAgents(
-    userId,
-    conversationId,
-    userMessage,
-    conversationHistory
-  );
+  let result;
+  try {
+    result = await processWithAgents(
+      userId,
+      conversationId,
+      userMessage,
+      conversationHistory
+    );
+    console.log('[Marcus V2] Turn complete.');
+  } catch (v2Error) {
+    console.error('[Marcus V2] Orchestrator failed, falling back to V1:', v2Error);
+    result = await processWithAgentsV1(
+      userId,
+      conversationId,
+      userMessage,
+      conversationHistory
+    );
+  }
 
   // Log agent timings for monitoring
   if (Object.keys(result.agentTimings).length > 0) {
