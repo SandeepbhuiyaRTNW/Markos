@@ -106,6 +106,22 @@ export interface ArenaOutput {
   primary: string;
 }
 
+// ─── PERMA Snapshot ───
+
+export interface PERMAScores {
+  P: number;  // Positive emotion (0-1)
+  E: number;  // Engagement (0-1)
+  R: number;  // Relationships (0-1)
+  M: number;  // Meaning (0-1)
+  A: number;  // Accomplishment (0-1)
+}
+
+export interface PERMASnapshot {
+  underwater_domain: 'P' | 'E' | 'R' | 'M' | 'A' | null;
+  scores: PERMAScores;
+  evidence: string[];
+}
+
 // ─── Tier 3 + 4 + 5 ───
 
 export interface WisdomCouncilOutput {
@@ -161,6 +177,7 @@ export interface StateEnvelope {
     trust: TrustOutput;
     silence_type: SilenceTypeOutput | null;
     arena: ArenaOutput | null;
+    perma: PERMASnapshot | null;
   };
 
   // Tier 3 — Wisdom Council

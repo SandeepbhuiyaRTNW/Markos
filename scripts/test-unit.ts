@@ -118,6 +118,140 @@ const qCount = (stripped.match(/\?/g) || []).length;
 assert('Socratic discipline strips to 1 question', qCount === 1, `${qCount} questions remain`);
 
 // ═══════════════════════════
+// TIER 2: PERMA Snapshot
+// ═══════════════════════════
+
+import { computePERMASnapshot } from '../src/lib/assessment/perma-snapshot';
+
+console.log('\n── TIER 2: PERMA Snapshot ──');
+
+// Divorce arena → Relationships underwater
+const perma_divorce = makeEnv("She left me and took everything", { arena: 'divorce' });
+perma_divorce.assessment.arena = { weights: { divorce: 1.0 }, primary: 'divorce' };
+perma_divorce.sentinels.listener_stack = {
+  words: '', emotion: 'sadness', pattern: '', the_man: '', the_silence: '',
+  depth_level: 3, depth_opportunity: '', silence_question: '',
+  emotional_trajectory: 'deepening', primary_emotion: 'sadness'
+};
+const pm1 = computePERMASnapshot(perma_divorce);
+assert('Divorce → R underwater', pm1.scores.R < pm1.scores.A, `R=${pm1.scores.R} A=${pm1.scores.A}`);
+
+// Work arena → Accomplishment underwater
+const perma_work = makeEnv("I got fired and don't know what to do", { arena: 'work' });
+perma_work.assessment.arena = { weights: { work: 1.0 }, primary: 'work' };
+const pm2 = computePERMASnapshot(perma_work);
+assert('Work → A lowest', pm2.scores.A <= pm2.scores.R, `A=${pm2.scores.A} R=${pm2.scores.R}`);
+
+// Friendship arena → R underwater
+const perma_friend = makeEnv("I have no friends", { arena: 'friendship' });
+perma_friend.assessment.arena = { weights: { friendship: 1.0 }, primary: 'friendship' };
+const pm3 = computePERMASnapshot(perma_friend);
+assert('Friendship → R lowest', pm3.scores.R <= pm3.scores.M, `R=${pm3.scores.R} M=${pm3.scores.M}`);
+
+// Shame silence → lowers P and A
+const perma_shame = makeEnv("test");
+perma_shame.assessment.silence_type = { label: 'shame', evidence: '', confidence: 0.8 };
+const pm4_base = computePERMASnapshot(makeEnv("test"));
+const pm4_shame = computePERMASnapshot(perma_shame);
+assert('Shame silence lowers P', pm4_shame.scores.P < pm4_base.scores.P, `shame=${pm4_shame.scores.P} base=${pm4_base.scores.P}`);
+
+// Multi-arena: divorce + grief → both R and P hit
+const perma_multi = makeEnv("She left and then my dad died");
+perma_multi.assessment.arena = { weights: { divorce: 0.6, grief: 0.4 }, primary: 'divorce' };
+const pm5 = computePERMASnapshot(perma_multi);
+assert('Multi-arena lowers both R and P', pm5.scores.R < 0.5 && pm5.scores.P < 0.5, `R=${pm5.scores.R} P=${pm5.scores.P}`);
+
+// No arena → neutral scores (all ~0.6)
+const perma_neutral = makeEnv("Just checking in");
+const pm6 = computePERMASnapshot(perma_neutral);
+assert('No arena → neutral scores', pm6.underwater_domain === null, `underwater=${pm6.underwater_domain} scores=P:${pm6.scores.P}`);
+
+// ═══════════════════════════
+// TIER 4: Whisperer Registry
+// ═══════════════════════════
+
+import { WHISPERER_REGISTRY, WHISPERER_ACTIVATION_THRESHOLD } from '../src/lib/whisperers';
+
+console.log('\n── TIER 4: Whisperer Registry ──');
+
+const expectedArenas = [
+  'divorce', 'grief', 'fatherhood', 'love', 'sex', 'friendship',
+  'work', 'money', 'health', 'addiction', 'veteran', 'midlife',
+  'faith_crisis', 'fatherless_son',
+];
+
+assert('Registry has 14 whisperers', Object.keys(WHISPERER_REGISTRY).length === 14, `count=${Object.keys(WHISPERER_REGISTRY).length}`);
+
+for (const arena of expectedArenas) {
+  assert(`Registry has ${arena}`, typeof WHISPERER_REGISTRY[arena] === 'function');
+}
+
+assert('Activation threshold is 0.15', WHISPERER_ACTIVATION_THRESHOLD === 0.15, `threshold=${WHISPERER_ACTIVATION_THRESHOLD}`);
+
+// ═══════════════════════════
+// TIER 4: Whisperer Routing in Orchestrator
+// ═══════════════════════════
+
+console.log('\n── TIER 4: Whisperer Routing Logic ──');
+
+// Simulate the routing logic from orchestrator-v2
+function simulateWhispererRouting(arenaWeights: Record<string, number>): string[] {
+  return Object.entries(arenaWeights)
+    .filter(([, weight]) => weight >= WHISPERER_ACTIVATION_THRESHOLD)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .filter(([arena]) => WHISPERER_REGISTRY[arena])
+    .map(([arena]) => arena);
+}
+
+const route1 = simulateWhispererRouting({ divorce: 0.8, love: 0.3, money: 0.1 });
+assert('Route: divorce + love (money below threshold)', route1.length === 2 && route1.includes('divorce') && route1.includes('love'), route1.join(', '));
+
+const route2 = simulateWhispererRouting({ grief: 0.6, fatherhood: 0.4, midlife: 0.3, work: 0.2 });
+assert('Route: caps at 3 whisperers', route2.length === 3, route2.join(', '));
+
+const route3 = simulateWhispererRouting({ work: 0.05 });
+assert('Route: nothing below threshold', route3.length === 0, `count=${route3.length}`);
+
+const route4 = simulateWhispererRouting({ veteran: 1.0 });
+assert('Route: single arena veteran', route4.length === 1 && route4[0] === 'veteran', route4.join(', '));
+
+const route5 = simulateWhispererRouting({ faith_crisis: 0.5, fatherless_son: 0.3 });
+assert('Route: faith_crisis + fatherless_son', route5.length === 2, route5.join(', '));
+
+// ═══════════════════════════
+// TIER 4: Fatherless Son Trust Threshold
+// ═══════════════════════════
+
+console.log('\n── TIER 4: Fatherless Son Trust Threshold ──');
+
+// The fatherless-son whisperer has a trust threshold of 8 sessions
+// unless the man explicitly names it
+const fs_low_sessions = createStateEnvelope({ userId: 'test', conversationId: 'test', utterance: 'I feel lost', conversationHistory: [] });
+fs_low_sessions.sentinels.memory.session_count = 3;
+// We can't call runFatherlessSonWhisperer directly (needs DB), but we can test the threshold logic
+function fatherlessSonMeetsThreshold(env: ReturnType<typeof createStateEnvelope>): boolean {
+  const sessionCount = env.sentinels.memory.session_count;
+  if (sessionCount >= 8) return true;
+  const msg = env.utterance.toLowerCase();
+  return /\b(my (dad|father)|grew up without|fatherless|absent father|never knew my|dad.*left|father.*abandon)\b/i.test(msg);
+}
+
+assert('3 sessions, generic msg → blocked', !fatherlessSonMeetsThreshold(fs_low_sessions));
+
+const fs_explicit = createStateEnvelope({ userId: 'test', conversationId: 'test', utterance: 'My dad left when I was five', conversationHistory: [] });
+fs_explicit.sentinels.memory.session_count = 2;
+assert('2 sessions, explicit mention → allowed', fatherlessSonMeetsThreshold(fs_explicit));
+
+const fs_deep = createStateEnvelope({ userId: 'test', conversationId: 'test', utterance: 'I feel lost', conversationHistory: [] });
+fs_deep.sentinels.memory.session_count = 10;
+assert('10 sessions, generic msg → allowed', fatherlessSonMeetsThreshold(fs_deep));
+
+const fs_absent = createStateEnvelope({ userId: 'test', conversationId: 'test', utterance: 'I grew up without a dad', conversationHistory: [] });
+fs_absent.sentinels.memory.session_count = 1;
+assert('1 session, "grew up without" → allowed', fatherlessSonMeetsThreshold(fs_absent));
+
+// ═══════════════════════════
 // SUMMARY
 // ═══════════════════════════
 console.log('\n' + '═'.repeat(50));

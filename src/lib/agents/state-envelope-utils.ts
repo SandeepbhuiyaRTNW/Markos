@@ -45,6 +45,7 @@ export function createStateEnvelope(params: {
       trust: { cognitive: 0.5, affective: 0.2 },
       silence_type: null,
       arena: null,
+      perma: null,
     },
 
     wisdom_council: { invoked: [] },
@@ -117,6 +118,10 @@ export function buildEnvelopeContextSummary(env: StateEnvelope): string {
   if (env.assessment.archetype?.reading) {
     const r = env.assessment.archetype.reading;
     parts.push(`## KWML: ${env.assessment.archetype.active}${env.assessment.archetype.shadow ? ` (shadow: ${env.assessment.archetype.shadow})` : ''}\nK:${r.king} W:${r.warrior} M:${r.magician} L:${r.lover}`);
+  }
+  if (env.assessment.perma?.underwater_domain) {
+    const p = env.assessment.perma;
+    parts.push(`## PERMA: underwater=${p.underwater_domain} | P:${p.scores.P} E:${p.scores.E} R:${p.scores.R} M:${p.scores.M} A:${p.scores.A}`);
   }
   if (env.wisdom_council.invoked.length > 0) {
     parts.push(`## WISDOM COUNCIL: ${env.wisdom_council.invoked.join(', ')}`);

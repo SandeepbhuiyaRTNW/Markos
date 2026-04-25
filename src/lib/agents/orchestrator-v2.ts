@@ -25,8 +25,8 @@ import { computeTrust } from '../assessment/trust-gauge';
 import { mapPhase } from '../assessment/phase-mapper';
 import { selectWisdomVoices, buildWisdomCouncilPrompt } from '../wisdom/council';
 import { determineCraftDirectives, enforceSocraticDiscipline, applyDeepListener } from '../craft/craft-layer';
-import { runDivorceWhisperer } from '../whisperers/divorce';
-import { runGriefWhisperer } from '../whisperers/grief';
+import { WHISPERER_REGISTRY, WHISPERER_ACTIVATION_THRESHOLD } from '../whisperers';
+import { computePERMASnapshot } from '../assessment/perma-snapshot';
 import { query } from '../db';
 
 // Re-export the same public interface
@@ -158,23 +158,36 @@ export async function processWithAgents(
   // ═══════════════════════════════════════════
   env.wisdom_council = selectWisdomVoices(env);
 
-  // Whisperer routing based on Arena Classifier
+  // PERMA Snapshot (lightweight heuristic, runs after assessment)
+  env.assessment.perma = computePERMASnapshot(env);
+
+  // Whisperer routing based on Arena Classifier — all 14 whisperers
   const whispererPromise = (async () => {
     const done = trackEnvelopeAgent(env, 'domain-whisperers');
     try {
-      const primary = env.assessment.arena?.primary;
-      if (primary === 'divorce' || (env.assessment.arena?.weights?.['divorce'] || 0) > 0.3) {
-        const result = await runDivorceWhisperer(env);
-        env.domain_whisperers.invoked.push('divorce');
-        env.domain_whisperers.question_candidates.push(...result.question_candidates);
-        env.domain_whisperers.frameworks_applied.push(...result.frameworks_applied);
-      }
-      if (primary === 'grief' || (env.assessment.arena?.weights?.['grief'] || 0) > 0.3) {
-        const result = await runGriefWhisperer(env);
-        env.domain_whisperers.invoked.push('grief');
-        env.domain_whisperers.question_candidates.push(...result.question_candidates);
-        env.domain_whisperers.frameworks_applied.push(...result.frameworks_applied);
-      }
+      const arenaWeights = env.assessment.arena?.weights || {};
+
+      // Find all arenas above activation threshold
+      const activeArenas = Object.entries(arenaWeights)
+        .filter(([, weight]) => weight >= WHISPERER_ACTIVATION_THRESHOLD)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3); // Cap at 3 concurrent whisperers for latency
+
+      // Run activated whisperers in parallel
+      const whispererPromises = activeArenas.map(async ([arena]) => {
+        const runner = WHISPERER_REGISTRY[arena];
+        if (!runner) return;
+        try {
+          const result = await runner(env);
+          env.domain_whisperers.invoked.push(arena);
+          env.domain_whisperers.question_candidates.push(...result.question_candidates);
+          env.domain_whisperers.frameworks_applied.push(...result.frameworks_applied);
+        } catch (err) {
+          recordEnvelopeError(env, `whisperer-${arena}`, err);
+        }
+      });
+
+      await Promise.all(whispererPromises);
     } catch (err) { recordEnvelopeError(env, 'domain-whisperers', err); }
     finally { done(); }
   })();
