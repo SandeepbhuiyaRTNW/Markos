@@ -71,11 +71,13 @@ export default function Home() {
   const [sessionNotes, setSessionNotes] = useState<SessionNotesData | null>(null);
   const [endingSession, setEndingSession] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
-  const [authStep, setAuthStep] = useState<'email' | 'otp'>('email');
+  const [authStep, setAuthStep] = useState<'email' | 'otp' | 'password'>('email');
   const [otpCode, setOtpCode] = useState('');
+  const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [sendingCode, setSendingCode] = useState(false);
   const [verifyingCode, setVerifyingCode] = useState(false);
+  const [loggingIn, setLoggingIn] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fetchingOpeningRef = useRef(false);
   const viewRef = useRef<AppView>(view);
@@ -198,6 +200,29 @@ export default function Home() {
       setAuthStep('email');
     } catch { setAuthError('Network error. Please try again.'); }
     finally { setVerifyingCode(false); }
+  };
+
+  const handlePasswordLogin = async () => {
+    if (!password) { setAuthError('Please enter your password.'); return; }
+    setLoggingIn(true);
+    setAuthError('');
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setAuthError(data.error || 'Invalid credentials'); return; }
+      setUserId(data.userId);
+      setUserEmail(data.email);
+      setInitialized(true);
+      localStorage.setItem('marcus_userId', data.userId);
+      localStorage.setItem('marcus_email', data.email);
+      setShowLogin(false);
+      setAuthStep('email');
+      setPassword('');
+    } catch { setAuthError('Network error. Please try again.'); }
+    finally { setLoggingIn(false); }
   };
 
   const handleLogout = () => {
@@ -431,10 +456,31 @@ export default function Home() {
                       onKeyDown={(e) => e.key === 'Enter' && handleSendCode()}
                       placeholder="Enter your email"
                       className="h-13 bg-white border-border text-foreground placeholder:text-muted-foreground/60 rounded-xl px-5 text-sm" />
-                    <Button onClick={handleSendCode} disabled={sendingCode}
+                    <Button onClick={() => { if (!email || !email.includes('@')) { setAuthError('Please enter a valid email.'); return; } setAuthStep('password'); setAuthError(''); }}
                       className="w-full h-13 text-sm font-medium rounded-xl bg-[#44403c] hover:bg-[#57534e] text-white transition-all disabled:opacity-50">
-                      {sendingCode ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending code…</> : <>Send Verification Code <ChevronRight className="w-4 h-4 ml-2" /></>}
+                      Continue <ChevronRight className="w-4 h-4 ml-2" />
                     </Button>
+                  </>
+                ) : authStep === 'password' ? (
+                  <>
+                    <p className="text-sm text-muted-foreground">Signing in as <span className="font-medium text-foreground">{email}</span></p>
+                    <Input type="password" value={password} onChange={(e) => { setPassword(e.target.value); setAuthError(''); }}
+                      onKeyDown={(e) => e.key === 'Enter' && handlePasswordLogin()}
+                      placeholder="Enter your password"
+                      className="h-13 bg-white border-border text-foreground placeholder:text-muted-foreground/60 rounded-xl px-5 text-sm" />
+                    <Button onClick={handlePasswordLogin} disabled={loggingIn || !password}
+                      className="w-full h-13 text-sm font-medium rounded-xl bg-[#44403c] hover:bg-[#57534e] text-white transition-all disabled:opacity-50">
+                      {loggingIn ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Signing in…</> : <>Sign In <ChevronRight className="w-4 h-4 ml-2" /></>}
+                    </Button>
+                    <div className="flex items-center justify-center gap-4">
+                      <button onClick={() => { setAuthStep('email'); setPassword(''); setAuthError(''); }} className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                        Change email
+                      </button>
+                      <span className="text-muted-foreground/30">·</span>
+                      <button onClick={handleSendCode} disabled={sendingCode} className="text-xs text-[#a3785e] hover:text-[#8a6550] transition-colors disabled:opacity-50">
+                        {sendingCode ? 'Sending…' : 'Use verification code instead'}
+                      </button>
+                    </div>
                   </>
                 ) : (
                   <>
@@ -460,7 +506,7 @@ export default function Home() {
                   </>
                 )}
                 {authError && <p className="text-xs text-red-500 text-center">{authError}</p>}
-                <button onClick={() => { setShowLogin(false); setAuthStep('email'); setOtpCode(''); setAuthError(''); }}
+                <button onClick={() => { setShowLogin(false); setAuthStep('email'); setOtpCode(''); setPassword(''); setAuthError(''); }}
                   className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">Cancel</button>
               </div>
             ) : (
