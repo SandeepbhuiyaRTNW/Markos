@@ -17,6 +17,8 @@ import { retrieveWisdom, retrieveQuestion } from '../rag/retriever';
 import { detectCrisisType } from '../sentinels/crisis';
 import { getCrisisResponse, isPostCrisisRetreat, POST_CRISIS_RETREAT_RESPONSE } from '../sentinels/crisis-responses';
 import { runBoundarySentinel, checkBoundary, getBoundaryOverridePrompt } from '../sentinels/boundary';
+import { detectAIIdentityQuestion, getAIHonestyResponse } from '../sentinels/ai-honesty';
+import { detectFrameCollapse, getFrameRefusalResponse } from '../sentinels/frame-refusal';
 import { runPathwayRouter } from '../sentinels/pathway-router';
 import { runCulturalContext } from '../sentinels/cultural';
 import { classifyArena } from '../assessment/arena-classifier';
@@ -24,7 +26,7 @@ import { classifySilence } from '../assessment/silence-typer';
 import { computeTrust } from '../assessment/trust-gauge';
 import { mapPhase } from '../assessment/phase-mapper';
 import { selectWisdomVoices, buildWisdomCouncilPrompt } from '../wisdom/council';
-import { determineCraftDirectives, enforceSocraticDiscipline, applyDeepListener } from '../craft/craft-layer';
+import { determineCraftDirectives, enforceSocraticDiscipline, applyDeepListener, enforceVocativePrinciple } from '../craft/craft-layer';
 import { WHISPERER_REGISTRY, WHISPERER_ACTIVATION_THRESHOLD } from '../whisperers';
 import { computePERMASnapshot } from '../assessment/perma-snapshot';
 import { query } from '../db';
@@ -64,17 +66,40 @@ export async function processWithAgents(
     // Acute crisis — force response, bypass all other tiers
     const forcedResponse = getCrisisResponse(crisisType);
     env.sentinels.crisis = { level: 'acute', type: crisisType, protocol: crisisType, forced_response: forcedResponse };
-    env.final_response = forcedResponse || 'Brother — 988 Suicide & Crisis Lifeline: call or text 988.';
+    // Apply vocative filter to crisis responses too
+    const cleanedCrisis = enforceVocativePrinciple(forcedResponse || '988 Suicide & Crisis Lifeline: call or text 988.', userName);
+    env.final_response = cleanedCrisis;
     return buildResponse(env);
   }
 
   // Post-crisis retreat check
   if (isPostCrisisRetreat(userMessage, conversationHistory)) {
-    env.final_response = POST_CRISIS_RETREAT_RESPONSE;
+    env.final_response = enforceVocativePrinciple(POST_CRISIS_RETREAT_RESPONSE, userName);
     return buildResponse(env);
   }
 
-  // 1b. Parallel sentinel fetch: Memory + Understanding + KWML + Cultural
+  // 1b. AI-Honesty Sentinel — forced route (Engineering Findings §6)
+  if (detectAIIdentityQuestion(userMessage)) {
+    const { isHostileAIChallenge } = await import('../sentinels/ai-honesty');
+    env.sentinels.ai_honesty = { triggered: true, hostile: isHostileAIChallenge(userMessage) };
+    const honestyResponse = getAIHonestyResponse(userMessage);
+    env.final_response = enforceVocativePrinciple(honestyResponse, userName);
+    return buildResponse(env);
+  }
+
+  // 1c. Frame-Refusal Sentinel — role boundary enforcement (Engineering Findings §7)
+  const frameCollapse = detectFrameCollapse(userMessage);
+  if (frameCollapse) {
+    env.sentinels.frame_refusal = { triggered: true, category: frameCollapse };
+    const turnCount = conversationHistory.filter(m => m.role === 'user').length;
+    const refusalResponse = getFrameRefusalResponse(frameCollapse, turnCount);
+    if (refusalResponse) {
+      env.final_response = enforceVocativePrinciple(refusalResponse, userName);
+      return buildResponse(env);
+    }
+  }
+
+  // 1d. Parallel sentinel fetch: Memory + Understanding + KWML + Cultural
   const historyStr = conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n');
 
   // Phase 1: Fast DB fetches

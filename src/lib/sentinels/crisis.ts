@@ -8,19 +8,49 @@ import type { CrisisOutput, CrisisType, CrisisLevel } from '../agents/state-enve
 import type { StateEnvelope } from '../agents/state-envelope';
 
 // ─── IMMEDIATE crisis patterns — hard intercept ───
+// Expanded per Engineering Findings §5: direct method language, ambivalence, oblique phrases
 
 const SUICIDE_PATTERNS = [
+  // --- Direct statements ---
   /\b(suicid|kill\s*my\s*self|end\s*(my|it|things)|checking\s*out|better\s*off\s*(without|dead))\b/i,
   /\b(want\s*to\s*die|don'?t\s*want\s*to\s*(be\s*here|live|exist|wake\s*up))\b/i,
   /\b(self[\s-]*harm|cut\s*my\s*self|hurt\s*my\s*self)\b/i,
   /\b(no\s*(point|reason)\s*(in\s*)?(living|going\s*on|being\s*here))\b/i,
+
+  // --- Direct method language ---
   /\b(put\s*a\s*(bullet|gun)|blow\s*my\s*(head|brains))\b/i,
-  /\b(jump\s*(off|from)|hang\s*my\s*self|overdose|take\s*(all\s*the|too\s*many)\s*pills)\b/i,
+  /\b(jump\s*(off|from)\s*(a\s*)?(bridge|building|roof|overpass|ledge))\b/i,
+  /\b(hang\s*my\s*self|hang(ing)?\s*from)\b/i,
+  /\b(overdose|take\s*(all\s*the|too\s*many)\s*pills)\b/i,
+  /\b(bought\s*(a\s*)?rope|looking\s*at\s*(the\s*)?(bridge|tracks|rail|ledge))\b/i,
+  /\b(loaded\s*(the\s*)?(gun|pistol|rifle|shotgun))\b/i,
+  /\b(slit\s*(my\s*)?(wrist|throat))\b/i,
+  /\b(drive\s*(my\s*)?(car|truck)\s*(into|off|over))\b/i,
+  /\b(step\s*(in\s*front\s*of|into)\s*(traffic|a\s*train|the\s*train))\b/i,
+
+  // --- Passive / oblique ---
   /\b(wouldn'?t\s*miss\s*me|world\s*(is\s*)?better\s*without|nobody\s*(would\s*)?(care|notice))\b/i,
   /\b(giving\s*(away|everything)|getting\s*(my\s*)?(affairs|things)\s*in\s*order)\b/i,
   /\b(wrote\s*(a\s*)?(note|letter)\s*(to|for)\s*(my|the)\s*(kids|family|wife))\b/i,
   /\b(made\s*(my|a)\s*(peace|plan)|have\s*a\s*plan)\b/i,
   /\b(i'?m\s*(a\s*)?burden|burden\s*(to|on)\s*(everyone|my|them))\b/i,
+  /\b(won'?t\s*be\s*(a\s*)?problem\s*(much\s*)?longer)\b/i,
+  /\b(this\s*will\s*(all\s*)?be\s*over\s*soon)\b/i,
+  /\b(taking\s*care\s*of\s*everything\s*before\s*i\s*go)\b/i,
+  /\b(said\s*(my\s*)?goodbye|saying\s*(my\s*)?goodbye)\b/i,
+  /\b(you'?ll\s*(all\s*)?(understand|see)\s*(when\s*i'?m\s*gone|soon))\b/i,
+  /\b(i'?ve\s*(already\s*)?decided)\b/i,
+  /\b(tonight'?s\s*the\s*night|this\s*is\s*it)\b/i,
+  /\b(finally\s*(found\s*)?(the\s*)?courage\s*to\s*do\s*it)\b/i,
+  /\b(i\s*know\s*how\s*i'?m\s*going\s*to\s*do\s*it)\b/i,
+  /\b(don'?t\s*try\s*to\s*stop\s*me)\b/i,
+  /\b(delete\s*my\s*(accounts?|messages?|photos?)\s*(after|when))\b/i,
+
+  // --- Ambivalence phrases (still acute — better safe) ---
+  /\b(part\s*of\s*me\s*wants?\s*to\s*(die|end\s*it|not\s*(be\s*here|exist|wake\s*up)))\b/i,
+  /\b(sometimes\s*i\s*(think\s*about|wonder\s*(about|if))\s*(dying|ending\s*it|not\s*(being|existing|waking)))\b/i,
+  /\b(thought\s*about\s*(it|ending\s*it)\s*(a\s*lot|more\s*(than|and\s*more)|every\s*day|lately))\b/i,
+  /\b(getting\s*(closer|harder)\s*to\s*(not\s*)?(doing|acting\s*on)\s*it)\b/i,
 ];
 
 const VIOLENCE_PATTERNS = [

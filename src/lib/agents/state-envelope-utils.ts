@@ -37,6 +37,8 @@ export function createStateEnvelope(params: {
         memory_context: null, style_preferences: null, returning_patterns: [],
       },
       cultural: { region: null, register: 'neutral', faith_context: null, generation: null },
+      ai_honesty: { triggered: false, hostile: false },
+      frame_refusal: { triggered: false, category: null },
     },
 
     assessment: {

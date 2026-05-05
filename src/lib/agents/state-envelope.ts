@@ -68,6 +68,21 @@ export interface CulturalOutput {
   generation: string | null;
 }
 
+// ─── AI-Honesty Sentinel Output ───
+export interface AIHonestyOutput {
+  triggered: boolean;
+  hostile: boolean;
+}
+
+// ─── Frame-Refusal Sentinel Output ───
+export type FrameCollapseCategory = 'draft_request' | 'advice_request' | 'book_recommend'
+  | 'diagnosis_agree' | 'predict_outcome' | 'judge_other' | null;
+
+export interface FrameRefusalOutput {
+  triggered: boolean;
+  category: FrameCollapseCategory;
+}
+
 // ─── Assessment Ring Outputs ───
 
 export type Phase = 'unsilenced' | 'unleashed' | 'brothered';
@@ -168,6 +183,8 @@ export interface StateEnvelope {
     pathway_router: PathwayRouterOutput;
     memory: MemoryOutput;
     cultural: CulturalOutput;
+    ai_honesty: AIHonestyOutput;
+    frame_refusal: FrameRefusalOutput;
   };
 
   // Tier 2 — Assessment Ring

@@ -270,8 +270,22 @@ export async function retrieveQuestion(
     // Sort by composite score descending
     scored.sort((a: { score: number }, b: { score: number }) => b.score - a.score);
 
+    // Series-level rotation: avoid pulling multiple questions from the same CE-series in one selection
+    const selectedIds = new Set<string>();
+    const selectedSeries = new Set<string>();
+    const diverseResults: { question_text: string; question_id: string }[] = [];
+    for (const r of scored) {
+      if (diverseResults.length >= limit) break;
+      const series = r.question_id ? r.question_id.split('-').slice(0, 2).join('-') : '';
+      // Allow at most 1 question per CE-series per selection
+      if (series && selectedSeries.has(series)) continue;
+      diverseResults.push(r);
+      if (r.question_id) selectedIds.add(r.question_id);
+      if (series) selectedSeries.add(series);
+    }
+
     // Return top-N question texts
-    return scored.slice(0, limit).map((r: { question_text: string }) => r.question_text);
+    return diverseResults.map((r: { question_text: string }) => r.question_text);
   } catch (error) {
     console.error('Question retrieval error:', error);
     return [];

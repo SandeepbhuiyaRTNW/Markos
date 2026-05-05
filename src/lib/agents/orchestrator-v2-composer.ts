@@ -10,7 +10,7 @@ import { buildSystemPrompt } from '../agent/system-prompt';
 import type { StateEnvelope } from './state-envelope';
 import { trackEnvelopeAgent, recordEnvelopeError, buildEnvelopeContextSummary } from './state-envelope-utils';
 import { checkBoundary, getBoundaryOverridePrompt, runBoundarySentinel } from '../sentinels/boundary';
-import { determineCraftDirectives, enforceSocraticDiscipline, applyDeepListener } from '../craft/craft-layer';
+import { determineCraftDirectives, enforceSocraticDiscipline, applyDeepListener, enforceVocativePrinciple, detectForbiddenPhrases, detectFantasyIdentity, detectVocabSubstitutions } from '../craft/craft-layer';
 import { buildWisdomCouncilPrompt } from '../wisdom/council';
 import { getPhaseConstraints } from '../assessment/phase-mapper';
 import { retrieveWisdom, retrieveQuestion, type QuestionRetrievalContext } from '../rag/retriever';
@@ -149,9 +149,45 @@ export async function runComposerPipeline(env: StateEnvelope, historyStr: string
       } catch {}
     }
 
+    // ═══════════════════════════════════════════
+    // CRAFT LAYER POST-COMPOSITION FILTERS
+    // ═══════════════════════════════════════════
+
+    // 1. Fantasy-Identity Blocker — re-roll if draft contains forward-projecting templates
+    if (detectFantasyIdentity(content)) {
+      console.log(`[V2] 🎭 Fantasy-identity template detected — regenerating`);
+      const fantasyOverride = [...messages, new AIMessage(content),
+        new HumanMessage(`[SYSTEM OVERRIDE] Your response contains a forward-projecting fantasy-identity question ("imagine yourself a year from now" pattern). This is a banned template. Rewrite with a PRESENT-TENSE or PAST-EXCAVATING question instead. Ask about what IS happening, not what he wants to become. 2-3 sentences.`)];
+      const fantasyRetry = await model.invoke(fantasyOverride);
+      content = typeof fantasyRetry.content === 'string' ? fantasyRetry.content : content;
+    }
+
+    // 2. Vocabulary Fidelity Filter — re-roll if draft substitutes user's concrete words
+    const vocabViolations = detectVocabSubstitutions(env.utterance, content);
+    if (vocabViolations.length > 0) {
+      console.log(`[V2] 📝 Vocab fidelity violations: ${vocabViolations.slice(0, 3).join(', ')} — regenerating`);
+      const vocabOverride = [...messages, new AIMessage(content),
+        new HumanMessage(`[SYSTEM OVERRIDE] Your response translated the user's specific words into clinical abstractions. The user's EXACT words must appear in your response. Return at least one specific noun, verb, or phrase from the user's message verbatim. Do NOT substitute "throw up" with "heavy feeling" or "cheated" with "betrayal" etc. Rewrite using the user's own vocabulary. 2-3 sentences.`)];
+      const vocabRetry = await model.invoke(vocabOverride);
+      content = typeof vocabRetry.content === 'string' ? vocabRetry.content : content;
+    }
+
+    // 3. Forbidden Phrase Filter — re-roll if draft contains banned phrases
+    const forbiddenViolations = detectForbiddenPhrases(content);
+    if (forbiddenViolations.length > 0) {
+      console.log(`[V2] 🚫 Forbidden phrases: ${forbiddenViolations.join(', ')} — regenerating`);
+      const forbiddenOverride = [...messages, new AIMessage(content),
+        new HumanMessage(`[SYSTEM OVERRIDE] Your response contained forbidden phrases (${forbiddenViolations.join(', ')}). These are banned. Rewrite without any of them. Be direct and concrete. 2-3 sentences.`)];
+      const forbiddenRetry = await model.invoke(forbiddenOverride);
+      content = typeof forbiddenRetry.content === 'string' ? forbiddenRetry.content : content;
+    }
+
+    // 4. Vocative Principle Filter — ALWAYS runs last, strips banned vocatives
+    content = enforceVocativePrinciple(content, env.user_name);
+
     // Crisis resource enforcement for elevated/passive crisis
     if (env.sentinels.crisis.level === 'elevated' && !content.includes('988')) {
-      content += '\n\nBrother — 988 Suicide & Crisis Lifeline: call or text 988. Crisis Text Line: text HOME to 741741.';
+      content += `\n\n${env.user_name ? env.user_name + ' — ' : ''}988 Suicide & Crisis Lifeline: call or text 988. Crisis Text Line: text HOME to 741741.`;
     }
 
     env.composer_output = content;
