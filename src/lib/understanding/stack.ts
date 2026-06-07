@@ -35,17 +35,18 @@ Return JSON:
   "layer4_the_man": "What this reveals about his IDENTITY journey. Who was he? Who is he now? Who is he becoming or resisting becoming? This is not a summary — it is an insight about his self-concept",
   "layer5_the_silence": "THE MOST IMPORTANT LAYER. What is he NOT saying? What topic did he skip? What person did he not mention? What emotion did he avoid? What question would he never ask himself? Be SPECIFIC: 'He talks about his wife's anger but never mentions his own role' or 'He describes the loss but never uses the word grief' or 'He mentioned everyone else's needs but never his own'",
   "primary_emotion": "One word — the dominant emotion",
-  "depth_level": "1-5 scale: 1=surface facts, 2=acknowledging feelings, 3=exploring patterns, 4=identity questioning, 5=confronting core truth",
+  "depth_level": "1-5 scale, rated by the EMOTIONAL WEIGHT this man brings in THIS message — NOT by how many exchanges have happened. 1=surface facts/logistics, 2=acknowledging feelings, 3=exploring patterns, 4=identity questioning, 5=confronting core truth. A man who opens with raw pain — a divorce, a death, suicidal weight, a shame he has never spoken — is at 4-5 even on his FIRST message. He has gone deep voluntarily. Do NOT rate a heavy message as 1-2 just because it is early in the conversation.",
   "depth_opportunity": "A specific, actionable suggestion for the companion to go DEEPER. Not generic ('go deeper') — specific: 'He mentioned his father but immediately pivoted to logistics. Return to what his father means to him.' or 'He used anger 3 times but hasn't named what the anger is protecting. Ask what is underneath it.'",
   "silence_question": "Write ONE specific question that would crack open Layer 5. This should be the question he is NOT asking himself. Example: 'When did you stop believing your needs mattered?' or 'What would you say to your father if you knew he could hear you?' This must be specific to HIS situation, not generic.",
-  "emotional_trajectory": "Is he OPENING (becoming more vulnerable/honest), RETREATING (pulling back, getting more guarded), or FLAT (staying at same level)? Look at the conversation arc, not just this message."
+  "emotional_trajectory": "Is he OPENING (becoming more vulnerable/honest), RETREATING (pulling back, getting more guarded), or FLAT (staying at same level)? Look at the conversation arc. If there is no prior arc (first message), judge by THIS message: a man who brings vulnerability or raw emotion — even in his first words — is OPENING, not FLAT. Reserve FLAT for genuinely surface/logistical messages with no emotional weight."
 }
 
 CRITICAL RULES:
 - Layer 5 must be SPECIFIC to this man, not generic. "He might be avoiding deeper feelings" is USELESS. "He described his wife's threats but never mentioned whether he still loves her" is ACTIONABLE.
 - depth_opportunity must be a CONCRETE move the companion can make, not a platitude.
 - silence_question must be a question that would make this specific man pause and think. Not a therapy cliché.
-- If the conversation has been surface-level for multiple exchanges, say so explicitly in depth_opportunity.`
+- If the conversation has been surface-level for multiple exchanges, say so explicitly in depth_opportunity.
+- PRESENTED DEPTH OVERRIDES TIMING: rate depth_level and trajectory by what the man actually brings, not by session position. Meeting a man at the depth he brought is the analysis's job — under-rating a heavy message produces a shallow, careful response that loses him.`
       },
       {
         role: 'user',

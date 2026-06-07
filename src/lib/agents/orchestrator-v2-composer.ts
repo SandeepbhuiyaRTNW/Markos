@@ -69,10 +69,17 @@ export async function runComposerPipeline(env: StateEnvelope, historyStr: string
     const wisdomCouncilPrompt = buildWisdomCouncilPrompt(env.wisdom_council);
     const phaseConstraints = getPhaseConstraints(env.assessment.phase.label);
 
+    // Meet him where he is: the phase max_depth gates how hard we PUSH, but a man who
+    // brings depth (raw grief, divorce, a shame never spoken) must be MET at that depth,
+    // even in early sessions. Challenge stays trust-gated; presence is content-gated.
+    const presentedDepth = env.sentinels.listener_stack?.depth_level || 1;
+    const effectiveMaxDepth = Math.max(phaseConstraints.max_depth, presentedDepth);
+
     // Phase constraints — inject into prompt so Composer knows depth/challenge permissions
     const phaseAddendum = `\n\n## PHASE CONSTRAINTS (${env.assessment.phase.label.toUpperCase()})
-Max depth: ${phaseConstraints.max_depth}/5 | Can challenge: ${phaseConstraints.can_challenge ? 'YES' : 'NO'} | Can suggest: ${phaseConstraints.can_suggest ? 'YES' : 'NO'}
-Question style: ${phaseConstraints.question_style}`;
+Meet-him depth (match this — he brought it): ${effectiveMaxDepth}/5 | Challenge ceiling (push only this hard): ${phaseConstraints.max_depth}/5
+Can challenge: ${phaseConstraints.can_challenge ? 'YES' : 'NO'} | Can suggest: ${phaseConstraints.can_suggest ? 'YES' : 'NO'}
+Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseConstraints.max_depth ? `\nNOTE: He brought depth ${presentedDepth}. MATCH it — reflect the real thing he said and ask the one question that lives at his level. Do NOT retreat to a careful, surface response just because trust is still early. What you hold back is adversarial confrontation, not presence.` : ''}`;
 
     // Craft-aware system addendum
     const craftAddendum = env.craft_directives.style_override

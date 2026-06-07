@@ -29,7 +29,11 @@ export async function retrieveWhispererQuestions(
     const vectorStr = `[${embedding.join(',')}]`;
 
     const sessionCount = env.sentinels.memory.session_count;
-    const maxDepth = sessionCount <= 2 ? 2 : sessionCount <= 5 ? 3 : sessionCount <= 15 ? 4 : 5;
+    // Session count gates how hard we PUSH; presented depth lets us MEET a man who
+    // goes deep early. A heavy first message must not be answered with only shallow questions.
+    const sessionDepth = sessionCount <= 2 ? 2 : sessionCount <= 5 ? 3 : sessionCount <= 15 ? 4 : 5;
+    const presentedDepth = env.sentinels.listener_stack?.depth_level || 1;
+    const maxDepth = Math.max(sessionDepth, presentedDepth);
     const phase = env.assessment.phase.label;
     const silenceType = env.assessment.silence_type?.label;
 
