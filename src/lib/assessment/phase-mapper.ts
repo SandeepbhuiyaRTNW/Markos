@@ -21,6 +21,9 @@ export function mapPhase(
   trustCognitive: number,
   trustAffective: number,
 ): PhaseOutput {
+  const trajectory = (emotionalTrajectory || '').toLowerCase();
+  const isOpening = trajectory.includes('open') || trajectory.includes('deepen');
+
   // Brothered: deep trust, high depth, many sessions
   if (sessionCount >= 20 && trustAffective >= 0.7 && depthLevel >= 3) {
     return { label: 'brothered', confidence: 0.8 };
@@ -30,7 +33,7 @@ export function mapPhase(
   if (
     (sessionCount >= 5 && trustCognitive >= 0.5 && depthLevel >= 2) ||
     (sessionCount >= 8 && trustAffective >= 0.4) ||
-    (depthLevel >= 3 && emotionalTrajectory === 'opening')
+    (depthLevel >= 3 && isOpening)
   ) {
     const confidence = Math.min(0.9,
       0.4 + (sessionCount >= 10 ? 0.2 : 0) + (depthLevel >= 3 ? 0.15 : 0) + (trustAffective >= 0.5 ? 0.15 : 0)

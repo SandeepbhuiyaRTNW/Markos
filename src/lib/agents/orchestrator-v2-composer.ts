@@ -25,6 +25,10 @@ export async function runComposerPipeline(env: StateEnvelope, historyStr: string
   const ragDone = trackEnvelopeAgent(env, 'rag-retrieval');
   let ragWisdom = '';
   let legacyQuestions: string[] = [];
+  // Escalation engine — loop-breaking, pushback/resistance handling, advice-loop
+  // detection, emotional-direction tracking, and hopelessness templates. Computed
+  // in parallel with RAG so it adds no extra latency.
+  let convState: Awaited<ReturnType<typeof analyzeConversation>> | null = null;
   try {
     const retrievalCtx: QuestionRetrievalContext = {
       sessionCount: env.sentinels.memory.session_count,
@@ -33,10 +37,12 @@ export async function runComposerPipeline(env: StateEnvelope, historyStr: string
       shadow: env.assessment.archetype?.shadow || undefined,
       arena: env.assessment.arena?.primary,
     };
-    [ragWisdom, legacyQuestions] = await Promise.all([
+    const [rw, lq, cs] = await Promise.all([
       retrieveWisdom(env.utterance, 5, historyStr),
       retrieveQuestion(env.utterance, env.assessment.archetype?.active, undefined, 3, retrievalCtx),
+      analyzeConversation(env.conversation_history, env.utterance),
     ]);
+    ragWisdom = rw; legacyQuestions = lq; convState = cs;
   } catch (err) { recordEnvelopeError(env, 'rag-retrieval', err); }
   finally { ragDone(); }
 
@@ -109,8 +115,23 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     // Build priority hierarchy — the Composer's marching orders for THIS turn
     const priorityHierarchy = buildPriorityHierarchy(env);
 
+    // Escalation directives from the conversation-state engine — these are the
+    // loop-breakers (pushback/resistance/advice-loop/worsening) and hard-constraint
+    // templates that stop Marcus repeating himself and force a change of approach.
+    const escalationDirectives: string[] = [];
+    if (convState?.loopBreaker) escalationDirectives.push(convState.loopBreaker);
+    if (convState && convState.hopelessnessLevel >= 3 && convState.responseTemplate) {
+      escalationDirectives.push(convState.responseTemplate);
+    }
+    const escalationAddendum = escalationDirectives.length > 0
+      ? `\n\n## 🔁 CONVERSATION STATE — OVERRIDE (HIGHEST PRIORITY, OBEY BEFORE ALL ELSE)\n${escalationDirectives.join('\n\n')}`
+      : '';
+    if (convState) {
+      console.log(`[V2] ConvState: intent=${convState.intent} phase=${convState.phase} hopeless=${convState.hopelessnessLevel} pushback=${convState.pushbackCount} adviceLoop=${convState.adviceLoopCount} direction=${convState.emotionalDirection} loopBreaker=${convState.loopBreaker ? 'YES' : 'no'}`);
+    }
+
     // Inject State Envelope intelligence after system prompt
-    const fullSystem = `${systemContent}\n\n${envelopeContext}\n\n${wisdomCouncilPrompt}${phaseAddendum}${craftAddendum}\n\n${priorityHierarchy}`;
+    const fullSystem = `${systemContent}\n\n${envelopeContext}\n\n${wisdomCouncilPrompt}${phaseAddendum}${craftAddendum}\n\n${priorityHierarchy}${escalationAddendum}`;
 
     const messages: (SystemMessage | HumanMessage | AIMessage)[] = [
       new SystemMessage(fullSystem),

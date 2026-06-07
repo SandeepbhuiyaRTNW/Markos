@@ -15,6 +15,17 @@ export interface UnderstandingAnalysis {
   emotional_trajectory: string;  // Is he opening up, retreating, or flat?
 }
 
+/**
+ * Normalize the model's free-text trajectory ("OPENING — he is...") into a
+ * canonical lowercase enum so downstream phase/craft comparisons match reliably.
+ */
+function normalizeTrajectory(raw: string): 'opening' | 'retreating' | 'flat' {
+  const t = (raw || '').toLowerCase();
+  if (t.includes('open') || t.includes('deepen')) return 'opening';
+  if (t.includes('retreat') || t.includes('guard') || t.includes('pull') || t.includes('withdraw')) return 'retreating';
+  return 'flat';
+}
+
 export async function analyzeUnderstanding(
   userMessage: string,
   conversationHistory: string,
@@ -70,7 +81,7 @@ CRITICAL RULES:
     depth_level: parsed.depth_level || 1,
     depth_opportunity: parsed.depth_opportunity || '',
     silence_question: parsed.silence_question || '',
-    emotional_trajectory: parsed.emotional_trajectory || 'flat',
+    emotional_trajectory: normalizeTrajectory(parsed.emotional_trajectory),
   };
 }
 

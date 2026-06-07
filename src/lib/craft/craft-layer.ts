@@ -281,7 +281,8 @@ export function determineCraftDirectives(env: StateEnvelope): CraftDirectives {
     return { form: 'challenge', pacing: 'full', metaphor_hint: null, style_override: null };
   }
 
-  if (trajectory === 'opening' || trajectory === 'deepening') {
+  const trajectoryLower = trajectory.toLowerCase();
+  if (trajectoryLower.includes('open') || trajectoryLower.includes('deepen')) {
     return { form: 'question', pacing: 'full', metaphor_hint: null, style_override: null };
   }
 

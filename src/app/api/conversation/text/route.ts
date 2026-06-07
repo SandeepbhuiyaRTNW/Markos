@@ -43,12 +43,15 @@ export async function POST(req: NextRequest) {
       conversationId = convResult.rows[0].id;
     }
 
-    // Get conversation history
+    // Get conversation history — most recent 60 messages, re-ordered chronologically
     const historyResult = await query(
-      `SELECT role, content FROM messages
-       WHERE conversation_id = $1
-       ORDER BY created_at ASC
-       LIMIT 60`,
+      `SELECT role, content FROM (
+         SELECT role, content, created_at FROM messages
+         WHERE conversation_id = $1
+         ORDER BY created_at DESC
+         LIMIT 60
+       ) recent
+       ORDER BY created_at ASC`,
       [conversationId]
     );
     const history = historyResult.rows.map(
