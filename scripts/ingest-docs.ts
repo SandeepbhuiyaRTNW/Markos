@@ -30,6 +30,10 @@ interface DocEntry {
   filename: string;
   title: string;
   domain: string;
+  /** If set, ingested as 'training_doc' with whisperer metadata instead of generic 'doc' */
+  source_type?: 'doc' | 'training_doc';
+  /** Whisperer names this training doc feeds into */
+  whisperers?: string[];
 }
 
 const DOCS: DocEntry[] = [
@@ -47,6 +51,13 @@ const DOCS: DocEntry[] = [
     filename: 'mrkos_intelbase_questions_v10.xlsx',
     title: 'mrkos IntelBase Questions',
     domain: 'question_bank',
+  },
+  {
+    filename: 'mrkos_divorce_grief_learning_v1.docx',
+    title: 'mrkos Divorce & Grief Learning — Whisperer Training',
+    domain: 'divorce_grief',
+    source_type: 'training_doc',
+    whisperers: ['divorce', 'grief'],
   },
 ];
 
@@ -135,10 +146,24 @@ function extractXlsxText(filepath: string): string {
 
 async function ingestDoc(doc: DocEntry): Promise<number> {
   const filepath = join(DOCS_DIR, doc.filename);
-  console.log('\n[' + doc.title + ']');
+  const sourceType = doc.source_type || 'doc';
+  console.log('\n[' + doc.title + '] (source_type: ' + sourceType + ')');
+
+  // Ensure source_type is allowed (ALTER CHECK constraint if needed)
+  if (sourceType === 'training_doc' || sourceType === 'doc') {
+    await pool.query(`
+      DO $$ BEGIN
+        ALTER TABLE embeddings DROP CONSTRAINT IF EXISTS embeddings_source_type_check;
+        ALTER TABLE embeddings ADD CONSTRAINT embeddings_source_type_check
+          CHECK (source_type IN ('book', 'question', 'conversation', 'reflection', 'doc', 'training_doc'));
+      EXCEPTION WHEN others THEN NULL;
+      END $$;
+    `).catch(() => {});
+  }
+
   const existing = await pool.query(
-    "SELECT COUNT(*) FROM embeddings WHERE source_title = $1 AND source_type = 'doc'",
-    [doc.title]
+    "SELECT COUNT(*) FROM embeddings WHERE source_title = $1 AND source_type = $2",
+    [doc.title, sourceType]
   );
   const reingest = process.argv.includes('--reingest');
   if (parseInt(existing.rows[0].count) > 0 && !reingest) {
@@ -147,7 +172,7 @@ async function ingestDoc(doc: DocEntry): Promise<number> {
   }
   if (reingest && parseInt(existing.rows[0].count) > 0) {
     console.log('  🔄 Deleting ' + existing.rows[0].count + ' old chunks...');
-    await pool.query("DELETE FROM embeddings WHERE source_title = $1 AND source_type = 'doc'", [doc.title]);
+    await pool.query("DELETE FROM embeddings WHERE source_title = $1 AND source_type = $2", [doc.title, sourceType]);
   }
   console.log('  Extracting text from ' + doc.filename + '...');
   let text: string;
@@ -164,30 +189,45 @@ async function ingestDoc(doc: DocEntry): Promise<number> {
   console.log('  Extracted ' + text.length + ' characters');
   const chunks = chunkText(text);
   console.log('  Split into ' + chunks.length + ' chunks');
-  for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
-    const batch = chunks.slice(i, i + BATCH_SIZE);
-    const embeddings = await getEmbeddings(batch);
-    for (let j = 0; j < batch.length; j++) {
-      const vecStr = '[' + embeddings[j].join(',') + ']';
-      await pool.query(
-        "INSERT INTO embeddings (content, embedding, source_type, source_id, source_title, chunk_index, metadata) VALUES ($1, $2::vector, 'doc', $3, $4, $5, $6)",
-        [
-          batch[j],
-          vecStr,
-          doc.filename,
-          doc.title,
-          i + j,
-          JSON.stringify({ domain: doc.domain }),
-        ]
-      );
+
+  // For training_doc with multiple whisperers, insert one row per whisperer per chunk
+  // so retrieveTrainingContext can filter by metadata->>'whisperer'
+  const whisperers = doc.whisperers && doc.whisperers.length > 0 ? doc.whisperers : [null];
+
+  let totalInserted = 0;
+  for (const whisperer of whisperers) {
+    if (whisperer) {
+      console.log('  Ingesting for whisperer: ' + whisperer);
     }
-    const done = Math.min(i + BATCH_SIZE, chunks.length);
-    console.log('  Embedded ' + done + '/' + chunks.length + ' chunks');
-    if (i + BATCH_SIZE < chunks.length)
-      await new Promise((r) => setTimeout(r, 500));
+    for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+      const batch = chunks.slice(i, i + BATCH_SIZE);
+      const embeddings = await getEmbeddings(batch);
+      for (let j = 0; j < batch.length; j++) {
+        const vecStr = '[' + embeddings[j].join(',') + ']';
+        const metadata: Record<string, string> = { domain: doc.domain };
+        if (whisperer) metadata.whisperer = whisperer;
+        await pool.query(
+          "INSERT INTO embeddings (content, embedding, source_type, source_id, source_title, chunk_index, metadata) VALUES ($1, $2::vector, $3, $4, $5, $6, $7)",
+          [
+            batch[j],
+            vecStr,
+            sourceType,
+            doc.filename,
+            doc.title,
+            i + j,
+            JSON.stringify(metadata),
+          ]
+        );
+      }
+      const done = Math.min(i + BATCH_SIZE, chunks.length);
+      console.log('  Embedded ' + done + '/' + chunks.length + ' chunks' + (whisperer ? ' [' + whisperer + ']' : ''));
+      if (i + BATCH_SIZE < chunks.length)
+        await new Promise((r) => setTimeout(r, 500));
+    }
+    totalInserted += chunks.length;
   }
-  console.log('  Done: ' + chunks.length + ' chunks embedded');
-  return chunks.length;
+  console.log('  Done: ' + totalInserted + ' total rows embedded (' + whisperers.length + ' whisperer(s))');
+  return totalInserted;
 }
 
 async function main() {

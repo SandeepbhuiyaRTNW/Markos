@@ -71,7 +71,7 @@ CREATE TABLE embeddings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     content TEXT NOT NULL,
     embedding vector(3072),
-    source_type VARCHAR(50) NOT NULL CHECK (source_type IN ('book', 'question', 'conversation', 'reflection')),
+    source_type VARCHAR(50) NOT NULL CHECK (source_type IN ('book', 'question', 'conversation', 'reflection', 'doc', 'training_doc')),
     source_id VARCHAR(255),
     source_title VARCHAR(500),
     chunk_index INTEGER,
