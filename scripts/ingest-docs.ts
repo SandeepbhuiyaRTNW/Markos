@@ -254,10 +254,10 @@ async function main() {
       ' total chunks ==='
   );
   const verify = await pool.query(
-    "SELECT source_title, COUNT(*) as chunks FROM embeddings WHERE source_type = 'doc' GROUP BY source_title"
+    "SELECT source_title, source_type, COUNT(*) as chunks FROM embeddings WHERE source_type IN ('doc', 'training_doc') GROUP BY source_title, source_type"
   );
   for (const row of verify.rows) {
-    console.log('  ' + row.source_title + ': ' + row.chunks + ' chunks');
+    console.log('  ' + row.source_title + ' [' + row.source_type + ']: ' + row.chunks + ' chunks');
   }
   console.log('\nDone.');
   await pool.end();

@@ -51,7 +51,7 @@ export function createStateEnvelope(params: {
     },
 
     wisdom_council: { invoked: [] },
-    domain_whisperers: { invoked: [], question_candidates: [], frameworks_applied: [] },
+    domain_whisperers: { invoked: [], question_candidates: [], frameworks_applied: [], landmines: [], context_notes: [] },
     craft_directives: { form: 'question', pacing: 'full', metaphor_hint: null, style_override: null },
 
     composer_output: null,
@@ -133,6 +133,15 @@ export function buildEnvelopeContextSummary(env: StateEnvelope): string {
     const trust = env.assessment.trust;
     const trustLabel = mem.session_count <= 2 ? 'NEW' : mem.session_count <= 5 ? 'DEVELOPING' : mem.session_count <= 15 ? 'ESTABLISHED' : 'DEEP';
     parts.push(`## QUESTIONS (Trust: ${trustLabel}, Session #${mem.session_count})\nPRIMARY: ${qs[0].text}${qs.length > 1 ? `\nALTERNATIVES:\n${qs.slice(1, 4).map((q, i) => `${i + 2}. ${q.text}`).join('\n')}` : ''}`);
+  }
+  if (env.domain_whisperers.frameworks_applied.length > 0) {
+    parts.push(`## ACTIVE FRAMEWORKS\n${env.domain_whisperers.frameworks_applied.join(', ')}`);
+  }
+  if (env.domain_whisperers.landmines.length > 0) {
+    parts.push(`## LANDMINES — DO NOT:\n${env.domain_whisperers.landmines.map(l => `• ${l}`).join('\n')}`);
+  }
+  if (env.domain_whisperers.context_notes.length > 0) {
+    parts.push(`## WHISPERER INTELLIGENCE\n${env.domain_whisperers.context_notes.join('\n')}`);
   }
   if (env.sentinels.pathway_router.candidates.length > 0) {
     const now = env.sentinels.pathway_router.candidates.filter(c => c.when === 'now');

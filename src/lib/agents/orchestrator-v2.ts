@@ -207,6 +207,8 @@ export async function processWithAgents(
           env.domain_whisperers.invoked.push(arena);
           env.domain_whisperers.question_candidates.push(...result.question_candidates);
           env.domain_whisperers.frameworks_applied.push(...result.frameworks_applied);
+          if (result.landmines.length > 0) env.domain_whisperers.landmines.push(...result.landmines);
+          if (result.context_notes) env.domain_whisperers.context_notes.push(result.context_notes);
         } catch (err) {
           recordEnvelopeError(env, `whisperer-${arena}`, err);
         }

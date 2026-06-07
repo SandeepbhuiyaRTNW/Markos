@@ -154,6 +154,8 @@ export interface DomainWhisperersOutput {
   invoked: string[];   // e.g., ['divorce']
   question_candidates: WhispererQuestionCandidate[];
   frameworks_applied: string[];
+  landmines: string[];        // things Marcus must NOT say (from whisperer red lines)
+  context_notes: string[];    // internal clinical guidance for the Composer
 }
 
 export interface CraftDirectives {
