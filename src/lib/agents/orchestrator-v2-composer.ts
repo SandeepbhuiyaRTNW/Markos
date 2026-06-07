@@ -60,7 +60,7 @@ export async function runComposerPipeline(env: StateEnvelope, historyStr: string
   try {
     const model = new ChatOpenAI({
       modelName: 'gpt-4o',
-      temperature: 0.85,
+      temperature: 0.75,
       maxTokens: 350,
     });
 
@@ -68,6 +68,11 @@ export async function runComposerPipeline(env: StateEnvelope, historyStr: string
     const envelopeContext = buildEnvelopeContextSummary(env);
     const wisdomCouncilPrompt = buildWisdomCouncilPrompt(env.wisdom_council);
     const phaseConstraints = getPhaseConstraints(env.assessment.phase.label);
+
+    // Phase constraints — inject into prompt so Composer knows depth/challenge permissions
+    const phaseAddendum = `\n\n## PHASE CONSTRAINTS (${env.assessment.phase.label.toUpperCase()})
+Max depth: ${phaseConstraints.max_depth}/5 | Can challenge: ${phaseConstraints.can_challenge ? 'YES' : 'NO'} | Can suggest: ${phaseConstraints.can_suggest ? 'YES' : 'NO'}
+Question style: ${phaseConstraints.question_style}`;
 
     // Craft-aware system addendum
     const craftAddendum = env.craft_directives.style_override
@@ -94,8 +99,11 @@ export async function runComposerPipeline(env: StateEnvelope, historyStr: string
       stylePreferences: env.sentinels.memory.style_preferences || undefined,
     });
 
+    // Build priority hierarchy — the Composer's marching orders for THIS turn
+    const priorityHierarchy = buildPriorityHierarchy(env);
+
     // Inject State Envelope intelligence after system prompt
-    const fullSystem = `${systemContent}\n\n${envelopeContext}\n\n${wisdomCouncilPrompt}${craftAddendum}`;
+    const fullSystem = `${systemContent}\n\n${envelopeContext}\n\n${wisdomCouncilPrompt}${phaseAddendum}${craftAddendum}\n\n${priorityHierarchy}`;
 
     const messages: (SystemMessage | HumanMessage | AIMessage)[] = [
       new SystemMessage(fullSystem),
@@ -245,3 +253,63 @@ async function storeInBackground(env: StateEnvelope): Promise<void> {
   }
 }
 
+/**
+ * Build a priority hierarchy that tells the Composer exactly what to focus on.
+ * Placed LAST in the system prompt so it has maximum attention weight.
+ */
+function buildPriorityHierarchy(env: StateEnvelope): string {
+  const ls = env.sentinels.listener_stack;
+  const whisperers = env.domain_whisperers;
+  const depth = ls?.depth_level || 1;
+  const phase = env.assessment.phase.label;
+
+  const lines: string[] = [
+    '## ⚡ COMPOSER PRIORITY — READ THIS LAST, OBEY THIS FIRST',
+    '',
+  ];
+
+  // Priority 1: If there's a silence question, it's the #1 candidate
+  if (ls?.silence_question) {
+    lines.push(`PRIORITY 1 — SILENCE QUESTION (from Listener Stack):`);
+    lines.push(`"${ls.silence_question}"`);
+    lines.push(`This is the DEEPEST question available for this moment. Use it as-is or adapt it to your voice. Do NOT replace it with a safer question unless the man explicitly needs gentleness right now.`);
+    lines.push('');
+  }
+
+  // Priority 2: Depth Move
+  if (ls?.depth_opportunity) {
+    lines.push(`PRIORITY 2 — DEPTH MOVE:`);
+    lines.push(`${ls.depth_opportunity}`);
+    lines.push(`This tells you WHERE to push. Follow this direction.`);
+    lines.push('');
+  }
+
+  // Priority 3: Whisperer Intelligence (domain-specific clinical notes)
+  if (whisperers.context_notes.length > 0 || whisperers.landmines.length > 0) {
+    lines.push(`PRIORITY 3 — DOMAIN INTELLIGENCE:`);
+    if (whisperers.context_notes.length > 0) {
+      lines.push(`Clinical context: ${whisperers.context_notes.join(' | ')}`);
+    }
+    if (whisperers.landmines.length > 0) {
+      lines.push(`AVOID: ${whisperers.landmines.join('; ')}`);
+    }
+    lines.push('');
+  }
+
+  // Depth accountability
+  if (depth <= 2) {
+    lines.push(`DEPTH CHECK: You are at depth ${depth}/5. If you have been at this depth for 3+ exchanges, YOU are failing. Use the Silence Question or Depth Move above to go deeper. Do not stay at the surface with him.`);
+  } else if (depth >= 4) {
+    lines.push(`DEPTH CHECK: You are at depth ${depth}/5. This is sacred ground. Honor it. Mirror his truth. Do not retreat to safety.`);
+  }
+
+  // Phase-specific instruction
+  if (phase === 'unleashed' || phase === 'brothered') {
+    lines.push(`PHASE NOTE: This man is in ${phase.toUpperCase()}. He can handle challenge and direct confrontation. Do NOT default to empathy-first. Lead with the provocation, then hold him through it.`);
+  }
+
+  lines.push('');
+  lines.push('YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then ask ONE question or make ONE statement that pushes toward the depth target above. (3) Keep it 2-4 sentences. End with weight.');
+
+  return lines.join('\n');
+}

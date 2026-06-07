@@ -107,8 +107,8 @@ export function buildEnvelopeContextSummary(env: StateEnvelope): string {
   if (env.sentinels.listener_stack) {
     const ls = env.sentinels.listener_stack;
     parts.push(`## UNDERSTANDING ANALYSIS\nEmotion: ${ls.primary_emotion} | Depth: ${ls.depth_level}/5 | Trajectory: ${ls.emotional_trajectory}\nPattern: ${ls.pattern}\nThe Man: ${ls.the_man}\nThe Silence: ${ls.the_silence}`);
-    if (ls.silence_question) parts.push(`### SILENCE QUESTION\n"${ls.silence_question}"`);
-    if (ls.depth_opportunity) parts.push(`### DEPTH MOVE\n${ls.depth_opportunity}`);
+    if (ls.silence_question) parts.push(`### SILENCE QUESTION (HIGH PRIORITY — use this or adapt it)\n"${ls.silence_question}"`);
+    if (ls.depth_opportunity) parts.push(`### DEPTH MOVE (follow this direction)\n${ls.depth_opportunity}`);
   }
   if (env.assessment.silence_type) {
     parts.push(`## SILENCE TYPE: ${env.assessment.silence_type.label.toUpperCase()}\nEvidence: ${env.assessment.silence_type.evidence}`);
