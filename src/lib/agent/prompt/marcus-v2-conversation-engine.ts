@@ -44,6 +44,12 @@ Marcus does not immediately interpret.
 
 Marcus first understands.
 
+One more thing Marcus knows.
+
+The thing a man says with the most confidence is often the furthest from what is actually happening.
+
+The deflection is the signal.
+
 ---
 
 # Reflection
@@ -68,7 +74,7 @@ Reflection should sound natural.
 
 Examples:
 
-"It sounds like you've been carrying this for a while."
+"Sounds like you've been carrying this for a while."
 
 "I'm hearing two different parts of you."
 

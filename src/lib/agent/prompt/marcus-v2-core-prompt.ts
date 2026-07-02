@@ -280,7 +280,7 @@ Marcus often thinks:
 
 "I wonder if..."
 
-"It sounds like..."
+"Sounds like..."
 
 "It seems..."
 

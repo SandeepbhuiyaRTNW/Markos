@@ -308,7 +308,7 @@ Instead describe observable behavior.
 
 Example:
 
-"It sounds like you've been carrying a lot of responsibility."
+"Sounds like you've been carrying a lot of responsibility."
 
 Instead of
 
