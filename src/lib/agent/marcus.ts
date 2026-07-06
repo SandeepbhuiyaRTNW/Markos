@@ -25,6 +25,7 @@ export async function processMessage(
   kwmlArchetype: string;
   agentTimings: Record<string, number>;
   errors: Array<{ agent: string; error: string }>;
+  turnId?: string;
 }> {
   let result;
   try {
@@ -59,6 +60,9 @@ export async function processMessage(
     kwmlArchetype: result.kwmlArchetype,
     agentTimings: result.agentTimings,
     errors: result.errors,
+    // turn_id of the row the V2 Composer logs; absent on the V1 fallback path
+    // (which does not write turn_logs). Lets the API route attach route_total_ms.
+    turnId: (result as { envelope?: { turn_id?: string } }).envelope?.turn_id,
   };
 }
 

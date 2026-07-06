@@ -50,6 +50,7 @@ export async function ensureTurnLogsTable(): Promise<void> {
       -- Performance
       agent_timings JSONB,
       total_ms INTEGER,
+      route_total_ms INTEGER,
       regen_triggers TEXT[],
       errors JSONB,
 
@@ -123,6 +124,21 @@ export async function logTurn(env: StateEnvelope): Promise<void> {
     );
   } catch (err) {
     console.error('[TurnLogger] Failed to log turn:', err);
+  }
+}
+
+/**
+ * Record the route-level wall-clock (entry -> response-ready, INCLUDING STT and
+ * TTS) onto the turn row the Composer already inserted for this turn. Called
+ * from the API route after synthesis. On the voice path the intervening TTS
+ * await guarantees the Composer's fire-and-forget insert has landed; on the
+ * text path (no TTS) it is best-effort and may occasionally find no row yet.
+ */
+export async function recordRouteTotal(turnId: string, routeTotalMs: number): Promise<void> {
+  try {
+    await query(`UPDATE turn_logs SET route_total_ms = $2 WHERE turn_id = $1`, [turnId, routeTotalMs]);
+  } catch (err) {
+    console.error('[TurnLogger] Failed to record route_total_ms:', err);
   }
 }
 

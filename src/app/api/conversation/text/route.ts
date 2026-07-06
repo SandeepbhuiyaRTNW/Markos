@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { processMessage } from '@/lib/agent/marcus';
+import { recordRouteTotal } from '@/lib/observability/turn-logger';
 import { query } from '@/lib/db';
 
 /**
@@ -9,6 +10,8 @@ import { query } from '@/lib/db';
  * Returns: { marcusText, emotion, conversationId }
  */
 export async function POST(req: NextRequest) {
+  // Route-level wall-clock start: entry -> response-ready (text path, no STT/TTS).
+  const routeStart = Date.now();
   try {
     const body = await req.json();
     const { userId, message } = body;
@@ -62,12 +65,16 @@ export async function POST(req: NextRequest) {
     );
 
     // Process through Marcus agent (same as voice path)
-    const { response: marcusText, emotion } = await processMessage(
+    const { response: marcusText, emotion, turnId } = await processMessage(
       userId,
       conversationId!,
       message,
       history
     );
+
+    if (turnId) {
+      await recordRouteTotal(turnId, Date.now() - routeStart);
+    }
 
     return NextResponse.json({
       marcusText,

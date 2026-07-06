@@ -63,7 +63,7 @@ async function main() {
 
   const res = await pool.query(
     `SELECT agent_timings, boundary_violations, errors, crisis_level
-            ${hasLatencyCols ? ', total_ms, regen_triggers' : ''}
+            ${hasLatencyCols ? ', total_ms, route_total_ms, regen_triggers' : ''}
      FROM turn_logs
      WHERE timestamp > NOW() - ($1 || ' days')::interval
        AND agent_timings IS NOT NULL
@@ -78,6 +78,7 @@ async function main() {
     errors: unknown[] | string | null;
     crisis_level: string | null;
     total_ms?: number | null;
+    route_total_ms?: number | null;
     regen_triggers?: string[] | null;
   }>;
 
@@ -89,6 +90,8 @@ async function main() {
 
   const perAgent: Record<string, number[]> = {};
   const measuredTotals: number[] = [];
+  const measuredRouteTotals: number[] = [];
+  const sttTtsOverheads: number[] = []; // route_total_ms - total_ms (STT + TTS + route DB)
   const reconTotals: number[] = [];
   const regenTriggerCounts: Record<string, number> = {};
   let regenTurns = 0;
@@ -114,6 +117,12 @@ async function main() {
       (t['composer'] || 0);
     if (recon > 0) reconTotals.push(recon);
     if (typeof row.total_ms === 'number' && row.total_ms > 0) measuredTotals.push(row.total_ms);
+    if (typeof row.route_total_ms === 'number' && row.route_total_ms > 0) {
+      measuredRouteTotals.push(row.route_total_ms);
+      if (typeof row.total_ms === 'number' && row.total_ms > 0) {
+        sttTtsOverheads.push(row.route_total_ms - row.total_ms);
+      }
+    }
     if (t['composer']) composerTurns++;
 
     // Regeneration accounting: prefer the persisted trigger list; fall back to
@@ -132,6 +141,8 @@ async function main() {
   }
 
   measuredTotals.sort((a, b) => a - b);
+  measuredRouteTotals.sort((a, b) => a - b);
+  sttTtsOverheads.sort((a, b) => a - b);
   reconTotals.sort((a, b) => a - b);
 
   console.log(`\n=== Turn latency analysis (last ${days} days, ${rows.length} turns) ===\n`);
@@ -142,6 +153,12 @@ async function main() {
     console.log(`Measured total: none yet (run migrate-turn-logs-latency.sql, then collect turns).`);
   }
   console.log(`Reconstructed total (critical path):            p50 ${fmt(percentile(reconTotals, 50))}  p95 ${fmt(percentile(reconTotals, 95))}  (n=${reconTotals.length})`);
+  if (measuredRouteTotals.length > 0) {
+    console.log(`Route total (route_total_ms, incl. STT + TTS):  p50 ${fmt(percentile(measuredRouteTotals, 50))}  p95 ${fmt(percentile(measuredRouteTotals, 95))}  (n=${measuredRouteTotals.length})`);
+  }
+  if (sttTtsOverheads.length > 0) {
+    console.log(`Implied STT + TTS + route overhead (route-total): p50 ${fmt(percentile(sttTtsOverheads, 50))}  p95 ${fmt(percentile(sttTtsOverheads, 95))}  (n=${sttTtsOverheads.length})`);
+  }
   console.log(`Turns with a regeneration: ${regenTurns} (${((regenTurns / rows.length) * 100).toFixed(1)}%)`);
   for (const [trigger, count] of Object.entries(regenTriggerCounts).sort((a, b) => b[1] - a[1])) {
     console.log(`  ${trigger.padEnd(20)} ${count} (${((count / rows.length) * 100).toFixed(1)}% of turns)`);

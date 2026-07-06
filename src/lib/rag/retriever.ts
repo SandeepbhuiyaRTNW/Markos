@@ -9,6 +9,9 @@ function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 // dedupes concurrent identical requests (a whisperer's two rounds, or several
 // retrievals embedding the same utterance in one turn) down to a single API
 // call. A bounded FIFO cap keeps memory flat on long-lived (warm) instances.
+// The key is the input text only, so this assumes a single fixed embedding
+// model + dimensions per process (getEmbedding always uses text-embedding-3-large
+// @ 3072 below); if that ever varies, fold model + dims into the cache key.
 const EMBED_CACHE = new Map<string, Promise<number[]>>();
 const EMBED_CACHE_MAX = 512;
 
