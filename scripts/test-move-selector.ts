@@ -81,6 +81,11 @@ assert('5  crisis beats a direct advice ask',
   selectMove(makeEnv({ crisis: 'acute', utterance: 'what should I do' })).move === 'crisis_protocol');
 assert('6  crisis beats a standing style pref',
   selectMove(makeEnv({ crisis: 'elevated', stylePreferences: JUST_LISTEN })).move === 'crisis_protocol');
+// Safety pin: crisis (rung 1) must outrank the clever advice-override (rung 2).
+// Even the pref-override rule can never swallow the crisis rule.
+const a51 = selectMove(makeEnv({ crisis: 'elevated', stylePreferences: JUST_LISTEN, utterance: 'what should I do about telling my wife?' }));
+assert('51 crisis outranks advice-override (pref + advice ask + crisis) -> crisis_protocol',
+  a51.move === 'crisis_protocol' && a51.rule === 'crisis_pass_through', `move=${a51.move} rule=${a51.rule}`);
 
 console.log('\n── B. Style “just listen” vs direct advice ask ──');
 const b7 = selectMove(makeEnv({ stylePreferences: JUST_LISTEN, utterance: 'what should I do about telling my wife?' }));
