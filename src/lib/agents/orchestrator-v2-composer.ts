@@ -256,6 +256,7 @@ async function storeInBackground(env: StateEnvelope): Promise<void> {
   const { query: dbQuery } = await import('../db');
   const { extractMemories } = await import('../memory/memory-manager');
   const { saveKWMLProfile } = await import('../kwml/detector');
+  const { runConversationIntelligence } = await import('../intelligence');
 
   try {
     const userMsgResult = await dbQuery(
@@ -275,6 +276,10 @@ async function storeInBackground(env: StateEnvelope): Promise<void> {
       env.assessment.archetype?.reading
         ? saveKWMLProfile(env.user_id, env.assessment.archetype.reading, env.conversation_id)
         : Promise.resolve(),
+      // Conversation Intelligence (Part 1) — gated internally (cheap arc append
+      // every turn, gpt-4o-mini only when earned). Own .catch so a CI failure
+      // can never reject this Promise.all or affect memory/message writes.
+      runConversationIntelligence(env, userMsgId).catch(err => console.error('[CI] error:', err)),
     ]);
   } catch (err) {
     console.error('[V2 Store] Error:', err);
