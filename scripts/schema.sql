@@ -1,4 +1,7 @@
--- Drop existing tables to recreate cleanly
+-- Drop existing tables to recreate cleanly (children first for clean FK order)
+DROP TABLE IF EXISTS follow_ups CASCADE;
+DROP TABLE IF EXISTS open_loops CASCADE;
+DROP TABLE IF EXISTS conversation_intelligence CASCADE;
 DROP TABLE IF EXISTS reflections CASCADE;
 DROP TABLE IF EXISTS kwml_profiles CASCADE;
 DROP TABLE IF EXISTS questions CASCADE;

@@ -5,7 +5,7 @@
  */
 
 import { query } from '../db';
-import type { ArcPoint, CIExtraction, ExistingLoop } from './types';
+import type { ArcPoint, CIExtraction, CIPerson, ExistingLoop } from './types';
 
 // A loop that has not been referenced in this many sessions flips to 'dormant'
 // so Marcus never surfaces a stale thread as if it were live.
@@ -21,6 +21,30 @@ function clamp01(n: unknown, dflt = 0.5): number {
 
 function normalizeTrigger(t: unknown): 'next_session' | 'time' | 'event' {
   return t === 'time' || t === 'event' ? t : 'next_session';
+}
+
+/**
+ * Merge people into the conversation-level row WITHOUT clobbering earlier turns.
+ * applyCIExtraction runs per gated turn, but the row represents the WHOLE
+ * conversation. Union by name (case-insensitive); on a name conflict the newer
+ * (incoming) entry wins so a later turn can refine sentiment/note. An empty or
+ * partial pass keeps everyone captured earlier — it never erases people.
+ */
+function mergePeople(existing: unknown, incoming: unknown): CIPerson[] {
+  const byName = new Map<string, CIPerson>();
+  const add = (arr: unknown) => {
+    if (!Array.isArray(arr)) return;
+    for (const p of arr) {
+      if (!p || typeof p !== 'object') continue;
+      const person = p as CIPerson;
+      const name = typeof person.name === 'string' ? person.name.trim() : '';
+      if (!name) continue;
+      byName.set(name.toLowerCase(), person);
+    }
+  };
+  add(existing);  // earlier turns first
+  add(incoming);  // newer wins on a same-name conflict
+  return [...byName.values()];
 }
 
 /**
@@ -76,7 +100,14 @@ export async function applyCIExtraction(params: {
   const { userId, conversationId, sourceMessageId, currentSession, extraction } = params;
 
   // 1. Conversation-level snapshot. The row already exists (appendArcPoint ran
-  //    first). people is authoritative from the model; vocab moments accumulate.
+  //    first). people MERGES with prior turns (an empty/partial pass never
+  //    clobbers); vocab moments accumulate; headline/what_changed are
+  //    last-non-empty-wins via COALESCE(NULLIF(...)).
+  const existingRow = await query(
+    `SELECT people FROM conversation_intelligence WHERE conversation_id = $1 AND user_id = $2`,
+    [conversationId, userId],
+  );
+  const mergedPeople = mergePeople(existingRow.rows[0]?.people, extraction.people || []);
   await query(
     `UPDATE conversation_intelligence
        SET headline = COALESCE(NULLIF($3, ''), headline),
@@ -86,7 +117,7 @@ export async function applyCIExtraction(params: {
            updated_at = NOW()
      WHERE conversation_id = $2 AND user_id = $1`,
     [userId, conversationId, extraction.headline || '', extraction.what_changed || '',
-     JSON.stringify(extraction.people || []), JSON.stringify(extraction.vocabulary_moments || [])],
+     JSON.stringify(mergedPeople), JSON.stringify(extraction.vocabulary_moments || [])],
   );
 
   // 2. New open loops.
