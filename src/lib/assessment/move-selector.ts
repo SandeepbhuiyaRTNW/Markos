@@ -107,10 +107,16 @@ const ASK_MOVES = new Set<ConversationMove>(['ask_grounding_question', 'ask_loss
 export const DIVORCE_SHOCK_TOO_EARLY = ['identity_rebuild', 'financial_strategy', 'dating', 'reconciliation'];
 
 // Affective trust required before Marcus invites an INTIMATE probe (naming a
-// loss). Above the 0.2 new-user default and the ~0.4 unleashed-entry band:
-// genuine emotional rapport, not merely "not brand new". mapPhase can mark a
-// deep first message 'unleashed' while trust is still low, so phase alone must
-// NOT unlock a probing move — the trust gate is the real guard.
+// loss). mapPhase can mark a deep first message 'unleashed' while trust is still
+// low, so phase alone must NOT unlock a probing move — THIS gate is the real guard.
+//
+// Affective-trust bands (computeTrust / phase-mapper), for calibration:
+//   0.2  = new-user default (createStateEnvelope)
+//   ~0.4 = unleashed-entry band (phase-mapper allows 'unleashed' here)
+//   0.5  = rapport established — the floor for an intimate probe (THIS constant)
+//   0.7  = deep / 'brothered'
+// DO NOT lower this to 0.4 to match the phase band: that silently reopens the
+// gate this fixes (a low-trust griever getting "name your loss" on turn one).
 export const RAPPORT_MIN_AFFECTIVE_TRUST = 0.5;
 
 // Stored preference KEYS (written by extractMemories, memory-manager.ts) that

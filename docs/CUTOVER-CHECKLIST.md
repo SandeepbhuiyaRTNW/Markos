@@ -154,3 +154,9 @@ stores 60 points in one JSONB. Fine at current scale; consider a cap or rollup.
 5. Swap the three composer call sites (`conversational-agent.ts`,
    `orchestrator-v2-composer.ts`, `opening/route.ts`) to `buildSystemPromptV2`,
    run the QA battery for parity, then retire the old prompt.
+
+> **QA note (BUG 1 fix):** `getStylePreferences` now prefixes each stored
+> preference with its key — the live `{style_preferences}` prompt content changed
+> from `- <value>` to `- [style_no_ending_questions] <value>`. Re-verify in the
+> QA battery that this string change does not move Marcus's outputs for users who
+> have stored style preferences.
