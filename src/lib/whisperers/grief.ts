@@ -52,8 +52,10 @@ const GRIEF_RED_LINES = [
 
 /** Run the Grief Whisperer */
 export async function runGriefWhisperer(env: StateEnvelope): Promise<WhispererResult> {
-  const questionCandidates = await retrieveWhispererQuestions(env, 'grief', 5);
-  const trainingContext = await retrieveTrainingContext(env.utterance, 'grief', 3);
+  const [questionCandidates, trainingContext] = await Promise.all([
+    retrieveWhispererQuestions(env, 'grief', 5),
+    retrieveTrainingContext(env.utterance, 'grief', 3),
+  ]);
 
   // Determine active frameworks
   const frameworks: string[] = [];

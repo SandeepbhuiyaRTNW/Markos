@@ -49,6 +49,8 @@ export async function ensureTurnLogsTable(): Promise<void> {
 
       -- Performance
       agent_timings JSONB,
+      total_ms INTEGER,
+      regen_triggers TEXT[],
       errors JSONB,
 
       -- Cultural
@@ -80,7 +82,8 @@ export async function logTurn(env: StateEnvelope): Promise<void> {
         wisdom_voices, whisperers_invoked, frameworks_applied,
         craft_form, craft_pacing,
         agent_timings, errors,
-        register, faith_context, pathway_candidates
+        register, faith_context, pathway_candidates,
+        total_ms, regen_triggers
       ) VALUES (
         $1, $2, $3, $4, $5,
         $6, $7, $8,
@@ -91,7 +94,8 @@ export async function logTurn(env: StateEnvelope): Promise<void> {
         $19, $20, $21,
         $22, $23,
         $24, $25,
-        $26, $27, $28
+        $26, $27, $28,
+        $29, $30
       )`,
       [
         env.turn_id, env.user_id, env.conversation_id,
@@ -113,6 +117,8 @@ export async function logTurn(env: StateEnvelope): Promise<void> {
         env.sentinels.cultural.register, env.sentinels.cultural.faith_context,
         env.sentinels.pathway_router.candidates.length > 0
           ? JSON.stringify(env.sentinels.pathway_router.candidates) : null,
+        env.total_ms,
+        env.regen_triggers.length > 0 ? env.regen_triggers : null,
       ]
     );
   } catch (err) {

@@ -30,8 +30,10 @@ const MIDLIFE_RED_LINES = [
 ];
 
 export async function runMidlifeWhisperer(env: StateEnvelope): Promise<WhispererResult> {
-  const questionCandidates = await retrieveWhispererQuestions(env, 'midlife', 5);
-  const trainingContext = await retrieveTrainingContext(env.utterance, 'midlife', 3);
+  const [questionCandidates, trainingContext] = await Promise.all([
+    retrieveWhispererQuestions(env, 'midlife', 5),
+    retrieveTrainingContext(env.utterance, 'midlife', 3),
+  ]);
 
   const frameworks: string[] = [];
   const msg = env.utterance.toLowerCase();

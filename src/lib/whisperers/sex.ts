@@ -31,8 +31,10 @@ const SEX_RED_LINES = [
 ];
 
 export async function runSexWhisperer(env: StateEnvelope): Promise<WhispererResult> {
-  const questionCandidates = await retrieveWhispererQuestions(env, 'sex', 5);
-  const trainingContext = await retrieveTrainingContext(env.utterance, 'sex', 3);
+  const [questionCandidates, trainingContext] = await Promise.all([
+    retrieveWhispererQuestions(env, 'sex', 5),
+    retrieveTrainingContext(env.utterance, 'sex', 3),
+  ]);
 
   const frameworks: string[] = [];
   const msg = env.utterance.toLowerCase();

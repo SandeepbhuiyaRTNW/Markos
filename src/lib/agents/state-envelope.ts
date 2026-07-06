@@ -216,5 +216,10 @@ export interface StateEnvelope {
   active_agents: string[];
   agent_timings: Record<string, number>;
   errors: Array<{ agent: string; error: string }>;
+
+  // Latency instrumentation
+  turn_start_ms: number;          // Date.now() at envelope creation
+  total_ms: number | null;        // measured wall-clock of the agent pipeline (set before logTurn)
+  regen_triggers: string[];       // post-generation checks that forced a regeneration
 }
 

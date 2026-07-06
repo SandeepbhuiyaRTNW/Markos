@@ -30,8 +30,10 @@ const FRIENDSHIP_RED_LINES = [
 ];
 
 export async function runFriendshipWhisperer(env: StateEnvelope): Promise<WhispererResult> {
-  const questionCandidates = await retrieveWhispererQuestions(env, 'friendship', 5);
-  const trainingContext = await retrieveTrainingContext(env.utterance, 'friendship', 3);
+  const [questionCandidates, trainingContext] = await Promise.all([
+    retrieveWhispererQuestions(env, 'friendship', 5),
+    retrieveTrainingContext(env.utterance, 'friendship', 3),
+  ]);
 
   const frameworks: string[] = [];
   const msg = env.utterance.toLowerCase();

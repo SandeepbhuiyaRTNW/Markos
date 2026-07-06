@@ -18,7 +18,21 @@ import { analyzeConversation, computeTrajectoryDrift } from './conversation-stat
 import { searchPastMessages } from '../memory/memory-manager';
 import type { AgentResponse } from './orchestrator-v2';
 
-export async function runComposerPipeline(env: StateEnvelope, historyStr: string): Promise<AgentResponse> {
+export interface PreComposerResult {
+  ragWisdom: string;
+  legacyQuestions: string[];
+  convState: Awaited<ReturnType<typeof analyzeConversation>> | null;
+}
+
+/**
+ * Composer pre-fetch: RAG wisdom, legacy question retrieval, and the
+ * conversation-state escalation engine (loop-breaking, pushback/resistance,
+ * advice-loop detection, hopelessness templates). Depends only on Tier 1/2
+ * outputs (memory, listener stack, archetype, arena) — none of which the
+ * Whisperer tier mutates — so the orchestrator runs it concurrently with the
+ * Whisperers. Kept callable standalone (composer computes it if not supplied).
+ */
+export async function retrievePreComposer(env: StateEnvelope, historyStr: string): Promise<PreComposerResult> {
   // ═══════════════════════════════════════════
   // PRE-COMPOSER: RAG + Legacy question retrieval (parallel)
   // ═══════════════════════════════════════════
@@ -45,6 +59,13 @@ export async function runComposerPipeline(env: StateEnvelope, historyStr: string
     ragWisdom = rw; legacyQuestions = lq; convState = cs;
   } catch (err) { recordEnvelopeError(env, 'rag-retrieval', err); }
   finally { ragDone(); }
+  return { ragWisdom, legacyQuestions, convState };
+}
+
+export async function runComposerPipeline(env: StateEnvelope, historyStr: string, pre?: PreComposerResult): Promise<AgentResponse> {
+  // Pre-fetch is supplied by the orchestrator (run concurrently with Whisperers);
+  // fall back to computing it here when the composer is invoked standalone.
+  const { ragWisdom, legacyQuestions, convState } = pre ?? await retrievePreComposer(env, historyStr);
 
   // Merge Whisperer question candidates with legacy questions
   const allQuestionTexts = [
@@ -162,6 +183,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
 
     if (!boundaryResult.passed) {
       console.log(`[V2] 🚫 Boundary violations: ${boundaryResult.violations.slice(0, 3).join(', ')} — regenerating`);
+      env.regen_triggers.push('boundary');
       const overridePrompt = getBoundaryOverridePrompt(boundaryResult);
       const retryMessages = [...messages, new AIMessage(content), new HumanMessage(overridePrompt)];
       const retry = await model.invoke(retryMessages);
@@ -177,6 +199,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
         const drift = await computeTrajectoryDrift(content, prevMarcus);
         if (drift > 0.85) {
           console.log(`[V2] 🔄 Trajectory dedup (drift: ${drift.toFixed(3)}) — regenerating`);
+          env.regen_triggers.push('trajectory_dedup');
           const dedupMessages = [...messages, new AIMessage(content),
             new HumanMessage(`[SYSTEM OVERRIDE] Your response is semantically identical to what you've been saying all session. You are STUCK IN A LOOP. Write a COMPLETELY DIFFERENT response. Change angle entirely. 2-3 sentences. End differently.`)];
           const dedupRetry = await model.invoke(dedupMessages);
@@ -192,6 +215,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     // 1. Fantasy-Identity Blocker — re-roll if draft contains forward-projecting templates
     if (detectFantasyIdentity(content)) {
       console.log(`[V2] 🎭 Fantasy-identity template detected — regenerating`);
+      env.regen_triggers.push('fantasy_identity');
       const fantasyOverride = [...messages, new AIMessage(content),
         new HumanMessage(`[SYSTEM OVERRIDE] Your response contains a forward-projecting fantasy-identity question ("imagine yourself a year from now" pattern). This is a banned template. Rewrite with a PRESENT-TENSE or PAST-EXCAVATING question instead. Ask about what IS happening, not what he wants to become. 2-3 sentences.`)];
       const fantasyRetry = await model.invoke(fantasyOverride);
@@ -202,6 +226,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     const vocabViolations = detectVocabSubstitutions(env.utterance, content);
     if (vocabViolations.length > 0) {
       console.log(`[V2] 📝 Vocab fidelity violations: ${vocabViolations.slice(0, 3).join(', ')} — regenerating`);
+      env.regen_triggers.push('vocab_fidelity');
       const vocabOverride = [...messages, new AIMessage(content),
         new HumanMessage(`[SYSTEM OVERRIDE] Your response translated the user's specific words into clinical abstractions. The user's EXACT words must appear in your response. Return at least one specific noun, verb, or phrase from the user's message verbatim. Do NOT substitute "throw up" with "heavy feeling" or "cheated" with "betrayal" etc. Rewrite using the user's own vocabulary. 2-3 sentences.`)];
       const vocabRetry = await model.invoke(vocabOverride);
@@ -212,6 +237,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     const forbiddenViolations = detectForbiddenPhrases(content);
     if (forbiddenViolations.length > 0) {
       console.log(`[V2] 🚫 Forbidden phrases: ${forbiddenViolations.join(', ')} — regenerating`);
+      env.regen_triggers.push('forbidden_phrase');
       const forbiddenOverride = [...messages, new AIMessage(content),
         new HumanMessage(`[SYSTEM OVERRIDE] Your response contained forbidden phrases (${forbiddenViolations.join(', ')}). These are banned. Rewrite without any of them. Be direct and concrete. 2-3 sentences.`)];
       const forbiddenRetry = await model.invoke(forbiddenOverride);
@@ -228,6 +254,9 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
 
     env.composer_output = content;
     env.final_response = content;
+    // Measured wall-clock of the agent pipeline (envelope creation → response
+    // ready). Excludes route-level STT/TTS, which are not instrumented here.
+    env.total_ms = Date.now() - env.turn_start_ms;
   } catch (err) {
     recordEnvelopeError(env, 'composer', err);
     env.final_response = "I hear you. Tell me more.";

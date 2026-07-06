@@ -30,8 +30,10 @@ const WORK_RED_LINES = [
 ];
 
 export async function runWorkWhisperer(env: StateEnvelope): Promise<WhispererResult> {
-  const questionCandidates = await retrieveWhispererQuestions(env, 'work', 5);
-  const trainingContext = await retrieveTrainingContext(env.utterance, 'work', 3);
+  const [questionCandidates, trainingContext] = await Promise.all([
+    retrieveWhispererQuestions(env, 'work', 5),
+    retrieveTrainingContext(env.utterance, 'work', 3),
+  ]);
 
   const frameworks: string[] = [];
   const msg = env.utterance.toLowerCase();
