@@ -38,6 +38,7 @@ function makeEnv(o: {
   depth?: number;
   crisis?: CrisisLevel;
   pathway?: PathwayCandidate[];
+  trust?: { cognitive?: number; affective?: number };
 } = {}): StateEnvelope {
   const env = createStateEnvelope({
     userId: 'u', conversationId: 'c', utterance: o.utterance ?? '', conversationHistory: [], userName: null,
@@ -53,6 +54,7 @@ function makeEnv(o: {
   if (o.silence) env.assessment.silence_type = { label: o.silence, evidence: '', confidence: 0.8 };
   if (o.depth !== undefined) env.sentinels.listener_stack = stubListener(o.depth);
   if (o.pathway) env.sentinels.pathway_router = { candidates: o.pathway };
+  if (o.trust) env.assessment.trust = { cognitive: o.trust.cognitive ?? 0.5, affective: o.trust.affective ?? 0.2 };
   return env;
 }
 
@@ -64,7 +66,9 @@ function makeCS(o: Partial<ConversationState> = {}): ConversationState {
   };
 }
 
-const JUST_LISTEN = 'He asked Marcus to stop ending responses with questions. Respect this.';
+// Realistic stored-preference format: getStylePreferences prefixes each line
+// with its stable key, e.g. "- [style_no_questions] ...".
+const JUST_LISTEN = '- [style_no_questions] He asked Marcus to stop ending responses with questions.';
 const DIVORCE = { divorce: 0.8, love: 0.3 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -94,7 +98,7 @@ assert('8  ...via advice_ask_overrides_just_listen rule', b7.rule === 'advice_as
 assert('9  style pref + venting (no ask) -> stay_present',
   selectMove(makeEnv({ stylePreferences: JUST_LISTEN, utterance: 'everything is just piling up and I am exhausted' })).move === 'stay_present');
 assert('10 style pref “just be present” + no ask -> stay_present',
-  selectMove(makeEnv({ stylePreferences: 'He wants me to just be present, not probing.', utterance: 'today was rough' })).move === 'stay_present');
+  selectMove(makeEnv({ stylePreferences: '- [style_presence] He wants presence and active listening, not probing.', utterance: 'today was rough' })).move === 'stay_present');
 const b11 = selectMove(makeEnv({ utterance: 'what should I do about my job?' }));
 assert('11 no pref + advice ask -> give_practical_advice', b11.move === 'give_practical_advice', `rule=${b11.rule}`);
 assert('12 ...via explicit_practical_advice rule', b11.rule === 'explicit_practical_advice');
@@ -149,13 +153,13 @@ assert('35 advice move does not ask a question',
   selectMove(makeEnv({ utterance: 'what should I do?' })).ask_question === false);
 
 console.log('\n── G. Question-selecting moves ──');
-const g36 = selectMove(makeEnv({ utterance: 'I keep thinking about my father', arena: { grief: 0.8 }, silence: 'grief', phase: 'unleashed', depth: 3 }));
+const g36 = selectMove(makeEnv({ utterance: 'I keep thinking about my father', arena: { grief: 0.8 }, silence: 'grief', phase: 'unleashed', depth: 3, trust: { affective: 0.6 } }));
 assert('36 grief silence + depth>=3 + trust -> ask_loss_naming_question', g36.move === 'ask_loss_naming_question', `rule=${g36.rule}`);
 assert('37 ask_loss_naming asks a question', g36.ask_question === true);
 assert('38 grief silence depth 2 -> not loss-naming (falls to default)',
   selectMove(makeEnv({ silence: 'grief', phase: 'unleashed', depth: 2 })).move === 'make_observation');
-assert('39 grief silence but unsilenced -> not loss-naming (too early to invite)',
-  selectMove(makeEnv({ silence: 'grief', phase: 'unsilenced', depth: 4 })).move === 'reflect_only');
+assert('39 grief silence but unsilenced -> not loss-naming (phase blocks even WITH trust)',
+  selectMove(makeEnv({ silence: 'grief', phase: 'unsilenced', depth: 4, trust: { affective: 0.6 } })).move === 'reflect_only');
 assert('40 avoidance silence depth 2 -> ask_grounding_question',
   selectMove(makeEnv({ silence: 'avoidance', depth: 2 })).move === 'ask_grounding_question');
 assert('41 avoidance silence depth 4 -> not grounding (falls to default)',
@@ -179,6 +183,33 @@ const refNotYet = selectMove(makeEnv({ depth: 2, pathway: [{ target: 'mens_circl
 assert('49 pathway “not_yet” only -> refer not warranted', refNotYet.refer_human_support.warranted === false);
 assert('50 no pathway candidates -> refer not warranted, no target',
   (() => { const d = selectMove(makeEnv({ depth: 2 })); return d.refer_human_support.warranted === false && d.refer_human_support.target === null; })());
+
+console.log('\n── J. Codex boundary fixes (BUG 1 stored no-questions key; BUG 2 grief trust gate) ──');
+// BUG 1: a stored style_no_ending_questions preference (carried by KEY) must set
+// hasNoQuestionPref=true and beat a question move — even when the prose value
+// would NOT match the old regex.
+const j52 = selectMove(makeEnv({
+  stylePreferences: '- [style_no_ending_questions] He does not want responses to end with questions.',
+  silence: 'avoidance', depth: 2, // context that would otherwise pick ask_grounding_question
+}));
+assert('52 stored style_no_ending_questions -> stay_present, no question (BUG 1)',
+  j52.move === 'stay_present' && j52.ask_question === false && j52.rule === 'honor_just_listen', `move=${j52.move} rule=${j52.rule}`);
+const j53 = selectMove(makeEnv({
+  // Value reworded so the OLD prose regex would miss it; the KEY still honors it.
+  stylePreferences: '- [style_no_ending_questions] He prefers statements over interrogatives.',
+  silence: 'avoidance', depth: 2,
+}));
+assert('53 stored key honored despite reworded value (no silent break) (BUG 1)',
+  j53.move === 'stay_present' && j53.ask_question === false);
+
+// BUG 2: a low-trust, high-depth, grief, non-unsilenced envelope must NOT get the
+// loss-naming probe; a high-trust one still can.
+const j54 = selectMove(makeEnv({ silence: 'grief', phase: 'unleashed', depth: 3, trust: { affective: 0.2 } }));
+assert('54 low-trust grief depth3 non-unsilenced -> reflect_only, NOT loss-naming (BUG 2)',
+  j54.move === 'reflect_only' && j54.rule === 'default_reflect_deep', `move=${j54.move} rule=${j54.rule}`);
+const j55 = selectMove(makeEnv({ silence: 'grief', phase: 'unleashed', depth: 3, trust: { affective: 0.6 } }));
+assert('55 high-trust grief depth3 non-unsilenced -> ask_loss_naming_question (BUG 2)',
+  j55.move === 'ask_loss_naming_question', `move=${j55.move} rule=${j55.rule}`);
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${'─'.repeat(50)}`);

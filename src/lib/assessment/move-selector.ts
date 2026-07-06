@@ -32,7 +32,9 @@
  *                                  no advice — stop pushing)
  *  7. explicit_practical_advice    direct advice ask (no style pref) ->
  *                                  give_practical_advice
- *  8. ask_loss_naming              grief-silence + depth>=3 + trust to invite
+ *  8. ask_loss_naming              grief-silence + depth>=3 + phase!=unsilenced
+ *                                  + affective trust >= rapport threshold (an
+ *                                  intimate probe — phase alone must NOT unlock it)
  *                                  -> ask_loss_naming_question
  *  9. ask_grounding               avoidance-silence + depth<=3 (side door)
  *                                  -> ask_grounding_question
@@ -104,6 +106,25 @@ const ASK_MOVES = new Set<ConversationMove>(['ask_grounding_question', 'ask_loss
 
 export const DIVORCE_SHOCK_TOO_EARLY = ['identity_rebuild', 'financial_strategy', 'dating', 'reconciliation'];
 
+// Affective trust required before Marcus invites an INTIMATE probe (naming a
+// loss). Above the 0.2 new-user default and the ~0.4 unleashed-entry band:
+// genuine emotional rapport, not merely "not brand new". mapPhase can mark a
+// deep first message 'unleashed' while trust is still low, so phase alone must
+// NOT unlock a probing move — the trust gate is the real guard.
+export const RAPPORT_MIN_AFFECTIVE_TRUST = 0.5;
+
+// Stored preference KEYS (written by extractMemories, memory-manager.ts) that
+// mean "do not end with / ask questions". We match the STABLE key, not the prose
+// value, so a later reword of the value can never silently stop the preference
+// from being honored. style_no_advice is intentionally excluded (it is about
+// advice, not questions).
+const NO_QUESTION_PREF_KEYS = [
+  'style_no_ending_questions',
+  'style_no_questions',
+  'style_just_listen',
+  'style_presence',
+];
+
 // ─── Signal readers (all reuse envelope fields; derive nothing new) ───
 
 function depthOf(env: StateEnvelope): number { return env.sentinels.listener_stack?.depth_level || 1; }
@@ -115,10 +136,18 @@ function isDirectAdviceAsk(env: StateEnvelope, cs: ConversationState | null): bo
   return cs?.intent === 'seeking_direction' || ADVICE_ASK_RE.test(env.utterance);
 }
 
-const NO_Q_PREF_RE = /(stop\s+(asking|ending)|without\s+asking\s+questions|just\s+listen|just\s+be\s+present|not\s+probing|presence\s+and\s+active\s+listening|don'?t\s+(ask|end|give))/i;
+// Fallback ONLY for an in-utterance request made THIS turn, before extractMemories
+// has stored it as a preference (e.g. "just listen", "stop asking questions").
+const NO_Q_PREF_RE = /(stop\s+(asking|ending)|without\s+asking\s+questions|just\s+listen|just\s+be\s+present|not\s+probing|don'?t\s+(ask|end|give))/i;
+
 function hasNoQuestionPref(env: StateEnvelope): boolean {
-  const s = env.sentinels.memory.style_preferences;
-  return !!s && NO_Q_PREF_RE.test(s);
+  // Stored preference: honor via the carried KEY (robust to value rewording).
+  // getStylePreferences now prefixes each line with its key, e.g.
+  // "- [style_no_ending_questions] ...".
+  const prefs = env.sentinels.memory.style_preferences;
+  if (prefs && NO_QUESTION_PREF_KEYS.some(k => prefs.includes(k))) return true;
+  // In-utterance request this turn (not yet stored as a preference).
+  return NO_Q_PREF_RE.test(env.utterance);
 }
 
 function divorceShock(env: StateEnvelope): boolean {
@@ -174,7 +203,13 @@ const RULES: Rule[] = [
     move: 'give_practical_advice' },
 
   { name: 'ask_loss_naming',
-    predicate: (e) => e.assessment.silence_type?.label === 'grief' && depthOf(e) >= 3 && e.assessment.phase.label !== 'unsilenced',
+    // Intimate probe: requires grief-silence, real depth, past the opening
+    // phase, AND genuine affective trust. The trust gate is the real guard —
+    // phase alone can be 'unleashed' on a deep first message while trust is low.
+    predicate: (e) => e.assessment.silence_type?.label === 'grief'
+      && depthOf(e) >= 3
+      && e.assessment.phase.label !== 'unsilenced'
+      && e.assessment.trust.affective >= RAPPORT_MIN_AFFECTIVE_TRUST,
     move: 'ask_loss_naming_question' },
 
   { name: 'ask_grounding',
