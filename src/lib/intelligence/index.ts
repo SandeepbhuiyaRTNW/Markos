@@ -20,7 +20,20 @@ export { getConversationIntelligenceContext } from './surfacing';
 export { shouldRunCIExtraction, CI_MIN_DEPTH, CI_LLM_EVERY_N_TURNS } from './extraction';
 export { LOOP_DORMANT_AFTER_SESSIONS } from './writer';
 
+// Set once per process if the CI tables are absent (migration not yet applied),
+// so we log a single clear line and then skip cleanly instead of erroring every
+// turn. Per-process = per warm instance, which is the right granularity.
+let ciTablesMissing = false;
+
+function isMissingRelationError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { code?: string; message?: string };
+  if (e.code === '42P01') return true; // undefined_table
+  return typeof e.message === 'string' && /relation .* does not exist/i.test(e.message);
+}
+
 export async function runConversationIntelligence(env: StateEnvelope, sourceMessageId: string): Promise<void> {
+  if (ciTablesMissing) return; // migration not applied — skip cleanly (already logged once)
   try {
     const userId = env.user_id;
     const conversationId = env.conversation_id;
@@ -62,6 +75,13 @@ export async function runConversationIntelligence(env: StateEnvelope, sourceMess
     await applyCIExtraction({ userId, conversationId, sourceMessageId, currentSession, extraction });
   } catch (err) {
     // Best-effort: never let CI failures affect the turn or its other background writes.
+    if (isMissingRelationError(err)) {
+      if (!ciTablesMissing) {
+        ciTablesMissing = true;
+        console.warn('[CI] tables not migrated — skipping CI until migrate-conversation-intelligence.sql is applied');
+      }
+      return;
+    }
     console.error('[CI] runConversationIntelligence error:', err);
   }
 }

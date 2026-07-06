@@ -77,17 +77,49 @@ Marcus responded: "${input.marcusResponse}"`;
 }
 
 function asArray<T>(v: unknown): T[] { return Array.isArray(v) ? (v as T[]) : []; }
+function asString(v: unknown): string { return typeof v === 'string' ? v : ''; }
 
-function normalizeExtraction(parsed: Record<string, unknown>): CIExtraction {
+const CI_KEYS = [
+  'headline', 'what_changed', 'people', 'vocabulary_moments',
+  'new_open_loops', 'resolved_open_loops', 'referenced_open_loops', 'follow_ups',
+];
+
+/**
+ * Find the object that actually holds the CI fields. Mirrors extractMemories'
+ * defensiveness: never assume the expected keys are at the top level. If the
+ * model wrapped the payload under an unexpected key (e.g. {"result": {...}}),
+ * descend one level to find the object that has CI keys. If nothing looks like a
+ * CI object, return {} so normalization degrades to "captured nothing this turn".
+ */
+function unwrapCIObject(parsed: unknown): Record<string, unknown> {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  const obj = parsed as Record<string, unknown>;
+  const hasCIKeys = (o: Record<string, unknown>) => CI_KEYS.some(k => k in o);
+  if (hasCIKeys(obj)) return obj;
+  for (const v of Object.values(obj)) {
+    if (v && typeof v === 'object' && !Array.isArray(v) && hasCIKeys(v as Record<string, unknown>)) {
+      return v as Record<string, unknown>;
+    }
+  }
+  return {};
+}
+
+/**
+ * Normalize a parsed model response into a CIExtraction. Every field is optional
+ * and degrades to empty ([] / '') — a malformed or renamed response yields an
+ * empty extraction ("captured nothing"), never a throw.
+ */
+function normalizeExtraction(parsed: unknown): CIExtraction {
+  const obj = unwrapCIObject(parsed);
   return {
-    headline: typeof parsed.headline === 'string' ? parsed.headline : '',
-    people: asArray(parsed.people),
-    vocabulary_moments: asArray(parsed.vocabulary_moments),
-    what_changed: typeof parsed.what_changed === 'string' ? parsed.what_changed : '',
-    new_open_loops: asArray(parsed.new_open_loops),
-    resolved_open_loops: asArray(parsed.resolved_open_loops),
-    referenced_open_loops: asArray<string>(parsed.referenced_open_loops).filter(x => typeof x === 'string'),
-    follow_ups: asArray(parsed.follow_ups),
+    headline: asString(obj.headline),
+    people: asArray(obj.people),
+    vocabulary_moments: asArray(obj.vocabulary_moments),
+    what_changed: asString(obj.what_changed),
+    new_open_loops: asArray(obj.new_open_loops),
+    resolved_open_loops: asArray(obj.resolved_open_loops),
+    referenced_open_loops: asArray<string>(obj.referenced_open_loops).filter(x => typeof x === 'string'),
+    follow_ups: asArray(obj.follow_ups),
   };
 }
 
