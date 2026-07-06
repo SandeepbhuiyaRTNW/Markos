@@ -136,7 +136,13 @@ export async function logTurn(env: StateEnvelope): Promise<void> {
  */
 export async function recordRouteTotal(turnId: string, routeTotalMs: number): Promise<void> {
   try {
-    await query(`UPDATE turn_logs SET route_total_ms = $2 WHERE turn_id = $1`, [turnId, routeTotalMs]);
+    const result = await query(`UPDATE turn_logs SET route_total_ms = $2 WHERE turn_id = $1`, [turnId, routeTotalMs]);
+    // The Composer awaits its logTurn insert before processMessage returns, so
+    // the row must already exist here. A miss means that ordering guarantee
+    // regressed — surface it loudly rather than dropping route_total_ms silently.
+    if (result.rowCount === 0) {
+      console.warn(`[TurnLogger] route_total_ms: no turn_logs row for turn_id=${turnId} (insert ordering regressed?)`);
+    }
   } catch (err) {
     console.error('[TurnLogger] Failed to record route_total_ms:', err);
   }
