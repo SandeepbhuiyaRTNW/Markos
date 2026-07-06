@@ -265,10 +265,17 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
   // ═══════════════════════════════════════════
   // STORE + OBSERVABILITY (fire-and-forget)
   // ═══════════════════════════════════════════
+  // Message + memory writes stay fire-and-forget (not needed downstream).
   storeInBackground(env).catch(err => console.error('[V2] Background store error:', err));
 
-  // Turn logging for clinical observability
-  import('../observability/turn-logger').then(({ logTurn }) => logTurn(env)).catch(() => {});
+  // Turn logging — AWAITED so the turn_logs row exists before processMessage
+  // returns. The API route then reliably attaches route_total_ms via UPDATE,
+  // deterministic even on the text path (which has no TTS settle window).
+  // logTurn never throws (it catches internally). Cost is one INSERT (~10-30ms);
+  // on the voice path this insert previously overlapped the awaited TTS, so
+  // end-to-end grows only by that insert. total_ms is measured earlier (right
+  // after final_response) and is unaffected.
+  await import('../observability/turn-logger').then(({ logTurn }) => logTurn(env)).catch(() => {});
 
   return {
     response: env.final_response || "I hear you. Tell me more.",
