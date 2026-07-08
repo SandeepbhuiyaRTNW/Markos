@@ -20,9 +20,14 @@ tests, **feature-flagged (`KI_ENABLED`, default OFF → passthrough) and UNWIRED
   `... FROM embeddings WHERE source_type IN ('book','doc') ORDER BY embedding <=> $1 LIMIT $2`
   with no domain filter (searches everything every turn). Add an optional
   `excludeDomains: string[]` param and, when non-empty, append
-  `AND (metadata->>'domain') IS DISTINCT FROM ALL($n::text[])`. No schema change
-  — `metadata` is `JSONB` and `source_type` is a real column, both queryable
-  today. Backward-compatible: omit the param → identical to current behavior.
+  `AND (metadata->>'domain' IS NULL OR metadata->>'domain' <> ALL($n::text[]))`.
+  The `IS NULL` branch keeps **untagged books** (no `domain` in `metadata`) in
+  the result — exclusion drops only the named heavy domains, never silently
+  everything. No schema change — `metadata` is `JSONB` and `source_type` is a
+  real column, both queryable today. Backward-compatible: omit the param →
+  identical to current behavior.
+  - **Verify this predicate against a real DB at cutover** — it cannot be tested
+    here without DB access.
 - **Composer:** after the move-selector runs, call
   `selectKnowledgePlan(env, decision)` behind `KI_ENABLED`; pass
   `plan.wisdom.excludeDomains` into `retrieveWisdom`; gate the RAG/questions
