@@ -59,6 +59,9 @@ export function createStateEnvelope(params: {
     active_agents: [],
     agent_timings: {},
     errors: [],
+    turn_start_ms: Date.now(),
+    total_ms: null,
+    regen_triggers: [],
   };
 }
 

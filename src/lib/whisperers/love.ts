@@ -29,8 +29,10 @@ const LOVE_RED_LINES = [
 ];
 
 export async function runLoveWhisperer(env: StateEnvelope): Promise<WhispererResult> {
-  const questionCandidates = await retrieveWhispererQuestions(env, 'love', 5);
-  const trainingContext = await retrieveTrainingContext(env.utterance, 'love', 3);
+  const [questionCandidates, trainingContext] = await Promise.all([
+    retrieveWhispererQuestions(env, 'love', 5),
+    retrieveTrainingContext(env.utterance, 'love', 3),
+  ]);
 
   const frameworks: string[] = [];
   const msg = env.utterance.toLowerCase();

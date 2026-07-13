@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { transcribeAudio } from '@/lib/voice/stt';
 import { synthesizeSpeech } from '@/lib/voice/tts';
 import { processMessage } from '@/lib/agent/marcus';
+import { recordRouteTotal } from '@/lib/observability/turn-logger';
 import { query } from '@/lib/db';
 
 // POST: Send audio, get audio back
 export async function POST(req: NextRequest) {
+  // Route-level wall-clock start: entry -> response-ready (includes STT + TTS).
+  const routeStart = Date.now();
   try {
     const formData = await req.formData();
     const audioFile = formData.get('audio') as File;
@@ -59,7 +62,7 @@ export async function POST(req: NextRequest) {
     }));
 
     // 3. Process through Marcus agent
-    const { response: marcusText, emotion } = await processMessage(
+    const { response: marcusText, emotion, turnId } = await processMessage(
       userId,
       conversationId!,
       userText,
@@ -68,6 +71,13 @@ export async function POST(req: NextRequest) {
 
     // 4. Synthesize speech (ElevenLabs)
     const audioResponse = await synthesizeSpeech(marcusText);
+
+    // Record route-level total (entry -> here, including STT + TTS) onto the
+    // turn row the Composer logged. Awaited so it completes before the
+    // serverless response returns (a post-return task could be frozen).
+    if (turnId) {
+      await recordRouteTotal(turnId, Date.now() - routeStart);
+    }
 
     // Return both text and audio
     return new NextResponse(new Uint8Array(audioResponse), {

@@ -47,14 +47,15 @@ export async function processWithAgents(
   userMessage: string,
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
 ): Promise<AgentResponse> {
-  // Fetch user name
-  let userName: string | null = null;
-  try {
-    const userResult = await query(`SELECT name FROM users WHERE id = $1`, [userId]);
-    userName = userResult.rows[0]?.name || null;
-  } catch {}
+  // Kick off the user-name lookup concurrently. It is only needed when we build
+  // a response: the sentinel early-returns await it directly; the main path sets
+  // it after the Tier-1 DB batch (the query overlaps the batch, so no extra
+  // sequential round trip).
+  const userNamePromise: Promise<string | null> = query(`SELECT name FROM users WHERE id = $1`, [userId])
+    .then(r => r.rows[0]?.name || null)
+    .catch(() => null);
 
-  const env = createStateEnvelope({ userId, conversationId, utterance: userMessage, conversationHistory, userName });
+  const env = createStateEnvelope({ userId, conversationId, utterance: userMessage, conversationHistory, userName: null });
 
   // ═══════════════════════════════════════════
   // TIER 1 — SENTINELS (parallel, every turn)
@@ -64,6 +65,8 @@ export async function processWithAgents(
   const crisisType = detectCrisisType(userMessage);
   if (crisisType && crisisType !== 'passive_crisis') {
     // Acute crisis — force response, bypass all other tiers
+    const userName = await userNamePromise;
+    env.user_name = userName;
     const forcedResponse = getCrisisResponse(crisisType);
     env.sentinels.crisis = { level: 'acute', type: crisisType, protocol: crisisType, forced_response: forcedResponse };
     // Apply vocative filter to crisis responses too
@@ -74,6 +77,8 @@ export async function processWithAgents(
 
   // Post-crisis retreat check
   if (isPostCrisisRetreat(userMessage, conversationHistory)) {
+    const userName = await userNamePromise;
+    env.user_name = userName;
     env.final_response = enforceVocativePrinciple(POST_CRISIS_RETREAT_RESPONSE, userName);
     return buildResponse(env);
   }
@@ -83,6 +88,8 @@ export async function processWithAgents(
     const { isHostileAIChallenge } = await import('../sentinels/ai-honesty');
     env.sentinels.ai_honesty = { triggered: true, hostile: isHostileAIChallenge(userMessage) };
     const honestyResponse = getAIHonestyResponse(userMessage);
+    const userName = await userNamePromise;
+    env.user_name = userName;
     env.final_response = enforceVocativePrinciple(honestyResponse, userName);
     return buildResponse(env);
   }
@@ -94,6 +101,8 @@ export async function processWithAgents(
     const turnCount = conversationHistory.filter(m => m.role === 'user').length;
     const refusalResponse = getFrameRefusalResponse(frameCollapse, turnCount);
     if (refusalResponse) {
+      const userName = await userNamePromise;
+      env.user_name = userName;
       env.final_response = enforceVocativePrinciple(refusalResponse, userName);
       return buildResponse(env);
     }
@@ -118,7 +127,13 @@ export async function processWithAgents(
   } catch (err) { recordEnvelopeError(env, 'memory-sentinel', err); }
   finally { memDone(); }
 
-  // Phase 2: LLM agents in parallel
+  // User name resolves concurrently with the batch above; assign unconditionally
+  // (independent of memory-fetch success, matching the original semantics).
+  env.user_name = await userNamePromise;
+
+  // Phase 2: LLM agents in parallel — understanding, KWML, and arena. Arena only
+  // needs message + history + memory (all ready after Phase 1), so it no longer
+  // waits behind Tier 2; it runs alongside the Tier-1 LLMs.
   const understandingPromise = (async () => {
     const done = trackEnvelopeAgent(env, 'listener-stack');
     try {
@@ -142,6 +157,14 @@ export async function processWithAgents(
     finally { done(); }
   })();
 
+  const arenaPromise = (async () => {
+    const done = trackEnvelopeAgent(env, 'arena-classifier');
+    try {
+      env.assessment.arena = await classifyArena(userMessage, historyStr, env.sentinels.memory.memory_context || '');
+    } catch (err) { recordEnvelopeError(env, 'arena-classifier', err); }
+    finally { done(); }
+  })();
+
   // Cultural context (fast, no LLM)
   env.sentinels.cultural = runCulturalContext(userMessage, conversationHistory);
 
@@ -150,21 +173,19 @@ export async function processWithAgents(
     env.sentinels.crisis = { level: 'elevated', type: 'passive_crisis', protocol: null, forced_response: null };
   }
 
-  await Promise.all([understandingPromise, kwmlPromise]);
+  await Promise.all([understandingPromise, kwmlPromise, arenaPromise]);
 
   // ═══════════════════════════════════════════
-  // TIER 2 — ASSESSMENT RING (parallel)
+  // TIER 2 — ASSESSMENT RING
   // ═══════════════════════════════════════════
   const assessDone = trackEnvelopeAgent(env, 'assessment-ring');
   try {
-    const [arenaResult, silenceResult] = await Promise.all([
-      classifyArena(userMessage, historyStr, env.sentinels.memory.memory_context || ''),
-      env.sentinels.listener_stack
-        ? classifySilence(userMessage, env.sentinels.listener_stack.the_silence, historyStr, env.sentinels.memory.memory_context || '', '')
-        : Promise.resolve(null),
-    ]);
-    env.assessment.arena = arenaResult;
-    env.assessment.silence_type = silenceResult;
+    // Arena is already classified in Tier 1. Silence depends on the listener
+    // stack, so it runs here. NOTE: arena is intentionally NOT passed to
+    // classifySilence (kept as '' exactly as before) to preserve behavior.
+    env.assessment.silence_type = env.sentinels.listener_stack
+      ? await classifySilence(userMessage, env.sentinels.listener_stack.the_silence, historyStr, env.sentinels.memory.memory_context || '', '')
+      : null;
     env.assessment.trust = computeTrust(userMessage, conversationHistory, env.sentinels.memory.session_count);
     env.assessment.phase = mapPhase(
       env.sentinels.memory.session_count,
@@ -219,16 +240,13 @@ export async function processWithAgents(
     finally { done(); }
   })();
 
-  await whispererPromise;
-  // continued in part 2...
-  return await runComposerAndFinish(env, historyStr);
-}
-
-async function runComposerAndFinish(env: StateEnvelope, historyStr: string): Promise<AgentResponse> {
-  // Placeholder — will call the existing Composer logic
-  // This is implemented in orchestrator-v2-composer.ts
-  const { runComposerPipeline } = await import('./orchestrator-v2-composer');
-  return runComposerPipeline(env, historyStr);
+  // Run the Composer pre-fetch (RAG wisdom + legacy questions + conversation-
+  // state) concurrently with the Whisperers. Its inputs (memory, listener,
+  // archetype, arena) are all populated and the Whisperers do not mutate them.
+  const { retrievePreComposer, runComposerPipeline } = await import('./orchestrator-v2-composer');
+  const preComposerPromise = retrievePreComposer(env, historyStr);
+  const [, pre] = await Promise.all([whispererPromise, preComposerPromise]);
+  return runComposerPipeline(env, historyStr, pre);
 }
 
 function buildResponse(env: StateEnvelope): AgentResponse {

@@ -49,6 +49,9 @@ export async function ensureTurnLogsTable(): Promise<void> {
 
       -- Performance
       agent_timings JSONB,
+      total_ms INTEGER,
+      route_total_ms INTEGER,
+      regen_triggers TEXT[],
       errors JSONB,
 
       -- Cultural
@@ -80,7 +83,8 @@ export async function logTurn(env: StateEnvelope): Promise<void> {
         wisdom_voices, whisperers_invoked, frameworks_applied,
         craft_form, craft_pacing,
         agent_timings, errors,
-        register, faith_context, pathway_candidates
+        register, faith_context, pathway_candidates,
+        total_ms, regen_triggers
       ) VALUES (
         $1, $2, $3, $4, $5,
         $6, $7, $8,
@@ -91,7 +95,8 @@ export async function logTurn(env: StateEnvelope): Promise<void> {
         $19, $20, $21,
         $22, $23,
         $24, $25,
-        $26, $27, $28
+        $26, $27, $28,
+        $29, $30
       )`,
       [
         env.turn_id, env.user_id, env.conversation_id,
@@ -113,10 +118,33 @@ export async function logTurn(env: StateEnvelope): Promise<void> {
         env.sentinels.cultural.register, env.sentinels.cultural.faith_context,
         env.sentinels.pathway_router.candidates.length > 0
           ? JSON.stringify(env.sentinels.pathway_router.candidates) : null,
+        env.total_ms,
+        env.regen_triggers.length > 0 ? env.regen_triggers : null,
       ]
     );
   } catch (err) {
     console.error('[TurnLogger] Failed to log turn:', err);
+  }
+}
+
+/**
+ * Record the route-level wall-clock (entry -> response-ready, INCLUDING STT and
+ * TTS) onto the turn row the Composer already inserted for this turn. Called
+ * from the API route after synthesis. On the voice path the intervening TTS
+ * await guarantees the Composer's fire-and-forget insert has landed; on the
+ * text path (no TTS) it is best-effort and may occasionally find no row yet.
+ */
+export async function recordRouteTotal(turnId: string, routeTotalMs: number): Promise<void> {
+  try {
+    const result = await query(`UPDATE turn_logs SET route_total_ms = $2 WHERE turn_id = $1`, [turnId, routeTotalMs]);
+    // The Composer awaits its logTurn insert before processMessage returns, so
+    // the row must already exist here. A miss means that ordering guarantee
+    // regressed — surface it loudly rather than dropping route_total_ms silently.
+    if (result.rowCount === 0) {
+      console.warn(`[TurnLogger] route_total_ms: no turn_logs row for turn_id=${turnId} (insert ordering regressed?)`);
+    }
+  } catch (err) {
+    console.error('[TurnLogger] Failed to record route_total_ms:', err);
   }
 }
 

@@ -32,8 +32,10 @@ const VETERAN_RED_LINES = [
 ];
 
 export async function runVeteranWhisperer(env: StateEnvelope): Promise<WhispererResult> {
-  const questionCandidates = await retrieveWhispererQuestions(env, 'veteran', 5);
-  const trainingContext = await retrieveTrainingContext(env.utterance, 'veteran', 3);
+  const [questionCandidates, trainingContext] = await Promise.all([
+    retrieveWhispererQuestions(env, 'veteran', 5),
+    retrieveTrainingContext(env.utterance, 'veteran', 3),
+  ]);
 
   const frameworks: string[] = [];
   const msg = env.utterance.toLowerCase();

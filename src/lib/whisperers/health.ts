@@ -31,8 +31,10 @@ const HEALTH_RED_LINES = [
 ];
 
 export async function runHealthWhisperer(env: StateEnvelope): Promise<WhispererResult> {
-  const questionCandidates = await retrieveWhispererQuestions(env, 'health', 5);
-  const trainingContext = await retrieveTrainingContext(env.utterance, 'health', 3);
+  const [questionCandidates, trainingContext] = await Promise.all([
+    retrieveWhispererQuestions(env, 'health', 5),
+    retrieveTrainingContext(env.utterance, 'health', 3),
+  ]);
 
   const frameworks: string[] = [];
   const msg = env.utterance.toLowerCase();

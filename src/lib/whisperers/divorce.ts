@@ -46,11 +46,11 @@ const DIVORCE_RED_LINES = [
 
 /** Run the Divorce Whisperer */
 export async function runDivorceWhisperer(env: StateEnvelope): Promise<WhispererResult> {
-  // Retrieve filtered questions from intelbase
-  const questionCandidates = await retrieveWhispererQuestions(env, 'divorce', 5);
-
-  // Retrieve relevant training doc context
-  const trainingContext = await retrieveTrainingContext(env.utterance, 'divorce', 3);
+  // Retrieve filtered questions + training doc context (independent — run together)
+  const [questionCandidates, trainingContext] = await Promise.all([
+    retrieveWhispererQuestions(env, 'divorce', 5),
+    retrieveTrainingContext(env.utterance, 'divorce', 3),
+  ]);
 
   // Determine which lens is most active
   const frameworks: string[] = [];
