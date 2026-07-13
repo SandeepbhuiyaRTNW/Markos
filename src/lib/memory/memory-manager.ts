@@ -243,7 +243,10 @@ export async function getStylePreferences(userId: string): Promise<string> {
 
     if (result.rows.length === 0) return '';
 
-    return result.rows.map(r => `- ${r.value}`).join('\n');
+    // Prefix each preference with its STABLE key so downstream consumers (e.g.
+    // the move selector) can honor it by key rather than by matching the prose
+    // value — which breaks silently if the value is ever reworded.
+    return result.rows.map(r => `- [${r.key}] ${r.value}`).join('\n');
   } catch {
     return '';
   }
