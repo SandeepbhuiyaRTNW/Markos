@@ -1,4 +1,7 @@
--- Drop existing tables to recreate cleanly
+-- Drop existing tables to recreate cleanly (children first for clean FK order)
+DROP TABLE IF EXISTS follow_ups CASCADE;
+DROP TABLE IF EXISTS open_loops CASCADE;
+DROP TABLE IF EXISTS conversation_intelligence CASCADE;
 DROP TABLE IF EXISTS reflections CASCADE;
 DROP TABLE IF EXISTS kwml_profiles CASCADE;
 DROP TABLE IF EXISTS questions CASCADE;
@@ -145,4 +148,55 @@ CREATE INDEX idx_reflections_user_id ON reflections(user_id);
 -- CREATE INDEX idx_embeddings_vector ON embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 -- CREATE INDEX idx_questions_vector ON questions USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
-SELECT 'Schema created successfully - all 8 tables and indexes' AS status;
+-- ─── Conversation Intelligence layer (see migrate-conversation-intelligence.sql) ───
+-- Conversation-as-event understanding on top of memory_layers. Additive.
+CREATE TABLE IF NOT EXISTS conversation_intelligence (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    conversation_id UUID NOT NULL UNIQUE REFERENCES conversations(id) ON DELETE CASCADE,
+    headline TEXT,
+    emotional_arc JSONB NOT NULL DEFAULT '[]'::jsonb,
+    people JSONB NOT NULL DEFAULT '[]'::jsonb,
+    vocabulary_moments JSONB NOT NULL DEFAULT '[]'::jsonb,
+    what_changed TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE TABLE IF NOT EXISTS open_loops (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    opened_conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
+    source_message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+    summary TEXT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'resolved', 'dormant')),
+    salience FLOAT NOT NULL DEFAULT 0.5,
+    people JSONB NOT NULL DEFAULT '[]'::jsonb,
+    first_seen_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    last_seen_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    last_seen_session INTEGER,
+    resolved_at TIMESTAMP WITH TIME ZONE,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE TABLE IF NOT EXISTS follow_ups (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    opened_conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
+    open_loop_id UUID REFERENCES open_loops(id) ON DELETE SET NULL,
+    prompt TEXT NOT NULL,
+    trigger VARCHAR(20) NOT NULL DEFAULT 'next_session' CHECK (trigger IN ('next_session', 'time', 'event')),
+    due_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'surfaced', 'done', 'dropped')),
+    value FLOAT NOT NULL DEFAULT 0.5,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    surfaced_at TIMESTAMP WITH TIME ZONE,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_conversation_intelligence_user ON conversation_intelligence(user_id);
+CREATE INDEX IF NOT EXISTS idx_open_loops_user_status ON open_loops(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_follow_ups_user_status ON follow_ups(user_id, status);
+
+SELECT 'Schema created successfully - all 11 tables and indexes' AS status;
