@@ -3,6 +3,11 @@ import { processMessage } from '@/lib/agent/marcus';
 import { recordRouteTotal } from '@/lib/observability/turn-logger';
 import { query } from '@/lib/db';
 
+// Cap serverless execution at 60s (see the voice route note; the same Amplify
+// SSR compute + CloudFront origin-response timeout caveat applies). ACTION FOR
+// SANDEEP in the PR.
+export const maxDuration = 60;
+
 /**
  * POST /api/conversation/text
  * Text-based conversation endpoint — same Marcus pipeline, no audio.

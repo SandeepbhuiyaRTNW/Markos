@@ -5,6 +5,13 @@ import { processMessage } from '@/lib/agent/marcus';
 import { recordRouteTotal } from '@/lib/observability/turn-logger';
 import { query } from '@/lib/db';
 
+// Cap this route's serverless execution at 60s (STT -> agent -> TTS is one long
+// synchronous chain). NOTE: this ceiling is only effective if the Amplify SSR
+// compute (Lambda) timeout AND the CloudFront origin-response timeout are raised
+// to match (>= 60s) in the AWS console — otherwise the edge kills the request
+// first. See "ACTION FOR SANDEEP" in the PR.
+export const maxDuration = 60;
+
 // POST: Send audio, get audio back
 export async function POST(req: NextRequest) {
   // Route-level wall-clock start: entry -> response-ready (includes STT + TTS).

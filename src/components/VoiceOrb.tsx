@@ -6,12 +6,20 @@ import { cn } from '@/lib/utils';
 
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
 
+// Client abort must sit ABOVE the route's `maxDuration = 60` (and the AWS SSR /
+// CloudFront origin-response timeouts it is capped by) plus a few seconds of
+// network/transfer, so the CLIENT is the outer boundary: it only aborts on a
+// genuine hang or dead connection, never on a turn the server was about to
+// finish. Keep in sync with maxDuration = 60 in the conversation route(s).
+const CLIENT_TIMEOUT_MS = 65000;
+
 interface VoiceOrbProps {
   onStateChange: (state: VoiceState) => void;
   onTranscript: (userText: string, marcusText: string) => void;
   userId: string;
   conversationId: string | null;
   onConversationId: (id: string) => void;
+  onError?: (message: string) => void;
   state: VoiceState;
   disabled?: boolean;
 }
@@ -22,6 +30,7 @@ export default function VoiceOrb({
   userId,
   conversationId,
   onConversationId,
+  onError,
   state,
   disabled = false,
 }: VoiceOrbProps) {
@@ -38,20 +47,24 @@ export default function VoiceOrb({
   const onConversationIdRef = useRef(onConversationId);
   const onTranscriptRef = useRef(onTranscript);
   const onStateChangeRef = useRef(onStateChange);
+  const onErrorRef = useRef(onError);
 
   useEffect(() => { conversationIdRef.current = conversationId; }, [conversationId]);
   useEffect(() => { userIdRef.current = userId; }, [userId]);
   useEffect(() => { onConversationIdRef.current = onConversationId; }, [onConversationId]);
   useEffect(() => { onTranscriptRef.current = onTranscript; }, [onTranscript]);
   useEffect(() => { onStateChangeRef.current = onStateChange; }, [onStateChange]);
+  useEffect(() => { onErrorRef.current = onError; }, [onError]);
 
   const sendAudio = useCallback(async (audioBlob: Blob) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), CLIENT_TIMEOUT_MS);
     try {
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
       formData.append('userId', userIdRef.current);
       if (conversationIdRef.current) formData.append('conversationId', conversationIdRef.current);
-      const res = await fetch('/api/conversation', { method: 'POST', body: formData });
+      const res = await fetch('/api/conversation', { method: 'POST', body: formData, signal: controller.signal });
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const convId = res.headers.get('X-Conversation-Id');
       if (convId && !conversationIdRef.current) {
@@ -69,8 +82,15 @@ export default function VoiceOrb({
       audioRef.current = audio;
       onStateChangeRef.current('speaking');
       audio.onended = () => { onStateChangeRef.current('idle'); URL.revokeObjectURL(url); };
-      await audio.play();
-    } catch (err) { console.error('Send audio error:', err); onStateChangeRef.current('idle'); }
+      audio.play().catch((e) => { console.warn('Audio play error:', e); onStateChangeRef.current('idle'); URL.revokeObjectURL(url); });
+    } catch (err) {
+      // Timeout (abort) or non-OK response: surface a real message, not a silent idle.
+      console.error('Send audio error:', err);
+      onErrorRef.current?.("That one took too long — try saying a bit less and I'll keep up.");
+      onStateChangeRef.current('idle');
+    } finally {
+      clearTimeout(timeout);
+    }
   }, []);
 
   const startRecording = useCallback(async () => {
