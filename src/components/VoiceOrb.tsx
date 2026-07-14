@@ -6,6 +6,13 @@ import { cn } from '@/lib/utils';
 
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
 
+// Client abort must sit ABOVE the route's `maxDuration = 60` (and the AWS SSR /
+// CloudFront origin-response timeouts it is capped by) plus a few seconds of
+// network/transfer, so the CLIENT is the outer boundary: it only aborts on a
+// genuine hang or dead connection, never on a turn the server was about to
+// finish. Keep in sync with maxDuration = 60 in the conversation route(s).
+const CLIENT_TIMEOUT_MS = 65000;
+
 interface VoiceOrbProps {
   onStateChange: (state: VoiceState) => void;
   onTranscript: (userText: string, marcusText: string) => void;
@@ -51,7 +58,7 @@ export default function VoiceOrb({
 
   const sendAudio = useCallback(async (audioBlob: Blob) => {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 55000);
+    const timeout = setTimeout(() => controller.abort(), CLIENT_TIMEOUT_MS);
     try {
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
