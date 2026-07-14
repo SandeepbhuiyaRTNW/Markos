@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 
-function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); }
+function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY, maxRetries: 1 }); }
 
 export async function transcribeAudio(audioBuffer: Buffer, mimeType: string = 'audio/webm'): Promise<string> {
   const ext = mimeType.includes('wav') ? 'wav' : mimeType.includes('mp4') ? 'mp4' : 'webm';

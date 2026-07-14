@@ -68,6 +68,7 @@ export async function runComposerPipeline(env: StateEnvelope, historyStr: string
       modelName: 'gpt-4o',
       temperature: 0.75,
       maxTokens: 350,
+      maxRetries: 1, // kill the hidden 2x SDK retry latency multiplier on the critical path
     });
 
     // Build the context injection from State Envelope
@@ -160,29 +161,50 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     const boundaryResult = checkBoundary(content);
     env.sentinels.boundary = runBoundarySentinel(content);
 
+    // ── Regeneration budget ──────────────────────────────────────────────
+    // The post-generation gates below run in PRIORITY ORDER (boundary ->
+    // trajectory -> fantasy -> vocab -> forbidden). Each re-roll is a full
+    // gpt-4o call on the critical path; a long/emotional turn used to trip up
+    // to 5 sequentially, ballooning the turn past the serverless timeout. Cap
+    // total re-rolls at MAX_REGENS so the highest-priority violations still win,
+    // then stop and keep the best draft — logging which lower-priority gates
+    // were skipped.
+    const MAX_REGENS = 2;
+    let regens = 0;
+    const skippedGates: string[] = [];
+
     if (!boundaryResult.passed) {
-      console.log(`[V2] 🚫 Boundary violations: ${boundaryResult.violations.slice(0, 3).join(', ')} — regenerating`);
-      const overridePrompt = getBoundaryOverridePrompt(boundaryResult);
-      const retryMessages = [...messages, new AIMessage(content), new HumanMessage(overridePrompt)];
-      const retry = await model.invoke(retryMessages);
-      const retryContent = typeof retry.content === 'string' ? retry.content : JSON.stringify(retry.content);
-      content = retryContent || content;
-      content = enforceSocraticDiscipline(content, env.craft_directives);
+      if (regens < MAX_REGENS) {
+        console.log(`[V2] 🚫 Boundary violations: ${boundaryResult.violations.slice(0, 3).join(', ')} — regenerating`);
+        regens++;
+        const overridePrompt = getBoundaryOverridePrompt(boundaryResult);
+        const retryMessages = [...messages, new AIMessage(content), new HumanMessage(overridePrompt)];
+        const retry = await model.invoke(retryMessages);
+        const retryContent = typeof retry.content === 'string' ? retry.content : JSON.stringify(retry.content);
+        content = retryContent || content;
+        content = enforceSocraticDiscipline(content, env.craft_directives);
+      } else {
+        skippedGates.push('boundary');
+      }
     }
 
-    // Trajectory dedup (from V1)
+    // Trajectory dedup (from V1). Skip the drift computation entirely once the
+    // regen budget is spent — it costs embedding calls we could not act on.
     const prevMarcus = env.conversation_history.filter(m => m.role === 'assistant').map(m => m.content);
-    if (prevMarcus.length >= 2) {
+    if (prevMarcus.length >= 2 && regens < MAX_REGENS) {
       try {
         const drift = await computeTrajectoryDrift(content, prevMarcus);
         if (drift > 0.85) {
           console.log(`[V2] 🔄 Trajectory dedup (drift: ${drift.toFixed(3)}) — regenerating`);
+          regens++;
           const dedupMessages = [...messages, new AIMessage(content),
             new HumanMessage(`[SYSTEM OVERRIDE] Your response is semantically identical to what you've been saying all session. You are STUCK IN A LOOP. Write a COMPLETELY DIFFERENT response. Change angle entirely. 2-3 sentences. End differently.`)];
           const dedupRetry = await model.invoke(dedupMessages);
           content = typeof dedupRetry.content === 'string' ? dedupRetry.content : content;
         }
       } catch {}
+    } else if (prevMarcus.length >= 2) {
+      skippedGates.push('trajectory(eval-skipped)');
     }
 
     // ═══════════════════════════════════════════
@@ -191,31 +213,50 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
 
     // 1. Fantasy-Identity Blocker — re-roll if draft contains forward-projecting templates
     if (detectFantasyIdentity(content)) {
-      console.log(`[V2] 🎭 Fantasy-identity template detected — regenerating`);
-      const fantasyOverride = [...messages, new AIMessage(content),
-        new HumanMessage(`[SYSTEM OVERRIDE] Your response contains a forward-projecting fantasy-identity question ("imagine yourself a year from now" pattern). This is a banned template. Rewrite with a PRESENT-TENSE or PAST-EXCAVATING question instead. Ask about what IS happening, not what he wants to become. 2-3 sentences.`)];
-      const fantasyRetry = await model.invoke(fantasyOverride);
-      content = typeof fantasyRetry.content === 'string' ? fantasyRetry.content : content;
+      if (regens < MAX_REGENS) {
+        console.log(`[V2] 🎭 Fantasy-identity template detected — regenerating`);
+        regens++;
+        const fantasyOverride = [...messages, new AIMessage(content),
+          new HumanMessage(`[SYSTEM OVERRIDE] Your response contains a forward-projecting fantasy-identity question ("imagine yourself a year from now" pattern). This is a banned template. Rewrite with a PRESENT-TENSE or PAST-EXCAVATING question instead. Ask about what IS happening, not what he wants to become. 2-3 sentences.`)];
+        const fantasyRetry = await model.invoke(fantasyOverride);
+        content = typeof fantasyRetry.content === 'string' ? fantasyRetry.content : content;
+      } else {
+        skippedGates.push('fantasy-identity');
+      }
     }
 
     // 2. Vocabulary Fidelity Filter — re-roll if draft substitutes user's concrete words
     const vocabViolations = detectVocabSubstitutions(env.utterance, content);
     if (vocabViolations.length > 0) {
-      console.log(`[V2] 📝 Vocab fidelity violations: ${vocabViolations.slice(0, 3).join(', ')} — regenerating`);
-      const vocabOverride = [...messages, new AIMessage(content),
-        new HumanMessage(`[SYSTEM OVERRIDE] Your response translated the user's specific words into clinical abstractions. The user's EXACT words must appear in your response. Return at least one specific noun, verb, or phrase from the user's message verbatim. Do NOT substitute "throw up" with "heavy feeling" or "cheated" with "betrayal" etc. Rewrite using the user's own vocabulary. 2-3 sentences.`)];
-      const vocabRetry = await model.invoke(vocabOverride);
-      content = typeof vocabRetry.content === 'string' ? vocabRetry.content : content;
+      if (regens < MAX_REGENS) {
+        console.log(`[V2] 📝 Vocab fidelity violations: ${vocabViolations.slice(0, 3).join(', ')} — regenerating`);
+        regens++;
+        const vocabOverride = [...messages, new AIMessage(content),
+          new HumanMessage(`[SYSTEM OVERRIDE] Your response translated the user's specific words into clinical abstractions. The user's EXACT words must appear in your response. Return at least one specific noun, verb, or phrase from the user's message verbatim. Do NOT substitute "throw up" with "heavy feeling" or "cheated" with "betrayal" etc. Rewrite using the user's own vocabulary. 2-3 sentences.`)];
+        const vocabRetry = await model.invoke(vocabOverride);
+        content = typeof vocabRetry.content === 'string' ? vocabRetry.content : content;
+      } else {
+        skippedGates.push('vocab-fidelity');
+      }
     }
 
     // 3. Forbidden Phrase Filter — re-roll if draft contains banned phrases
     const forbiddenViolations = detectForbiddenPhrases(content);
     if (forbiddenViolations.length > 0) {
-      console.log(`[V2] 🚫 Forbidden phrases: ${forbiddenViolations.join(', ')} — regenerating`);
-      const forbiddenOverride = [...messages, new AIMessage(content),
-        new HumanMessage(`[SYSTEM OVERRIDE] Your response contained forbidden phrases (${forbiddenViolations.join(', ')}). These are banned. Rewrite without any of them. Be direct and concrete. 2-3 sentences.`)];
-      const forbiddenRetry = await model.invoke(forbiddenOverride);
-      content = typeof forbiddenRetry.content === 'string' ? forbiddenRetry.content : content;
+      if (regens < MAX_REGENS) {
+        console.log(`[V2] 🚫 Forbidden phrases: ${forbiddenViolations.join(', ')} — regenerating`);
+        regens++;
+        const forbiddenOverride = [...messages, new AIMessage(content),
+          new HumanMessage(`[SYSTEM OVERRIDE] Your response contained forbidden phrases (${forbiddenViolations.join(', ')}). These are banned. Rewrite without any of them. Be direct and concrete. 2-3 sentences.`)];
+        const forbiddenRetry = await model.invoke(forbiddenOverride);
+        content = typeof forbiddenRetry.content === 'string' ? forbiddenRetry.content : content;
+      } else {
+        skippedGates.push('forbidden-phrase');
+      }
+    }
+
+    if (skippedGates.length > 0) {
+      console.log(`[V2] ⏭ Regen cap (${MAX_REGENS}) reached — skipped: ${skippedGates.join(', ')} (kept best draft)`);
     }
 
     // 4. Vocative Principle Filter — ALWAYS runs last, strips banned vocatives

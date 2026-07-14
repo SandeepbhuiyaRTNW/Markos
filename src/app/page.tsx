@@ -45,6 +45,7 @@ export default function Home() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [initialized, setInitialized] = useState(false);
   const [authLoading, setAuthLoading] = useState(true); // Loading saved session
@@ -1046,8 +1047,9 @@ export default function Home() {
                         {/* Voice Orb + Status */}
                         <div className="flex flex-col items-center gap-3 mb-4">
                           <VoiceOrb
-                            onStateChange={setState}
+                            onStateChange={(s) => { if (s === 'listening') setVoiceError(null); setState(s); }}
                             onTranscript={handleTranscript}
+                            onError={setVoiceError}
                             userId={userId}
                             conversationId={conversationId}
                             onConversationId={setConversationId}
@@ -1057,6 +1059,11 @@ export default function Home() {
                           <p className="text-[11px] tracking-wider uppercase text-muted-foreground/50">
                             {statusLabel[state]}
                           </p>
+                          {voiceError && (
+                            <p className="text-xs text-amber-600 text-center max-w-xs px-4">
+                              {voiceError}
+                            </p>
+                          )}
                         </div>
                       </>
                     ) : (

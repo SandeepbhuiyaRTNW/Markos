@@ -8,6 +8,7 @@ interface VoiceButtonProps {
   userId: string;
   conversationId: string | null;
   onConversationId: (id: string) => void;
+  onError?: (message: string) => void;
 }
 
 export default function VoiceButton({
@@ -16,6 +17,7 @@ export default function VoiceButton({
   userId,
   conversationId,
   onConversationId,
+  onError,
 }: VoiceButtonProps) {
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -56,13 +58,15 @@ export default function VoiceButton({
   }, [isRecording, onStateChange]);
 
   const sendAudio = async (audioBlob: Blob) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 55000);
     try {
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
       formData.append('userId', userId);
       if (conversationId) formData.append('conversationId', conversationId);
 
-      const res = await fetch('/api/conversation', { method: 'POST', body: formData });
+      const res = await fetch('/api/conversation', { method: 'POST', body: formData, signal: controller.signal });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
 
@@ -87,10 +91,14 @@ export default function VoiceButton({
         onStateChange('idle');
         URL.revokeObjectURL(url);
       };
-      await audio.play();
+      audio.play().catch((e) => { console.warn('Audio play error:', e); onStateChange('idle'); URL.revokeObjectURL(url); });
     } catch (err) {
+      // Timeout (abort) or non-OK response: surface a real message, not a silent idle.
       console.error('Send audio error:', err);
+      onError?.("That one took too long — try saying a bit less and I'll keep up.");
       onStateChange('idle');
+    } finally {
+      clearTimeout(timeout);
     }
   };
 
