@@ -18,7 +18,21 @@ import { analyzeConversation, computeTrajectoryDrift } from './conversation-stat
 import { searchPastMessages } from '../memory/memory-manager';
 import type { AgentResponse } from './orchestrator-v2';
 
-export async function runComposerPipeline(env: StateEnvelope, historyStr: string): Promise<AgentResponse> {
+export interface PreComposerResult {
+  ragWisdom: string;
+  legacyQuestions: string[];
+  convState: Awaited<ReturnType<typeof analyzeConversation>> | null;
+}
+
+/**
+ * Composer pre-fetch: RAG wisdom, legacy question retrieval, and the
+ * conversation-state escalation engine (loop-breaking, pushback/resistance,
+ * advice-loop detection, hopelessness templates). Depends only on Tier 1/2
+ * outputs (memory, listener stack, archetype, arena) — none of which the
+ * Whisperer tier mutates — so the orchestrator runs it concurrently with the
+ * Whisperers. Kept callable standalone (composer computes it if not supplied).
+ */
+export async function retrievePreComposer(env: StateEnvelope, historyStr: string): Promise<PreComposerResult> {
   // ═══════════════════════════════════════════
   // PRE-COMPOSER: RAG + Legacy question retrieval (parallel)
   // ═══════════════════════════════════════════
@@ -45,6 +59,13 @@ export async function runComposerPipeline(env: StateEnvelope, historyStr: string
     ragWisdom = rw; legacyQuestions = lq; convState = cs;
   } catch (err) { recordEnvelopeError(env, 'rag-retrieval', err); }
   finally { ragDone(); }
+  return { ragWisdom, legacyQuestions, convState };
+}
+
+export async function runComposerPipeline(env: StateEnvelope, historyStr: string, pre?: PreComposerResult): Promise<AgentResponse> {
+  // Pre-fetch is supplied by the orchestrator (run concurrently with Whisperers);
+  // fall back to computing it here when the composer is invoked standalone.
+  const { ragWisdom, legacyQuestions, convState } = pre ?? await retrievePreComposer(env, historyStr);
 
   // Merge Whisperer question candidates with legacy questions
   const allQuestionTexts = [
@@ -161,14 +182,14 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     const boundaryResult = checkBoundary(content);
     env.sentinels.boundary = runBoundarySentinel(content);
 
-    // ── Regeneration budget ──────────────────────────────────────────────
+    // ── Regeneration budget ────────────────────────────────────────────────
     // The post-generation gates below run in PRIORITY ORDER (boundary ->
     // trajectory -> fantasy -> vocab -> forbidden). Each re-roll is a full
     // gpt-4o call on the critical path; a long/emotional turn used to trip up
     // to 5 sequentially, ballooning the turn past the serverless timeout. Cap
     // total re-rolls at MAX_REGENS so the highest-priority violations still win,
     // then stop and keep the best draft — logging which lower-priority gates
-    // were skipped.
+    // were skipped. (env.regen_triggers is preserved for turn_logs observability.)
     const MAX_REGENS = 2;
     let regens = 0;
     const skippedGates: string[] = [];
@@ -177,6 +198,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
       if (regens < MAX_REGENS) {
         console.log(`[V2] 🚫 Boundary violations: ${boundaryResult.violations.slice(0, 3).join(', ')} — regenerating`);
         regens++;
+        env.regen_triggers.push('boundary');
         const overridePrompt = getBoundaryOverridePrompt(boundaryResult);
         const retryMessages = [...messages, new AIMessage(content), new HumanMessage(overridePrompt)];
         const retry = await model.invoke(retryMessages);
@@ -197,6 +219,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
         if (drift > 0.85) {
           console.log(`[V2] 🔄 Trajectory dedup (drift: ${drift.toFixed(3)}) — regenerating`);
           regens++;
+          env.regen_triggers.push('trajectory_dedup');
           const dedupMessages = [...messages, new AIMessage(content),
             new HumanMessage(`[SYSTEM OVERRIDE] Your response is semantically identical to what you've been saying all session. You are STUCK IN A LOOP. Write a COMPLETELY DIFFERENT response. Change angle entirely. 2-3 sentences. End differently.`)];
           const dedupRetry = await model.invoke(dedupMessages);
@@ -216,6 +239,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
       if (regens < MAX_REGENS) {
         console.log(`[V2] 🎭 Fantasy-identity template detected — regenerating`);
         regens++;
+        env.regen_triggers.push('fantasy_identity');
         const fantasyOverride = [...messages, new AIMessage(content),
           new HumanMessage(`[SYSTEM OVERRIDE] Your response contains a forward-projecting fantasy-identity question ("imagine yourself a year from now" pattern). This is a banned template. Rewrite with a PRESENT-TENSE or PAST-EXCAVATING question instead. Ask about what IS happening, not what he wants to become. 2-3 sentences.`)];
         const fantasyRetry = await model.invoke(fantasyOverride);
@@ -231,6 +255,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
       if (regens < MAX_REGENS) {
         console.log(`[V2] 📝 Vocab fidelity violations: ${vocabViolations.slice(0, 3).join(', ')} — regenerating`);
         regens++;
+        env.regen_triggers.push('vocab_fidelity');
         const vocabOverride = [...messages, new AIMessage(content),
           new HumanMessage(`[SYSTEM OVERRIDE] Your response translated the user's specific words into clinical abstractions. The user's EXACT words must appear in your response. Return at least one specific noun, verb, or phrase from the user's message verbatim. Do NOT substitute "throw up" with "heavy feeling" or "cheated" with "betrayal" etc. Rewrite using the user's own vocabulary. 2-3 sentences.`)];
         const vocabRetry = await model.invoke(vocabOverride);
@@ -246,6 +271,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
       if (regens < MAX_REGENS) {
         console.log(`[V2] 🚫 Forbidden phrases: ${forbiddenViolations.join(', ')} — regenerating`);
         regens++;
+        env.regen_triggers.push('forbidden_phrase');
         const forbiddenOverride = [...messages, new AIMessage(content),
           new HumanMessage(`[SYSTEM OVERRIDE] Your response contained forbidden phrases (${forbiddenViolations.join(', ')}). These are banned. Rewrite without any of them. Be direct and concrete. 2-3 sentences.`)];
         const forbiddenRetry = await model.invoke(forbiddenOverride);
@@ -269,6 +295,9 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
 
     env.composer_output = content;
     env.final_response = content;
+    // Measured wall-clock of the agent pipeline (envelope creation → response
+    // ready). Excludes route-level STT/TTS, which are not instrumented here.
+    env.total_ms = Date.now() - env.turn_start_ms;
   } catch (err) {
     recordEnvelopeError(env, 'composer', err);
     env.final_response = "I hear you. Tell me more.";
@@ -277,10 +306,17 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
   // ═══════════════════════════════════════════
   // STORE + OBSERVABILITY (fire-and-forget)
   // ═══════════════════════════════════════════
+  // Message + memory writes stay fire-and-forget (not needed downstream).
   storeInBackground(env).catch(err => console.error('[V2] Background store error:', err));
 
-  // Turn logging for clinical observability
-  import('../observability/turn-logger').then(({ logTurn }) => logTurn(env)).catch(() => {});
+  // Turn logging — AWAITED so the turn_logs row exists before processMessage
+  // returns. The API route then reliably attaches route_total_ms via UPDATE,
+  // deterministic even on the text path (which has no TTS settle window).
+  // logTurn never throws (it catches internally). Cost is one INSERT (~10-30ms);
+  // on the voice path this insert previously overlapped the awaited TTS, so
+  // end-to-end grows only by that insert. total_ms is measured earlier (right
+  // after final_response) and is unaffected.
+  await import('../observability/turn-logger').then(({ logTurn }) => logTurn(env)).catch(() => {});
 
   return {
     response: env.final_response || "I hear you. Tell me more.",
@@ -297,6 +333,7 @@ async function storeInBackground(env: StateEnvelope): Promise<void> {
   const { query: dbQuery } = await import('../db');
   const { extractMemories } = await import('../memory/memory-manager');
   const { saveKWMLProfile } = await import('../kwml/detector');
+  const { runConversationIntelligence } = await import('../intelligence');
 
   try {
     const userMsgResult = await dbQuery(
@@ -316,6 +353,10 @@ async function storeInBackground(env: StateEnvelope): Promise<void> {
       env.assessment.archetype?.reading
         ? saveKWMLProfile(env.user_id, env.assessment.archetype.reading, env.conversation_id)
         : Promise.resolve(),
+      // Conversation Intelligence (Part 1) — gated internally (cheap arc append
+      // every turn, gpt-4o-mini only when earned). Own .catch so a CI failure
+      // can never reject this Promise.all or affect memory/message writes.
+      runConversationIntelligence(env, userMsgId).catch(err => console.error('[CI] error:', err)),
     ]);
   } catch (err) {
     console.error('[V2 Store] Error:', err);

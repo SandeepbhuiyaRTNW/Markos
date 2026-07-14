@@ -31,8 +31,10 @@ const FATHERHOOD_RED_LINES = [
 ];
 
 export async function runFatherhoodWhisperer(env: StateEnvelope): Promise<WhispererResult> {
-  const questionCandidates = await retrieveWhispererQuestions(env, 'fatherhood', 5);
-  const trainingContext = await retrieveTrainingContext(env.utterance, 'fatherhood', 3);
+  const [questionCandidates, trainingContext] = await Promise.all([
+    retrieveWhispererQuestions(env, 'fatherhood', 5),
+    retrieveTrainingContext(env.utterance, 'fatherhood', 3),
+  ]);
 
   const frameworks: string[] = [];
   const msg = env.utterance.toLowerCase();

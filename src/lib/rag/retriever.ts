@@ -3,13 +3,37 @@ import { query } from '../db';
 
 function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); }
 
+// Per-content embedding memo. OpenAI embeddings are deterministic for a given
+// (input, model, dimensions), so caching by input text is behavior-preserving:
+// the same string always yields the same vector. Storing the in-flight promise
+// dedupes concurrent identical requests (a whisperer's two rounds, or several
+// retrievals embedding the same utterance in one turn) down to a single API
+// call. A bounded FIFO cap keeps memory flat on long-lived (warm) instances.
+// The key is the input text only, so this assumes a single fixed embedding
+// model + dimensions per process (getEmbedding always uses text-embedding-3-large
+// @ 3072 below); if that ever varies, fold model + dims into the cache key.
+const EMBED_CACHE = new Map<string, Promise<number[]>>();
+const EMBED_CACHE_MAX = 512;
+
 export async function getEmbedding(text: string): Promise<number[]> {
-  const response = await getOpenAI().embeddings.create({
-    model: 'text-embedding-3-large',
-    input: text,
-    dimensions: 3072,
-  });
-  return response.data[0].embedding;
+  const cached = EMBED_CACHE.get(text);
+  if (cached) return cached;
+
+  const pending = getOpenAI().embeddings
+    .create({ model: 'text-embedding-3-large', input: text, dimensions: 3072 })
+    .then(response => response.data[0].embedding)
+    .catch(err => {
+      // Never cache a failure — evict so the next caller retries.
+      EMBED_CACHE.delete(text);
+      throw err;
+    });
+
+  EMBED_CACHE.set(text, pending);
+  if (EMBED_CACHE.size > EMBED_CACHE_MAX) {
+    const oldest = EMBED_CACHE.keys().next().value;
+    if (oldest !== undefined && oldest !== text) EMBED_CACHE.delete(oldest);
+  }
+  return pending;
 }
 
 /**

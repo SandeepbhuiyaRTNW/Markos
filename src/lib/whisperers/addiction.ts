@@ -32,8 +32,10 @@ const ADDICTION_RED_LINES = [
 ];
 
 export async function runAddictionWhisperer(env: StateEnvelope): Promise<WhispererResult> {
-  const questionCandidates = await retrieveWhispererQuestions(env, 'addiction', 5);
-  const trainingContext = await retrieveTrainingContext(env.utterance, 'addiction', 3);
+  const [questionCandidates, trainingContext] = await Promise.all([
+    retrieveWhispererQuestions(env, 'addiction', 5),
+    retrieveTrainingContext(env.utterance, 'addiction', 3),
+  ]);
 
   const frameworks: string[] = [];
   const msg = env.utterance.toLowerCase();

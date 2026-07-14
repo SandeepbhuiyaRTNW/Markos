@@ -44,8 +44,10 @@ export async function runFatherlessSonWhisperer(env: StateEnvelope): Promise<Whi
     return { question_candidates: [], frameworks_applied: ['trust_threshold_not_met'], landmines: ['Trust threshold not met — deferring activation.'], context_notes: '' };
   }
 
-  const questionCandidates = await retrieveWhispererQuestions(env, 'fatherless_son', 5);
-  const trainingContext = await retrieveTrainingContext(env.utterance, 'fatherless_son', 3);
+  const [questionCandidates, trainingContext] = await Promise.all([
+    retrieveWhispererQuestions(env, 'fatherless_son', 5),
+    retrieveTrainingContext(env.utterance, 'fatherless_son', 3),
+  ]);
 
   const frameworks: string[] = [];
   const msg = env.utterance.toLowerCase();
