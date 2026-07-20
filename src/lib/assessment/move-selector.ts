@@ -193,6 +193,10 @@ export const COMMUNICATION_REQUEST_RE: RegExp[] = [
   // disclosures like "I need to talk to my therapist" or "I want to tell you how
   // lonely I am" — flagged by review as not actually asking for drafting help.)
   /\b(don'?t know|not sure|unsure|no idea|can'?t figure out|struggling with|help me figure out) (what|how) (i should |to )?(say|text|write|word|tell|put|phrase|respond|reply)\b/i,
+  // Difficulty finding the words FOR a message/person is a genuine request. The
+  // required target/verb (apologi|say|tell|her|my kids …) keeps pure self-
+  // expression out ("find the words to describe my grief" does NOT match).
+  /\b(can'?t|cannot|don'?t|struggling to|trying to) find the (right )?words (to|for) (say|tell|apolog\w*|explain|respond|reply|text|message|write|put|her|him|them|my (wife|husband|ex|kids|son|daughter))\b/i,
   /\b(rewrite|reword|rephrase|fix|soften|clean up) (this|my|the) (text|message|email|reply|response|note)\b/i,
   /\b(help me rehearse|rehearse what to (say|tell)|practice what to (say|tell))\b/i,
   /\bshould i (send|say|text) (this|her|him|them|that)\b/i,

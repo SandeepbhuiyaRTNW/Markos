@@ -61,8 +61,10 @@ export async function composeCommAssist(
   //    (intro, draft, follow_up). The draft is voice-gate-exempt, but NO field is
   //    harm-exempt: a model-generated threat in the intro or a manipulative
   //    follow_up is caught here too. If blocked, all fields are discarded.
-  const generatedText = [drafted.intro, drafted.draft, drafted.follow_up].join('\n\n');
-  const outHarm = await runHarmLayers({ request, draft: generatedText }, { judge: deps.judge });
+  const outHarm = await runHarmLayers(
+    { request, fields: [drafted.intro, drafted.draft, drafted.follow_up] },
+    { judge: deps.judge },
+  );
   if (outHarm.blocked) return refusalFrom(outHarm, 'draft');
 
   // 4. Voice gates apply to Marcus's OWN words only. The draft passes through

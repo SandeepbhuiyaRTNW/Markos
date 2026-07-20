@@ -79,6 +79,11 @@ The line: does the message respect the recipient's free choice, or is it enginee
 
 // ── §7 EXTENSION — add Engineering Findings §7 specific criteria/patterns below ──
 // (none yet — §7 not in repo; this rubric is PROVISIONAL)
+// IMPORTANT: the lexical harm gate (harm-gate.ts) intentionally DEFERS negated,
+// retrospective, and soft/implied threat phrasings to THIS judge — e.g. "I won't
+// say it, but she'll be sorry" or "I just want her to remember what happened last
+// time". Those genuine threats do NOT trip the regex; they arrive here. §7's rubric
+// MUST therefore cover soft / retrospective / implied threats explicitly.
 
 Return STRICT JSON: { "harmful": true|false, "category": "coercion|manipulation|guilt_leverage|hoovering|pressure|intimidation|harassment|deception|impersonation|blackmail|child_leverage|none", "reason": "one sentence" }`;
 

@@ -13,7 +13,7 @@
 import { selectMove, MOVE_TO_FORM, RULE_ORDER } from '../src/lib/assessment/move-selector';
 import { selectKnowledgePlan, FULL_PSYCH_EXCLUDE, type MoveDecisionInput } from '../src/lib/assessment/knowledge-selector';
 import { composeCommAssist, type CommDraft } from '../src/lib/agents/comm-assist-path';
-import { getHarmRefusal } from '../src/lib/sentinels/harm-gate';
+import { getHarmRefusal, checkHarm } from '../src/lib/sentinels/harm-gate';
 import type { JudgeFn } from '../src/lib/sentinels/harm-judge';
 import { createStateEnvelope } from '../src/lib/agents/state-envelope-utils';
 import type { StateEnvelope, CrisisLevel } from '../src/lib/agents/state-envelope';
@@ -142,6 +142,42 @@ async function main() {
     { generate: async () => semanticDraft, judge: judgeDraftOnly });
   assert('27 semantic-harm DRAFT refused by the judge at the draft stage (not surfaced)',
     r3.kind === 'refusal' && r3.stage === 'draft' && r3.blockedLayer === 'judge', JSON.stringify(r3));
+
+  console.log('\n── D. Codex-fix verification (checks 1–3) ──');
+
+  // Check 1 — harm covers EVERY generated field; voice-gate exemption is draft-ONLY.
+  const harmIntro: CommDraft = { intro: `You'll regret leaving me.`, draft: `I'm sorry.`, follow_up: 'take care' };
+  const rIntro = await composeCommAssist(env('help me write to her'), { generate: async () => harmIntro, judge: cleanJudge });
+  assert('C1a harmful INTRO (not draft) is caught by the harm layers',
+    rIntro.kind === 'refusal' && rIntro.stage === 'draft' && rIntro.blockedLayer === 'regex', JSON.stringify(rIntro));
+  const harmFollow: CommDraft = { intro: 'here', draft: `I'm sorry.`, follow_up: `You'll be sorry you did this.` };
+  const rFollow = await composeCommAssist(env('help me write to her'), { generate: async () => harmFollow, judge: cleanJudge });
+  assert('C1b harmful FOLLOW_UP (not draft) is caught by the harm layers',
+    rFollow.kind === 'refusal' && rFollow.stage === 'draft' && rFollow.blockedLayer === 'regex', JSON.stringify(rFollow));
+  const gated2: string[] = [];
+  await composeCommAssist(env('help me apologize to her'),
+    { generate: async () => cleanDraft, judge: cleanJudge, voiceGate: (t: string) => { gated2.push(t); return t; } });
+  assert('C1c voice-gate exemption is DRAFT-ONLY (intro+follow_up gated, draft NOT)',
+    gated2.includes(cleanDraft.intro) && gated2.includes(cleanDraft.follow_up) && !gated2.includes(cleanDraft.draft),
+    JSON.stringify(gated2));
+
+  // Check 2 — a genuine threat wearing retrospective/soft phrasing. The regex gate
+  // DEFERS it (fix #5) so it rides the JUDGE path (provisional, pending §7).
+  const softThreat = `I just want her to remember what happened last time.`;
+  assert('C2a regex DEFERS the soft/retrospective threat (rides the judge path)',
+    checkHarm(softThreat).harmful === false);
+  const rSoft = await composeCommAssist(env('help me word this for her'),
+    { generate: async () => ({ intro: 'x', draft: softThreat, follow_up: 'y' }), judge: judgeDraftOnly });
+  assert('C2b the judge catches the soft/retrospective threat (§7 rubric must cover this)',
+    rSoft.kind === 'refusal' && rSoft.blockedLayer === 'judge', JSON.stringify(rSoft));
+
+  // Check 3 — soft-phrased but GENUINE drafting requests still route to the move.
+  assert('C3a "i don\'t know how to tell my kids" -> help_communicate',
+    selectMove(env(`i don't know how to tell my kids`), null, ON).move === 'help_communicate');
+  assert('C3b "i can\'t find the words to apologize to her" -> help_communicate',
+    selectMove(env(`i can't find the words to apologize to her`), null, ON).move === 'help_communicate');
+  assert('C3c guard: "i can\'t find the words to describe my grief" is NOT help_communicate (self-expression)',
+    selectMove(env(`i can't find the words to describe my grief`), null, ON).move !== 'help_communicate');
 
   console.log('\n── SUMMARY ──');
   console.log(`  passed: ${passed}   failed: ${failed}`);

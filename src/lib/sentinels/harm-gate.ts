@@ -234,4 +234,8 @@ export function getHarmRefusal(categories: string[]): string {
 //   • Semantic coercion (benign words, harmful intent) is OUT OF REACH of regex.
 //     The follow-up is an LLM-judge layer over the request+draft; §7 should
 //     define its rubric. Do NOT rely on this file alone for that residual.
+//   • The threat category DEFERS negated/retrospective/apology frames to the judge
+//     (threatIsNegatedOrRetrospective). A genuine threat wearing that framing
+//     ("I won't say it, but she'll be sorry") therefore rides the JUDGE path, not
+//     this gate. §7's rubric MUST cover soft/retrospective/implied threats.
 // ─────────────────────────────────────────────────────────────────────────────

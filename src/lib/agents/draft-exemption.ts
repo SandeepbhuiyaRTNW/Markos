@@ -86,14 +86,22 @@ export interface HarmLayersResult {
  * and so the caller can swap implementations; it defaults to the real judgeHarm.
  */
 export async function runHarmLayers(
-  input: { request: string; draft?: string },
+  input: { request: string; draft?: string; fields?: string[] },
   opts?: { judge?: JudgeFn; regexOnly?: boolean },
 ): Promise<HarmLayersResult> {
-  // ── Layer 1: regex on request AND draft ──
+  // Regex checks each draft field SEPARATELY. Concatenating them would let a
+  // negation/apology cue in one field (e.g. "I'm sorry." in the draft) fall inside
+  // the threat-guard's preceding-context window for a threat in ANOTHER field (a
+  // harmful follow_up), masking it. The judge, by contrast, sees the fields joined
+  // for full context.
+  const draftTexts = input.fields ?? (input.draft ? [input.draft] : []);
+  const draftJoined = draftTexts.join('\n\n');
+
+  // ── Layer 1: regex on request AND each draft field independently ──
   const reqHarm = checkHarm(input.request || '');
-  const draftHarm = input.draft ? checkHarm(input.draft) : { harmful: false, categories: [], matched: [] };
-  if (reqHarm.harmful || draftHarm.harmful) {
-    const categories = [...new Set([...reqHarm.categories, ...draftHarm.categories])];
+  const fieldHarms = draftTexts.map(t => checkHarm(t));
+  if (reqHarm.harmful || fieldHarms.some(h => h.harmful)) {
+    const categories = [...new Set([...reqHarm.categories, ...fieldHarms.flatMap(h => h.categories)])];
     return {
       blocked: true,
       layer: 'regex',
@@ -109,7 +117,7 @@ export async function runHarmLayers(
 
   // ── Layer 2: semantic judge (only reached when regex is clean) ──
   const judge = opts?.judge ?? judgeHarm;
-  const verdict = await judge({ request: input.request, draft: input.draft });
+  const verdict = await judge({ request: input.request, draft: draftJoined || undefined });
   if (verdict.harmful) {
     return {
       blocked: true,
