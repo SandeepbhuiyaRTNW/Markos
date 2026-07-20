@@ -65,8 +65,8 @@ async function main() {
     selectMove(env(`help me rewrite this text so it's not angry`), null, ON).move === 'help_communicate');
   assert('7  audit slip: "can you help me rehearse what to say to my ex" -> help_communicate',
     selectMove(env('can you help me rehearse what to say to my ex'), null, ON).move === 'help_communicate');
-  assert('8  "i need to tell her i\'m moving out" -> help_communicate',
-    selectMove(env(`i need to tell her i'm moving out`), null, ON).move === 'help_communicate');
+  assert('8  "help me tell her i am moving out" -> help_communicate',
+    selectMove(env(`help me tell her i'm moving out`), null, ON).move === 'help_communicate');
   assert('9  audit slip: "help me respond to my ex-wife" -> help_communicate',
     selectMove(env('help me respond to my ex-wife'), null, ON).move === 'help_communicate');
   assert('10 crisis precedence: acute crisis + comm ask -> crisis_protocol',
@@ -75,6 +75,15 @@ async function main() {
     selectMove(env('what should I text her', { stylePreferences: JUST_LISTEN }), null, ON).move === 'help_communicate');
   assert('12 non-comm message "i feel lost today" is NOT help_communicate',
     selectMove(env('i feel lost today'), null, ON).move !== 'help_communicate');
+  // Review (Codex P2): bare statements of intent are NOT drafting requests.
+  assert('12b guard: "i need to talk to my therapist tomorrow" is NOT help_communicate',
+    selectMove(env('i need to talk to my therapist tomorrow'), null, ON).move !== 'help_communicate');
+  assert('12c guard: "i want to tell you how lonely i am" is NOT help_communicate',
+    selectMove(env('i want to tell you how lonely i am'), null, ON).move !== 'help_communicate');
+  assert('12d guard: "i have to email work before i can focus" is NOT help_communicate',
+    selectMove(env('i have to email work before i can focus'), null, ON).move !== 'help_communicate');
+  assert('12e uncertainty ask: "i don\'t know what to say to her" -> help_communicate',
+    selectMove(env(`i don't know what to say to her`), null, ON).move === 'help_communicate');
   assert('13 MOVE_TO_FORM.help_communicate === statement',
     MOVE_TO_FORM.help_communicate === 'statement');
   assert('14 help_communicate is not an ask-question move',
@@ -135,9 +144,9 @@ async function main() {
     r3.kind === 'refusal' && r3.stage === 'draft' && r3.blockedLayer === 'judge', JSON.stringify(r3));
 
   console.log('\n── SUMMARY ──');
-  console.log(`  passed: ${passed}   failed: ${failed}   (of 27)`);
+  console.log(`  passed: ${passed}   failed: ${failed}`);
   if (failed > 0) { console.log('  ❌ SUITE FAILED'); process.exit(1); }
-  else console.log('  ✅ SUITE PASSED — 27/27');
+  else console.log('  ✅ SUITE PASSED');
 }
 
 main();

@@ -43,6 +43,19 @@ const JUDGE_TIMEOUT_MS = 4000;
 // refuses on timeout — a retry would only risk ~8s for no safety gain.
 const JUDGE_MAX_RETRIES = 0;
 
+// The judge's category enum. response_format:json_object does NOT enforce it, so
+// a malformed response could return arbitrary text (even request PII) in
+// `category`. Anything off-list is normalized to 'other' BEFORE it can flow into
+// CommAssistResult.categories and the PII-free metrics (refusal_category).
+const ALLOWED_JUDGE_CATEGORIES = new Set([
+  'coercion', 'manipulation', 'guilt_leverage', 'hoovering', 'pressure',
+  'intimidation', 'harassment', 'deception', 'impersonation', 'blackmail',
+  'child_leverage', 'none',
+]);
+export function normalizeJudgeCategory(c: unknown): string {
+  return typeof c === 'string' && ALLOWED_JUDGE_CATEGORIES.has(c) ? c : 'other';
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // THE RUBRIC — deliberately aimed at the failure mode regex cannot reach:
 // coercion/manipulation dressed in benign, non-violent language.
@@ -119,7 +132,8 @@ export const judgeHarm: JudgeFn = async ({ request, draft }) => {
     }
     return {
       harmful: parsed.harmful,
-      category: typeof parsed.category === 'string' ? parsed.category : null,
+      // Allowlist-normalized — never a verbatim model string (PII guard).
+      category: normalizeJudgeCategory(parsed.category),
       reason: typeof parsed.reason === 'string' ? parsed.reason : '',
     };
   } catch (err) {

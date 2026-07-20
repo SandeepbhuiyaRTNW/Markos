@@ -140,6 +140,17 @@ export const HARM_CATEGORIES: Record<string, RegExp[]> = {
   blackmail_exposure: BLACKMAIL_EXPOSURE_PATTERNS,
 };
 
+// Retrospective / negated / apology framing that flips a THREAT reference from
+// intent into a reference to PAST or DISAVOWED harm ("I regret threatening her",
+// "promise I will never threaten her again"). Applied ONLY to the threat category
+// — apologizing does not make "pretend to be my lawyer" safe. Ambiguous cases are
+// deferred to the semantic judge, which still runs whenever regex is clean.
+const THREAT_NEGATION_CUES = /\b(never|not going to|won'?t|will not|would never|no longer|regret|sorry|apolog|ashamed|make amends|used to)\b/i;
+function threatIsNegatedOrRetrospective(text: string, matchIndex: number): boolean {
+  const window = text.slice(Math.max(0, matchIndex - 40), matchIndex);
+  return THREAT_NEGATION_CUES.test(window);
+}
+
 /**
  * Scan text for harmful content. Runs every category; harmful = any match.
  * Pure and deterministic. Safe to call on the user's request AND on a draft.
@@ -151,10 +162,12 @@ export function checkHarm(text: string): HarmVerdict {
   for (const [key, patterns] of Object.entries(HARM_CATEGORIES)) {
     for (const p of patterns) {
       const m = s.match(p);
-      if (m) {
-        if (!categories.includes(key)) categories.push(key);
-        matched.push(m[0]);
-      }
+      if (!m) continue;
+      // Threat category: skip a match sitting in a negated/retrospective/apology
+      // frame; the judge remains the backstop for anything this defers.
+      if (key === 'threat' && threatIsNegatedOrRetrospective(s, m.index ?? 0)) continue;
+      if (!categories.includes(key)) categories.push(key);
+      matched.push(m[0]);
     }
   }
   return { harmful: categories.length > 0, categories, matched };

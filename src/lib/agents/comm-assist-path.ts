@@ -48,16 +48,21 @@ export async function composeCommAssist(
   const voiceGate = deps.voiceGate ?? IDENTITY_VOICE_GATE;
   const request = env.utterance;
 
-  // 1. INPUT harm — refuse a harmful ASK before spending a generation on it.
-  const inHarm = await runHarmLayers({ request }, { judge: deps.judge });
+  // 1. INPUT harm — regex ONLY (cheap). Refuse a lexically-harmful ASK before
+  //    spending a generation on it. The semantic judge runs ONCE, at the output
+  //    stage below, over the request + every generated field (no double call).
+  const inHarm = await runHarmLayers({ request }, { regexOnly: true });
   if (inHarm.blocked) return refusalFrom(inHarm, 'request');
 
   // 2. Generate the structured draft.
   const drafted = await deps.generate(env);
 
-  // 3. OUTPUT harm — BOTH layers on request + draft. The draft is voice-gate-
-  //    exempt but NOT harm-exempt; if blocked, it is discarded, never surfaced.
-  const outHarm = await runHarmLayers({ request, draft: drafted.draft }, { judge: deps.judge });
+  // 3. OUTPUT harm — BOTH layers over the request + EVERY generated field
+  //    (intro, draft, follow_up). The draft is voice-gate-exempt, but NO field is
+  //    harm-exempt: a model-generated threat in the intro or a manipulative
+  //    follow_up is caught here too. If blocked, all fields are discarded.
+  const generatedText = [drafted.intro, drafted.draft, drafted.follow_up].join('\n\n');
+  const outHarm = await runHarmLayers({ request, draft: generatedText }, { judge: deps.judge });
   if (outHarm.blocked) return refusalFrom(outHarm, 'draft');
 
   // 4. Voice gates apply to Marcus's OWN words only. The draft passes through

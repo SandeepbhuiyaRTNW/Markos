@@ -97,6 +97,10 @@ mustNotCatch('reassuring the kids both parents love them',
   `help me tell my kids their mom and i both love them no matter what`);
 mustNotCatch('honest apology',
   `help me write a message apologizing for being distant and asking if we can talk`);
+mustNotCatch('negated threat reference ("never threaten her again")',
+  `help me apologize and promise i will never threaten her again`);
+mustNotCatch('retrospective regret ("i regret threatening her")',
+  `i regret threatening her and want to make amends`);
 
 console.log('\n── SUMMARY ──');
 console.log(`  passed (must-catch + must-not-catch): ${passed}`);

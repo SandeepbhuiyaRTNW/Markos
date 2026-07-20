@@ -188,8 +188,11 @@ export const COMMUNICATION_REQUEST_RE: RegExp[] = [
   /\bhow (should|do|can|could|would) i (respond|reply|word|say|phrase|approach|bring up|tell|break it to|start)\b/i,
   /\b(write|draft|compose) (me |a |the |her |him |them |my )?(text|message|email|letter|note|reply|response)\b/i,
   /\bhelp me (figure out|work out) (what|how) to (say|word|tell|write|respond|put)\b/i,
-  /\bi (need|want|have) to (tell|text|message|email|talk to|reach out to|respond to|reply to|write to)\b/i,
-  /\bwant to (tell|text|reach out to|message|write to|say something to)\b/i,
+  // Uncertainty about WHAT/HOW to word a message is a real request for help.
+  // (Replaces bare intent-to-contact patterns, which mis-caught ordinary
+  // disclosures like "I need to talk to my therapist" or "I want to tell you how
+  // lonely I am" — flagged by review as not actually asking for drafting help.)
+  /\b(don'?t know|not sure|unsure|no idea|can'?t figure out|struggling with|help me figure out) (what|how) (i should |to )?(say|text|write|word|tell|put|phrase|respond|reply)\b/i,
   /\b(rewrite|reword|rephrase|fix|soften|clean up) (this|my|the) (text|message|email|reply|response|note)\b/i,
   /\b(help me rehearse|rehearse what to (say|tell)|practice what to (say|tell))\b/i,
   /\bshould i (send|say|text) (this|her|him|them|that)\b/i,

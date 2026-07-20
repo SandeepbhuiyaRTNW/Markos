@@ -87,10 +87,8 @@ export interface HarmLayersResult {
  */
 export async function runHarmLayers(
   input: { request: string; draft?: string },
-  opts?: { judge?: JudgeFn },
+  opts?: { judge?: JudgeFn; regexOnly?: boolean },
 ): Promise<HarmLayersResult> {
-  const judge = opts?.judge ?? judgeHarm;
-
   // ── Layer 1: regex on request AND draft ──
   const reqHarm = checkHarm(input.request || '');
   const draftHarm = input.draft ? checkHarm(input.draft) : { harmful: false, categories: [], matched: [] };
@@ -104,7 +102,13 @@ export async function runHarmLayers(
     };
   }
 
+  // regexOnly short-circuit: the cheap pre-generation input check runs Layer 1
+  // only, so a clean help_communicate turn makes exactly ONE judge call (at the
+  // output stage over request+draft), not two.
+  if (opts?.regexOnly) return { blocked: false, layer: null, categories: [], reason: '' };
+
   // ── Layer 2: semantic judge (only reached when regex is clean) ──
+  const judge = opts?.judge ?? judgeHarm;
   const verdict = await judge({ request: input.request, draft: input.draft });
   if (verdict.harmful) {
     return {

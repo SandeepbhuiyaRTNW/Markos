@@ -22,7 +22,7 @@ import {
   VOICE_GATES,
   HARM_LAYERS,
 } from '../src/lib/agents/draft-exemption';
-import { judgeHarm, type JudgeFn } from '../src/lib/sentinels/harm-judge';
+import { judgeHarm, normalizeJudgeCategory, type JudgeFn } from '../src/lib/sentinels/harm-judge';
 
 let passed = 0, failed = 0;
 function assert(name: string, cond: boolean, detail = '') {
@@ -81,6 +81,13 @@ async function main() {
   process.env.OPENAI_API_KEY = savedKey;
   assert('judge returns harmful=true when the API call errors', verdict.harmful === true, JSON.stringify(verdict));
   assert('  ...with category judge_error', verdict.category === 'judge_error', JSON.stringify(verdict));
+
+  console.log('\n── F. Judge category allowlist (PII guard) ──');
+  assert('known category passes through', normalizeJudgeCategory('coercion') === 'coercion');
+  assert('none passes through', normalizeJudgeCategory('none') === 'none');
+  assert('unknown/PII string normalized to other',
+    normalizeJudgeCategory('here is the raw user message with private details') === 'other');
+  assert('non-string normalized to other', normalizeJudgeCategory(undefined) === 'other');
 
   console.log('\n── SUMMARY ──');
   console.log(`  passed: ${passed}   failed: ${failed}`);
