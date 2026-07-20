@@ -166,6 +166,55 @@ export function isHarmful(text: string): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CATEGORY → REFUSAL RESPONSE (plumbed from checkHarm().categories)
+//
+// Two tones, by intent behind the category:
+//   • CONCERNED — custody/child leverage & parental alienation. These usually
+//     come from a desperate father, not a malicious one. Firm boundary, but we
+//     meet the fear underneath, not the words.
+//   • REDIRECT  — threat / coercion / harassment / deception / impersonation /
+//     blackmail. Clear boundary, then redirect toward communication that is
+//     actually safe to help with.
+// Templates are ADJUSTABLE — tone/wording expected to change once §7 lands.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CONCERNED_CATEGORIES = new Set(['custody_child_leverage', 'parental_alienation']);
+
+export const HARM_REFUSAL_RESPONSES: Record<string, string> = {
+  custody_child_leverage:
+    `I am not going to help write that. Using the kids as leverage will cost you the thing you are trying to hold onto — them. I can hear how scared you are of losing them. That fear is real. What is it you are actually terrified of here?`,
+  parental_alienation:
+    `I will not help turn your kids against their mother. I know it does not feel like that is what you are asking — it feels like telling the truth. But they need both of you. What is the anger underneath this that is looking for somewhere to go?`,
+  threat:
+    `I am not going to help write a message meant to frighten or punish her. That is not a message — it is a threat, and it will not get you what you want. What are you actually trying to make her understand?`,
+  coercion_leverage:
+    `I will not help write something designed to make her afraid of what she would lose. Pressure is not connection. If there is something real you need her to hear, I will help you find the honest version of it — what is it?`,
+  harassment:
+    `I am not going to help you keep contacting her against her wishes. If she has asked for space, the message that helps you is the one you do not send. What is making it so hard to sit with the silence right now?`,
+  deception_manipulation:
+    `I will not help write something meant to deceive her or make her doubt herself. That road ends badly for you too. What is the truth you are trying to avoid saying straight?`,
+  impersonation:
+    `I am not going to help you pretend to be someone you are not — a lawyer, or anyone else. That can cross into real legal trouble. What is the fear that is making you reach for someone else's authority?`,
+  blackmail_exposure:
+    `I will not help you threaten to expose her. That is not leverage, it is something you cannot take back — and in many places it is a crime. Set that down. What has hurt you badly enough that this felt like the option?`,
+};
+
+const GENERIC_HARM_REFUSAL =
+  `I am not going to help write that. Let's find the version of what you need to say that does not do harm. What is the real thing underneath it?`;
+
+/**
+ * Pick a refusal for the matched categories. If multiple matched, a CONCERNED
+ * category wins (softer, and usually the more human read of the situation);
+ * otherwise the first matched category's template; else a generic harm refusal.
+ */
+export function getHarmRefusal(categories: string[]): string {
+  if (!categories || categories.length === 0) return GENERIC_HARM_REFUSAL;
+  const concerned = categories.find(c => CONCERNED_CATEGORIES.has(c));
+  const key = concerned || categories[0];
+  return HARM_REFUSAL_RESPONSES[key] || GENERIC_HARM_REFUSAL;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // EXTENSION POINTS — add Engineering Findings §7 patterns here.
 //   • New lexical patterns → the matching category array above.
 //   • New category → add an array + register it in HARM_CATEGORIES.
