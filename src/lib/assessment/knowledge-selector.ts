@@ -121,6 +121,20 @@ const RULES: KIRule[] = [
       includeWhispererOutput: false,
     } },
 
+  { name: 'help_communicate',
+    // Set only when COMM_ASSIST_ENABLED is on (move-selector gates it), so no
+    // separate flag is needed here. Scope to the relational/practical corpus for
+    // drafting help: exclude the whole psych/flourishing corpus, lean toward
+    // divorce + fatherhood if present, and do NOT push probing questions while
+    // the man is trying to word a message.
+    predicate: (_e, d) => d.move === 'help_communicate',
+    plan: {
+      safetyOnly: false,
+      wisdom: { enabled: true, excludeDomains: FULL_PSYCH_EXCLUDE, towardDomains: ['divorce', 'fatherhood'] },
+      questions: { enabled: false, whispererScope: null, arenaScope: null },
+      includeWhispererOutput: true,
+    } },
+
   { name: 'divorce_shock',
     // too_early is populated ONLY by the move-selector's early_divorce_shock rung.
     predicate: (_e, d) => d.too_early_to_address.length > 0,
@@ -188,6 +202,7 @@ const RULES: KIRule[] = [
 
 const RULE_RATIONALE: Record<string, string> = {
   crisis: 'Crisis — safety only; no wisdom, questions, or whisperer framing.',
+  help_communicate: 'Communication assist — scope to the relational/practical corpus (divorce, fatherhood); no probing questions while drafting.',
   divorce_shock: 'Early divorce shock — suppress the whole psych corpus; toward divorce/grief if present.',
   grief: 'Grief — suppress the psych corpus; toward the grief corpus and grief questions.',
   children: 'Child-centered — stay concrete (no deep psych); co-parenting questions via the divorce whisperer.',

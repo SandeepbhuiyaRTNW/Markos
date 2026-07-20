@@ -39,7 +39,9 @@ export interface JudgeVerdict {
 export type JudgeFn = (input: { request: string; draft?: string }) => Promise<JudgeVerdict>;
 
 const JUDGE_TIMEOUT_MS = 4000;
-const JUDGE_MAX_RETRIES = 1;
+// Single-shot: no retry. Someone is waiting on this turn, and fail-closed already
+// refuses on timeout — a retry would only risk ~8s for no safety gain.
+const JUDGE_MAX_RETRIES = 0;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // THE RUBRIC — deliberately aimed at the failure mode regex cannot reach:

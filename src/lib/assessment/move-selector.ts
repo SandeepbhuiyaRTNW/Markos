@@ -69,6 +69,7 @@ export type ConversationMove =
   | 'ask_grounding_question'
   | 'ask_loss_naming_question'
   | 'give_practical_advice'
+  | 'help_communicate'      // Safe Communication Assistance — flag-gated (COMM_ASSIST_ENABLED)
   | 'refer_to_human_support';
 
 type CraftForm = CraftDirectives['form']; // 'question' | 'statement' | 'reflection' | 'challenge' | 'presence'
@@ -99,6 +100,7 @@ export const MOVE_TO_FORM: Record<ConversationMove, CraftForm> = {
   ask_grounding_question: 'question',
   ask_loss_naming_question: 'question',
   give_practical_advice: 'statement',
+  help_communicate: 'statement',
   refer_to_human_support: 'statement',
 };
 
@@ -167,11 +169,44 @@ function childrenInvolved(env: StateEnvelope): boolean {
 
 function pushbackOf(cs: ConversationState | null): number { return cs?.pushbackCount ?? 0; }
 
+// ─── Communication-assist gate (Safe Communication Assistance) ───
+// COMM_ASSIST_ENABLED default OFF. When off, the help_communicate rule never
+// fires and the ladder is byte-identical to today. Flag convention matches KI.
+function commAssistEnabled(): boolean {
+  const v = process.env.COMM_ASSIST_ENABLED;
+  return v === 'true' || v === '1';
+}
+
+// BROAD phrasing coverage (spec Step 2) — deliberately wider than frame-refusal's
+// narrow DRAFT_PATTERNS, including the asymmetric cases the audit found slipping
+// ("help me respond to my ex-wife", "rewrite this text", "rehearse what to say").
+// Detects INTENT to get communication help; the harm layers downstream decide
+// whether that specific help is safe. This selector stays pure (no LLM).
+export const COMMUNICATION_REQUEST_RE: RegExp[] = [
+  /\b(help me|can you help me|i need help|could you help me) (write|draft|compose|word|phrase|rewrite|reword|rephrase|reply|respond|say|tell|text|message|email)\b/i,
+  /\bwhat (should|do|would|can|could) i (say|text|write|send|reply|respond|tell|put|message)\b/i,
+  /\bhow (should|do|can|could|would) i (respond|reply|word|say|phrase|approach|bring up|tell|break it to|start)\b/i,
+  /\b(write|draft|compose) (me |a |the |her |him |them |my )?(text|message|email|letter|note|reply|response)\b/i,
+  /\bhelp me (figure out|work out) (what|how) to (say|word|tell|write|respond|put)\b/i,
+  /\bi (need|want|have) to (tell|text|message|email|talk to|reach out to|respond to|reply to|write to)\b/i,
+  /\bwant to (tell|text|reach out to|message|write to|say something to)\b/i,
+  /\b(rewrite|reword|rephrase|fix|soften|clean up) (this|my|the) (text|message|email|reply|response|note)\b/i,
+  /\b(help me rehearse|rehearse what to (say|tell)|practice what to (say|tell))\b/i,
+  /\bshould i (send|say|text) (this|her|him|them|that)\b/i,
+  /\bhelp me (respond|reply) to\b/i,
+];
+function isCommunicationRequest(env: StateEnvelope): boolean {
+  return COMMUNICATION_REQUEST_RE.some(re => re.test(env.utterance));
+}
+
 // ─── The ordered rule ladder (the spec) ───
+
+// Cross-cutting context available to every rule's predicate (feature flags etc.).
+interface RuleCtx { commAssistEnabled: boolean; }
 
 interface Rule {
   name: string;
-  predicate: (env: StateEnvelope, cs: ConversationState | null) => boolean;
+  predicate: (env: StateEnvelope, cs: ConversationState | null, ctx: RuleCtx) => boolean;
   move: ConversationMove;
   too_early?: string[];
   sets?: { child_centered?: boolean };
@@ -181,6 +216,15 @@ const RULES: Rule[] = [
   { name: 'crisis_pass_through',
     predicate: (e) => e.sentinels.crisis.level !== 'none',
     move: 'crisis_protocol' },
+
+  // Safe Communication Assistance — flag-gated. Sits directly BELOW crisis so
+  // crisis always wins, and ABOVE the advice/just-listen rules (an explicit
+  // in-the-moment ask for help wording a message overrides a standing style pref,
+  // consistent with advice_ask_overrides_just_listen). Never fires when the flag
+  // is off, so today's live behavior is unchanged.
+  { name: 'help_communicate',
+    predicate: (e, _c, ctx) => ctx.commAssistEnabled && isCommunicationRequest(e),
+    move: 'help_communicate' },
 
   { name: 'advice_ask_overrides_just_listen',
     predicate: (e, c) => hasNoQuestionPref(e) && isDirectAdviceAsk(e, c),
@@ -233,6 +277,7 @@ const RULES: Rule[] = [
 
 const RULE_RATIONALE: Record<string, string> = {
   crisis_pass_through: 'Crisis is owned at Tier 1; defer to crisis handling and 988 enforcement.',
+  help_communicate: 'He asked for help wording a message (flag on) — route to the draft-safe path; harm layers gate the actual help.',
   advice_ask_overrides_just_listen: 'He asked for advice outright — an explicit ask overrides a standing "just listen".',
   honor_just_listen: 'Standing no-questions preference and he is not asking for advice — be present.',
   early_divorce_shock: 'Divorce shock window — meet the loss; do not open rebuild territories yet.',
@@ -274,10 +319,15 @@ function finalize(rule: Rule, env: StateEnvelope): MoveDecision {
  * Commit to exactly ONE conversational move for this turn. Pure and deterministic
  * — reads the envelope + conversation state, mutates nothing.
  */
-export function selectMove(env: StateEnvelope, cs?: ConversationState | null): MoveDecision {
+export function selectMove(
+  env: StateEnvelope,
+  cs?: ConversationState | null,
+  opts?: { commAssistEnabled?: boolean },
+): MoveDecision {
   const state = cs ?? null;
+  const ctx: RuleCtx = { commAssistEnabled: opts?.commAssistEnabled ?? commAssistEnabled() };
   for (const rule of RULES) {
-    if (rule.predicate(env, state)) return finalize(rule, env);
+    if (rule.predicate(env, state, ctx)) return finalize(rule, env);
   }
   // Unreachable: default_observe is total. Kept for exhaustiveness.
   return finalize(RULES[RULES.length - 1], env);
