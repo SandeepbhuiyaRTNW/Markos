@@ -30,6 +30,21 @@
  *   realities before she sees a lawyer"). The real net for that residual is an
  *   LLM-judge layer, which §7 should inform. This file is the extensible first
  *   layer, not the whole safety story.
+ *
+ * ⚠️ LIVE-TEST-REQUIRED — STRICT-CATEGORY OVER-REFUSAL (custody & alienation):
+ *   The custody and parental-alienation patterns cannot distinguish the man as
+ *   VICTIM/grieving ("I'm scared I'll never see my kids", "she'll take the kids
+ *   from me") from the man as AGGRESSOR ("she'll never see the kids again", "I'll
+ *   take the kids from her") — same words, opposite intent. They therefore REFUSE
+ *   the archetypal sympathetic case, the single most common thing this app's user
+ *   says. This is a SEMANTIC distinction regex MUST NOT attempt: any pronoun-based
+ *   carve-out either blocks grieving fathers or lets real threats through on one
+ *   wrong boundary — in the highest-stakes category. The correct fix is DEFERRING
+ *   these strict-category matches to the semantic judge ("Option B") — but that
+ *   rests on the judge (F1), which is unproven and injectable, so it CANNOT ship
+ *   until the judge is red-teamed live. Until then these over-refuse BY DESIGN;
+ *   the concrete cases are pinned in scripts/test-harm-gate.ts as
+ *   expectedCurrentlyRefused() so the over-refusal is tracked, not forgotten.
  */
 
 export interface HarmVerdict {

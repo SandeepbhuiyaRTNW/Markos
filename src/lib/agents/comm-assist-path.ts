@@ -29,6 +29,10 @@
  *      only in prior context is judged in isolation.
  *   F8 harm-gate ≠ crisis-gate: a draft containing self-harm/crisis content is not
  *      checked here (crisis.ts runs on input only).
+ *   F9 custody/alienation STRICT-category over-refusal: they refuse the archetypal
+ *      sympathetic case ("I'm scared I'll never see my kids") because regex can't
+ *      tell victim from aggressor. Proper fix = defer these to the judge (Option B),
+ *      blocked on F1. Tracked in test-harm-gate.ts (expectedCurrentlyRefused).
  *   G1 enabling COMM_ASSIST_ENABLED alone does NOTHING — this path is unwired (no
  *      orchestrator branch, no real generate fn, no voiceGate chain, relaxation
  *      unapplied). Substantial wiring is required before the feature does anything.
