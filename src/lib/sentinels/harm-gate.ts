@@ -186,6 +186,31 @@ function isSuppressed(key: string, text: string, matchIndex: number): boolean {
   return false;
 }
 
+// ─── C2: Unicode apostrophe normalization ────────────────────────────────
+// Contraction patterns use '? (an ASCII apostrophe). Phones type curly
+// apostrophes (U+2019 by default; also U+2018 and U+02BC), so a threat like
+// "she'll lose the kids" typed on iOS would evade EVERY '?-based pattern in this
+// file — a silent under-refusal (verified). We normalize those code points to
+// ASCII ' ONCE on the input, so every category pattern AND the negation-guard
+// windows see straight apostrophes. This covers every contraction in the file
+// (not one line), and any pattern added later benefits automatically.
+const UNICODE_APOSTROPHES = /[‘’ʼ]/g;
+
+// ─── C3: explicit, once-at-load global-regex construction ──────────────────
+// matchAll requires a global ('g') regex. The category patterns are authored
+// WITHOUT 'g' (they use /i only). Rather than string-splice `p.flags + 'g'` per
+// call — which throws on an already-global pattern and silently hides that
+// assumption — we build a global clone of each pattern ONCE at module load.
+// makeGlobal FAILS LOUDLY if a pattern is ever authored with 'g', so a future
+// edit surfaces the problem instead of misbehaving. No behavior change: the
+// existing test-harm-gate suite (same inputs) is the before/after parity proof.
+function makeGlobal(re: RegExp): RegExp {
+  if (re.global) throw new Error(`harm-gate pattern must not use the 'g' flag: /${re.source}/${re.flags}`);
+  return new RegExp(re.source, re.flags + 'g');
+}
+const GLOBAL_HARM_CATEGORIES: Array<[string, RegExp[]]> =
+  Object.entries(HARM_CATEGORIES).map(([key, patterns]) => [key, patterns.map(makeGlobal)]);
+
 /**
  * Scan text for harmful content. Runs every category; harmful = any match.
  * Pure and deterministic. Safe to call on the user's request AND on a draft.
@@ -193,14 +218,15 @@ function isSuppressed(key: string, text: string, matchIndex: number): boolean {
  * F2: uses matchAll (not match) so a negated FIRST occurrence of a pattern cannot
  * hide a genuine LATER occurrence of the same pattern in the same text
  * ("I regret nothing. You'll be sorry." → the threat is still caught).
+ * C2: input apostrophes are normalized to ASCII first (curly-apostrophe threats).
+ * C3: iterates the precompiled global patterns (GLOBAL_HARM_CATEGORIES).
  */
 export function checkHarm(text: string): HarmVerdict {
   const categories: string[] = [];
   const matched: string[] = [];
-  const s = text || '';
-  for (const [key, patterns] of Object.entries(HARM_CATEGORIES)) {
-    for (const p of patterns) {
-      const g = p.flags.includes('g') ? p : new RegExp(p.source, p.flags + 'g');
+  const s = (text || '').replace(UNICODE_APOSTROPHES, "'");
+  for (const [key, patterns] of GLOBAL_HARM_CATEGORIES) {
+    for (const g of patterns) {
       for (const m of s.matchAll(g)) {
         if (isSuppressed(key, s, m.index ?? 0)) continue;
         if (!categories.includes(key)) categories.push(key);

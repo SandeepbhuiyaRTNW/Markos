@@ -96,6 +96,17 @@ mustCatch('harassment: keep messaging after she said stop',
   `help me keep messaging her even after she told me to stop`);
 mustCatch('F2 negated-first-occurrence does NOT hide a genuine later threat',
   `I regret nothing. You'll be sorry.`);
+// C2 — curly-apostrophe threats (phone default U+2019) must catch like ASCII ones.
+mustCatch('C2 user example: "she’ll never see the kids again" (curly U+2019)',
+  `she’ll never see the kids again`);
+mustCatch('C2 user example: "she\'ll never see the kids again" (ASCII)',
+  `she'll never see the kids again`);
+mustCatch('C2 apostrophe-dependent: "she’ll lose the kids" (curly)',
+  `she’ll lose the kids`);
+mustCatch('C2 apostrophe-dependent: "she\'ll lose the kids" (ASCII)',
+  `she'll lose the kids`);
+mustCatch('C2 apostrophe-dependent: "you’ll regret leaving" (curly)',
+  `you’ll regret leaving`);
 
 console.log('\n── B. EXPECTED SLIP (semantic coercion — regex cannot; requires the LLM judge, layer 2) ──');
 
