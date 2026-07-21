@@ -45,6 +45,14 @@
  *   until the judge is red-teamed live. Until then these over-refuse BY DESIGN;
  *   the concrete cases are pinned in scripts/test-harm-gate.ts as
  *   expectedCurrentlyRefused() so the over-refusal is tracked, not forgotten.
+ *
+ * ⚠️ LIVE-TEST-REQUIRED — THREAT NEGATION (owner decision C1): the threat category
+ *   makes NO attempt to distinguish a real threat from an apology/negated reference
+ *   ("I'll never threaten her again", "I regret threatening her") in regex. No
+ *   window value is safe — a distant negation lets a real threat slip (unsafe), a
+ *   nearby one over-refuses an apology (safe). So threat OVER-refuses genuine
+ *   apologies BY DESIGN; the semantic call is deferred to the judge (Option B),
+ *   blocked on F1. Tracked in test-harm-gate.ts as expectedCurrentlyRefused().
  */
 
 export interface HarmVerdict {
@@ -171,17 +179,21 @@ export const HARM_CATEGORIES: Record<string, RegExp[]> = {
 // Retrospective/apology framing ("I regret threatening her") is threat-only, with
 // an even tighter window so "I regret nothing. You'll be sorry." is NOT masked.
 const DIRECT_NEGATION_CUES = /\b(don'?t|do not|won'?t|will not|will never|never|no longer|not going to)\b|n'?t\b/i;
-const THREAT_RETRO_CUES = /\b(regret|sorry|apolog|ashamed|used to|make amends)\b/i;
-const NEGATION_AWARE_CATEGORIES = new Set(['threat', 'deception_manipulation', 'impersonation']);
+// C1 (owner-approved): the THREAT category no longer attempts a negation/apology
+// distinction in regex. No window value is correct — a DISTANT negation lets a real
+// threat slip ("I won't lie, you'll regret this" → under-refusal, the UNSAFE
+// failure), a NEARBY one over-refuses a genuine apology (the SAFE failure). This is
+// a SEMANTIC call that belongs to the judge (Option B), same rationale as the F9
+// custody/alienation decision. So threat now OVER-refuses apologies BY DESIGN until
+// judge-deferral lands; the cases are pinned as expectedCurrentlyRefused() in the
+// test suite. deception & impersonation KEEP a short-window direct-negation guard
+// (benign negated forms are common there and the under-refusal risk is lower).
+const NEGATION_AWARE_CATEGORIES = new Set(['deception_manipulation', 'impersonation']);
 
 function isSuppressed(key: string, text: string, matchIndex: number): boolean {
   if (NEGATION_AWARE_CATEGORIES.has(key)) {
     const w = text.slice(Math.max(0, matchIndex - 14), matchIndex);
     if (DIRECT_NEGATION_CUES.test(w)) return true;
-  }
-  if (key === 'threat') {
-    const w = text.slice(Math.max(0, matchIndex - 10), matchIndex);
-    if (THREAT_RETRO_CUES.test(w)) return true;
   }
   return false;
 }
@@ -299,11 +311,11 @@ export function getHarmRefusal(categories: string[]): string {
 //   • Semantic coercion (benign words, harmful intent) is OUT OF REACH of regex.
 //     The follow-up is an LLM-judge layer over the request+draft; §7 should
 //     define its rubric. Do NOT rely on this file alone for that residual.
-//   • NEGATION_AWARE_CATEGORIES (threat, deception, impersonation) DEFER directly-
-//     negated phrasings to the judge ("so I don't make her doubt herself"); threat
-//     also defers retrospective/apology framing ("I regret threatening her"). A
-//     genuine harm wearing that framing rides the JUDGE path, not this gate, so
-//     §7's rubric MUST cover soft/negated/retrospective/implied cases. The other
-//     categories (custody, alienation, harassment, coercion, blackmail) do NOT
-//     defer negated cases — there a nearby negation usually IS the harm.
+//   • NEGATION_AWARE_CATEGORIES (deception, impersonation ONLY) defer directly-
+//     negated phrasings to the judge ("so I don't make her doubt herself") via a
+//     short-window guard. THREAT does NOT (C1) — threat negation is semantic and
+//     belongs to the judge (Option B), so threat OVER-refuses genuine apologies
+//     until judge-deferral lands. Custody, alienation, harassment, coercion, and
+//     blackmail also do NOT defer negated cases — there a nearby negation usually
+//     IS the harm. §7's rubric MUST cover soft/negated/retrospective/implied cases.
 // ─────────────────────────────────────────────────────────────────────────────
