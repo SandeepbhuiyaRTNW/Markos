@@ -52,7 +52,9 @@ export const THREAT_PATTERNS: RegExp[] = [
   /\b(or else|watch what happens|you have no idea what i)\b/i,
   /\bi'?ll (make sure|ruin|destroy|end|wreck) (her|him|them|your|his|this)\b/i,
   /\b(threaten(ing)?|a threat) (her|him|them|to (hurt|harm|leave|take))\b/i,
-  /\bregret (leaving|the day|ever)\b/i,
+  // F3: third-person / imperative only — first-person remorse ("I regret leaving
+  // her") is NOT a threat. "make her regret" is also caught by pattern 2 above.
+  /\b(make (her|him|them) regret|(she|he|they)(?:'?ll| will) regret) (leaving|the day|ever|it|this|that)\b/i,
 ];
 
 /**
@@ -66,7 +68,7 @@ export const COERCION_LEVERAGE_PATTERNS: RegExp[] = [
   /\bremind(ing)? (her|him|them) (who|what|that|how much) (she|he|they) (needs?|depends? on|owes?|can'?t (do|make it)|would be nothing without)\b/i,
   /\bunless (she|he|they|you) (comes? back|agrees?|does what|stops|changes|apologi)\b/i,
   /\bhold(ing)? .{0,24} over (her|his|their) head\b/i,
-  /\b(leave|walk away|end up|be left) with nothing\b/i,
+  /\b((she|he|they)(?:'?ll| will| is going to)? (leave|walk away|end up|be left)|leave (her|him|them)|make (her|him|them) (leave|walk away|end up|be left)) with nothing\b/i,
   /\bmake (her|him|them) (afraid|scared|understand what (happens|she'?ll lose) if)\b/i,
   /\b(what'?s at stake for (her|him|them)|the consequences (for her|for him|she'?ll face|of leaving))\b/i,
   /\bif (she|he|they) (doesn'?t|don'?t|won'?t|leaves?|files?) .{0,40}(then )?(i'?ll|i will|she'?ll|he'?ll|there (will|won'?t)|nobody|no one)\b/i,
@@ -140,20 +142,42 @@ export const HARM_CATEGORIES: Record<string, RegExp[]> = {
   blackmail_exposure: BLACKMAIL_EXPOSURE_PATTERNS,
 };
 
-// Retrospective / negated / apology framing that flips a THREAT reference from
-// intent into a reference to PAST or DISAVOWED harm ("I regret threatening her",
-// "promise I will never threaten her again"). Applied ONLY to the threat category
-// — apologizing does not make "pretend to be my lawyer" safe. Ambiguous cases are
-// deferred to the semantic judge, which still runs whenever regex is clean.
-const THREAT_NEGATION_CUES = /\b(never|not going to|won'?t|will not|would never|no longer|regret|sorry|apolog|ashamed|make amends|used to)\b/i;
-function threatIsNegatedOrRetrospective(text: string, matchIndex: number): boolean {
-  const window = text.slice(Math.max(0, matchIndex - 40), matchIndex);
-  return THREAT_NEGATION_CUES.test(window);
+// ─── Negation / retrospective / first-person suppression ───────────────────
+// Some categories over-refuse on DIRECTLY-NEGATED phrasings ("so I don't make her
+// doubt herself", "I don't want to pretend"). We suppress the regex hit for those
+// and let the semantic judge decide — but ONLY with a SHORT preceding-context
+// window, so a negation in a DIFFERENT clause ("it's not okay, gaslight her")
+// cannot mask genuine harm. An under-refusal is worse than an over-refusal here.
+//
+// Scope is deliberate (NEGATION_AWARE_CATEGORIES): threat, deception, and
+// impersonation, where benign negated/first-person forms are common. Custody,
+// alienation, harassment, coercion, and blackmail do NOT defer negated cases —
+// there a nearby negation usually IS the harm ("never see the kids again").
+// Retrospective/apology framing ("I regret threatening her") is threat-only, with
+// an even tighter window so "I regret nothing. You'll be sorry." is NOT masked.
+const DIRECT_NEGATION_CUES = /\b(don'?t|do not|won'?t|will not|will never|never|no longer|not going to)\b|n'?t\b/i;
+const THREAT_RETRO_CUES = /\b(regret|sorry|apolog|ashamed|used to|make amends)\b/i;
+const NEGATION_AWARE_CATEGORIES = new Set(['threat', 'deception_manipulation', 'impersonation']);
+
+function isSuppressed(key: string, text: string, matchIndex: number): boolean {
+  if (NEGATION_AWARE_CATEGORIES.has(key)) {
+    const w = text.slice(Math.max(0, matchIndex - 14), matchIndex);
+    if (DIRECT_NEGATION_CUES.test(w)) return true;
+  }
+  if (key === 'threat') {
+    const w = text.slice(Math.max(0, matchIndex - 10), matchIndex);
+    if (THREAT_RETRO_CUES.test(w)) return true;
+  }
+  return false;
 }
 
 /**
  * Scan text for harmful content. Runs every category; harmful = any match.
  * Pure and deterministic. Safe to call on the user's request AND on a draft.
+ *
+ * F2: uses matchAll (not match) so a negated FIRST occurrence of a pattern cannot
+ * hide a genuine LATER occurrence of the same pattern in the same text
+ * ("I regret nothing. You'll be sorry." → the threat is still caught).
  */
 export function checkHarm(text: string): HarmVerdict {
   const categories: string[] = [];
@@ -161,13 +185,13 @@ export function checkHarm(text: string): HarmVerdict {
   const s = text || '';
   for (const [key, patterns] of Object.entries(HARM_CATEGORIES)) {
     for (const p of patterns) {
-      const m = s.match(p);
-      if (!m) continue;
-      // Threat category: skip a match sitting in a negated/retrospective/apology
-      // frame; the judge remains the backstop for anything this defers.
-      if (key === 'threat' && threatIsNegatedOrRetrospective(s, m.index ?? 0)) continue;
-      if (!categories.includes(key)) categories.push(key);
-      matched.push(m[0]);
+      const g = p.flags.includes('g') ? p : new RegExp(p.source, p.flags + 'g');
+      for (const m of s.matchAll(g)) {
+        if (isSuppressed(key, s, m.index ?? 0)) continue;
+        if (!categories.includes(key)) categories.push(key);
+        matched.push(m[0]);
+        break; // one non-suppressed occurrence is enough for this pattern
+      }
     }
   }
   return { harmful: categories.length > 0, categories, matched };
@@ -234,8 +258,11 @@ export function getHarmRefusal(categories: string[]): string {
 //   • Semantic coercion (benign words, harmful intent) is OUT OF REACH of regex.
 //     The follow-up is an LLM-judge layer over the request+draft; §7 should
 //     define its rubric. Do NOT rely on this file alone for that residual.
-//   • The threat category DEFERS negated/retrospective/apology frames to the judge
-//     (threatIsNegatedOrRetrospective). A genuine threat wearing that framing
-//     ("I won't say it, but she'll be sorry") therefore rides the JUDGE path, not
-//     this gate. §7's rubric MUST cover soft/retrospective/implied threats.
+//   • NEGATION_AWARE_CATEGORIES (threat, deception, impersonation) DEFER directly-
+//     negated phrasings to the judge ("so I don't make her doubt herself"); threat
+//     also defers retrospective/apology framing ("I regret threatening her"). A
+//     genuine harm wearing that framing rides the JUDGE path, not this gate, so
+//     §7's rubric MUST cover soft/negated/retrospective/implied cases. The other
+//     categories (custody, alienation, harassment, coercion, blackmail) do NOT
+//     defer negated cases — there a nearby negation usually IS the harm.
 // ─────────────────────────────────────────────────────────────────────────────
