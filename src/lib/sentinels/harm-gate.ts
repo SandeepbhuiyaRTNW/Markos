@@ -75,9 +75,10 @@ export const THREAT_PATTERNS: RegExp[] = [
   /\b(or else|watch what happens|you have no idea what i)\b/i,
   /\bi'?ll (make sure|ruin|destroy|end|wreck) (her|him|them|your|his|this)\b/i,
   /\b(threaten(ing)?|a threat) (her|him|them|to (hurt|harm|leave|take))\b/i,
-  // F3: third-person / imperative only — first-person remorse ("I regret leaving
-  // her") is NOT a threat. "make her regret" is also caught by pattern 2 above.
-  /\b(make (her|him|them) regret|(she|he|they)(?:'?ll| will) regret) (leaving|the day|ever|it|this|that)\b/i,
+  // F3 + finding #2: second/third-person or imperative — "she'll/you'll regret the
+  // day", "make her regret" — but NOT first-person remorse ("I regret leaving her",
+  // which has no she/he/they/you subject, so it stays clean).
+  /\b(make (her|him|them) regret|(she|he|they|you)(?:'?ll| will) regret) (leaving|the day|ever|it|this|that)\b/i,
 ];
 
 /**
@@ -91,7 +92,9 @@ export const COERCION_LEVERAGE_PATTERNS: RegExp[] = [
   /\bremind(ing)? (her|him|them) (who|what|that|how much) (she|he|they) (needs?|depends? on|owes?|can'?t (do|make it)|would be nothing without)\b/i,
   /\bunless (she|he|they|you) (comes? back|agrees?|does what|stops|changes|apologi)\b/i,
   /\bhold(ing)? .{0,24} over (her|his|their) head\b/i,
-  /\b((she|he|they)(?:'?ll| will| is going to)? (leave|walk away|end up|be left)|leave (her|him|them)|make (her|him|them) (leave|walk away|end up|be left)) with nothing\b/i,
+  // finding #3: 2nd/3rd-person directed ("you'll/she'll be left with nothing") — but
+  // NOT first-person fear ("I'll leave with nothing": no she/he/they/you subject).
+  /\b((she|he|they|you)(?:'?ll| will| is going to)? (leave|walk away|end up|be left)|leave (her|him|them)|make (her|him|them) (leave|walk away|end up|be left)) with nothing\b/i,
   /\bmake (her|him|them) (afraid|scared|understand what (happens|she'?ll lose) if)\b/i,
   /\b(what'?s at stake for (her|him|them)|the consequences (for her|for him|she'?ll face|of leaving))\b/i,
   /\bif (she|he|they) (doesn'?t|don'?t|won'?t|leaves?|files?) .{0,40}(then )?(i'?ll|i will|she'?ll|he'?ll|there (will|won'?t)|nobody|no one)\b/i,
@@ -165,20 +168,25 @@ export const HARM_CATEGORIES: Record<string, RegExp[]> = {
   blackmail_exposure: BLACKMAIL_EXPOSURE_PATTERNS,
 };
 
-// ─── Negation / retrospective / first-person suppression ───────────────────
-// Some categories over-refuse on DIRECTLY-NEGATED phrasings ("so I don't make her
-// doubt herself", "I don't want to pretend"). We suppress the regex hit for those
-// and let the semantic judge decide — but ONLY with a SHORT preceding-context
-// window, so a negation in a DIFFERENT clause ("it's not okay, gaslight her")
-// cannot mask genuine harm. An under-refusal is worse than an over-refusal here.
+// ─── Negation / first-person suppression ───────────────────────────────
+// deception & impersonation over-refuse on DIRECTLY-NEGATED phrasings ("so I don't
+// make her doubt herself", "I don't want to pretend"). We suppress the regex hit for
+// those and let the semantic judge decide — but ONLY with a SHORT preceding-context
+// window, so a negation in a DIFFERENT clause ("it's not okay, gaslight her") cannot
+// mask genuine harm. An under-refusal is worse than an over-refusal here.
 //
-// Scope is deliberate (NEGATION_AWARE_CATEGORIES): threat, deception, and
-// impersonation, where benign negated/first-person forms are common. Custody,
-// alienation, harassment, coercion, and blackmail do NOT defer negated cases —
-// there a nearby negation usually IS the harm ("never see the kids again").
-// Retrospective/apology framing ("I regret threatening her") is threat-only, with
-// an even tighter window so "I regret nothing. You'll be sorry." is NOT masked.
-const DIRECT_NEGATION_CUES = /\b(don'?t|do not|won'?t|will not|will never|never|no longer|not going to)\b|n'?t\b/i;
+// Scope is deliberate (NEGATION_AWARE_CATEGORIES = deception, impersonation ONLY).
+// THREAT was REMOVED from the guard (C1): threat negation is semantic and belongs to
+// the judge, so threat now over-refuses apologies by design. Custody, alienation,
+// harassment, coercion, and blackmail also do NOT defer negated cases — there a
+// nearby negation usually IS the harm ("never see the kids again").
+// Finding #1 (root-cause fix): the old `n'?t\b` alternative matched the bare "nt" in
+// ordinary words like "want"/"aunt", so "I want to gaslight her" was wrongly treated
+// as negated and slipped. This lists whole negation WORDS in BOTH apostrophe and
+// apostrophe-less forms (phones type both). Curly apostrophes are already normalized
+// to ASCII on the input (C2), so straight forms suffice. "want" is not a negation
+// word, so it no longer suppresses — while real apostrophe-less "dont"/"wont" do.
+const DIRECT_NEGATION_CUES = /\b(don't|dont|won't|wont|can't|cant|doesn't|doesnt|isn't|isnt|wasn't|wasnt|didn't|didnt|wouldn't|wouldnt|shouldn't|shouldnt|couldn't|couldnt|haven't|havent|hasn't|hasnt|aren't|arent|ain't|aint|not|never|no longer)\b/i;
 // C1 (owner-approved): the THREAT category no longer attempts a negation/apology
 // distinction in regex. No window value is correct — a DISTANT negation lets a real
 // threat slip ("I won't lie, you'll regret this" → under-refusal, the UNSAFE
