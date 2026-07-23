@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Mic, MessageSquare, BarChart2, Flame, ChevronRight, Lightbulb, BookOpen, PlayCircle } from 'lucide-react';
+import { Mic, MessageSquare, BarChart2, Flame, ChevronRight, Lightbulb, BookOpen, PlayCircle, Search } from 'lucide-react';
+import { SessionSearchModal } from '../components/SearchModal';
 
 interface Topic { label: string; count: number; }
 interface WeeklyUsage { week: string; sessions: number; }
@@ -29,6 +30,7 @@ interface AnalyticsDashboardProps {
 export default function AnalyticsDashboard({ userId, onSelectSession, onContinueSession }: AnalyticsDashboardProps) {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -156,7 +158,16 @@ export default function AnalyticsDashboard({ userId, onSelectSession, onContinue
       {/* ─── RIGHT PANEL: Session List ─── */}
       <div className="lg:w-[60%] lg:overflow-y-auto lg:h-[calc(100vh-60px)] overflow-y-auto">
         <div className="px-5 py-8 space-y-3 fade-in-up">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-4">Past Sessions</p>
+          <div className="flex items-center justify-between mb-4">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/40">Past Sessions</p>
+          <button
+            onClick={() => setIsSearchOpen(true)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/40 hover:border-[#a3785e]/30 bg-secondary/30 hover:bg-[#a3785e]/5 text-xs text-muted-foreground/60 hover:text-foreground transition-all"
+          >
+            <Search className="w-3.5 h-3.5 text-[#a3785e]/70" />
+            <span>Search sessions...</span>
+          </button>
+        </div>
           {(data?.conversations ?? []).length > 0 ? (
             <div className="space-y-2">
               {(data?.conversations ?? []).map((s) => (
@@ -194,6 +205,12 @@ export default function AnalyticsDashboard({ userId, onSelectSession, onContinue
               <p className="text-xs text-muted-foreground/30">Your conversations with Marcus will appear here</p>
             </div>
           ) : null}
+          <SessionSearchModal
+            isOpen={isSearchOpen}
+            onClose={() => setIsSearchOpen(false)}
+            userId={userId}
+            onSelectSession={onSelectSession}
+          />
         </div>
       </div>
     </div>
