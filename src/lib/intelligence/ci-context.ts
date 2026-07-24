@@ -36,7 +36,8 @@
  * Enabling CI_CONTEXT_ENABLED waits on that live verification.
  */
 
-import { getConversationIntelligenceContext } from './surfacing';
+import { getConversationIntelligenceContext, type CISurfacingContext } from './surfacing';
+export type { CISurfacingContext } from './surfacing';
 
 /** CI_CONTEXT_ENABLED gate. Default OFF. Same convention as KI/COMM_ASSIST. */
 export function ciContextEnabled(): boolean {
@@ -93,7 +94,7 @@ export function mergeMemoryContext(
  * ONLY on turns that reach the composer (after the crisis/frame-refusal early
  * returns), so a follow-up is never consumed on a turn Marcus never composes.
  */
-export async function getCICallbackBlock(userId: string): Promise<string> {
-  const raw = await getConversationIntelligenceContext(userId);
+export async function getCICallbackBlock(userId: string, ctx: CISurfacingContext): Promise<string> {
+  const raw = await getConversationIntelligenceContext(userId, ctx);
   return renderCICallback(raw);
 }

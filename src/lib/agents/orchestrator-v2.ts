@@ -115,23 +115,16 @@ export async function processWithAgents(
   // Phase 1: Fast DB fetches
   const memDone = trackEnvelopeAgent(env, 'memory-sentinel');
   try {
-    // CI callback context (feature/ci-context-readside) — flag-gated. Fetched in
-    // PARALLEL with memory so it adds no latency; when the flag is OFF no DB call
-    // is made and nothing reaches the prompt (byte-identical to today). Runs only
-    // here on the post-sentinel path, so the follow-up 'surfaced' mutation never
-    // fires on a crisis / frame-refusal / ai-honesty turn (those return earlier).
-    const ciEnabled = ciContextEnabled();
-    const [memCtx, kwmlCtx, sessionResult, sessHistory, stylePrefs, ciCtx] = await Promise.all([
+    const [memCtx, kwmlCtx, sessionResult, sessHistory, stylePrefs] = await Promise.all([
       getMemoryContext(userId), getKWMLContext(userId),
       query(`SELECT COUNT(*) as cnt FROM conversations WHERE user_id = $1`, [userId]),
       getSessionHistory(userId), getStylePreferences(userId),
-      ciEnabled ? getCICallbackBlock(userId) : Promise.resolve(''),
     ]);
     env.sentinels.memory = {
       prior_threads: [], session_history: sessHistory, memory_context: memCtx,
       session_count: parseInt(sessionResult.rows[0]?.cnt || '0', 10),
       style_preferences: stylePrefs, returning_patterns: [],
-      ci_context: ciCtx || null,
+      ci_context: null, // populated later (flag-gated), once session_count + conversation_id are known
     };
   } catch (err) { recordEnvelopeError(env, 'memory-sentinel', err); }
   finally { memDone(); }
@@ -254,7 +247,25 @@ export async function processWithAgents(
   // archetype, arena) are all populated and the Whisperers do not mutate them.
   const { retrievePreComposer, runComposerPipeline } = await import('./orchestrator-v2-composer');
   const preComposerPromise = retrievePreComposer(env, historyStr);
-  const [, pre] = await Promise.all([whispererPromise, preComposerPromise]);
+
+  // CI callback context (feature/ci-context-readside) — flag-gated, composer-only.
+  // Runs concurrently with the Whisperers / pre-composer (adds no latency), and
+  // only HERE on the post-sentinel path (so the follow-up 'surfaced' mutation never
+  // fires on a crisis / frame-refusal / ai-honesty turn, which return earlier).
+  // Needs session_count + conversation_id (both populated now) so surfacing can
+  // apply READ-TIME dormancy and exclude follow-ups from the current conversation.
+  // Flag OFF → no DB call, ci_context stays null → prompt byte-identical to today.
+  const ciPromise = (async () => {
+    if (!ciContextEnabled()) return;
+    try {
+      env.sentinels.memory.ci_context = (await getCICallbackBlock(env.user_id, {
+        conversationId: env.conversation_id,
+        currentSession: env.sentinels.memory.session_count,
+      })) || null;
+    } catch (err) { recordEnvelopeError(env, 'ci-context', err); }
+  })();
+
+  const [, pre] = await Promise.all([whispererPromise, preComposerPromise, ciPromise]);
   return runComposerPipeline(env, historyStr, pre);
 }
 

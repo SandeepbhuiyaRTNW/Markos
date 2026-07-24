@@ -7,6 +7,7 @@
  */
 
 import { ciContextEnabled, renderCICallback, mergeMemoryContext } from '../src/lib/intelligence/ci-context';
+import { isLoopDormantAtRead, followUpEligibleInConversation } from '../src/lib/intelligence/surfacing';
 
 let passed = 0, failed = 0;
 function assert(name: string, cond: boolean, detail = '') {
@@ -51,6 +52,18 @@ assert('instructs: at most one, woven in', block.includes('AT MOST ONE'));
 assert('instructs: thread not facts (dedup)', block.toLowerCase().includes('not repeating facts'));
 assert('instructs: bias toward NOT surfacing when unsure (leave it out)', block.toLowerCase().includes('leave it out'));
 assert('instructs: under-surfacing is the safe failure', block.toLowerCase().includes('under-surfacing is the safe failure'));
+
+console.log('\n── D. Finding 2 — read-time loop dormancy (default staleAfter = 3) ──');
+assert('last seen 3 sessions ago -> dormant, NOT surfaced (status still open)', isLoopDormantAtRead(1, 4) === true);
+assert('exactly at threshold (currentSession - lastSeen == 3) -> dormant', isLoopDormantAtRead(1, 4, 3) === true);
+assert('last seen 2 sessions ago -> still live', isLoopDormantAtRead(2, 4) === false);
+assert('last seen this session -> live', isLoopDormantAtRead(4, 4) === false);
+assert('null last_seen_session -> live (mirrors sweep, which needs last_seen_session)', isLoopDormantAtRead(null, 10) === false);
+
+console.log('\n── E. Finding 1 — follow-up origin gate ──');
+assert('follow-up created in conversation A does NOT surface in A', followUpEligibleInConversation('conv-A', 'conv-A') === false);
+assert('follow-up created in conversation A DOES surface in conversation B', followUpEligibleInConversation('conv-A', 'conv-B') === true);
+assert('null origin -> eligible', followUpEligibleInConversation(null, 'conv-A') === true);
 
 console.log('\n── SUMMARY ──');
 console.log(`  passed: ${passed}   failed: ${failed}`);
