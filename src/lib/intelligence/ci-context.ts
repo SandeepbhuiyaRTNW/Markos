@@ -18,6 +18,22 @@
  * salience/value-ranked, not matched to the current utterance — relevance is
  * enforced instructionally below); programmatic dedup vs the memory_layers facts
  * (handled instructionally); correct/forget UI.
+ *
+ * ⚠️ LIVE-VERIFY-REQUIRED (cannot be judged offline — there is no login here):
+ *   - NATURAL-PHRASING QUALITY: whether Marcus actually references a thread like a
+ *     friend (vs. sliding into record-speak) can only be heard in a live turn.
+ *   - PEOPLE / FACT DEDUP: dedup between the old memory_layers facts and the CI
+ *     block is INSTRUCTIONAL only ("continue a thread, don't restate facts"). The
+ *     two stores share NO id, so any future code-level match would be fuzzy
+ *     name-matching — best-effort, may occasionally double-surface a person or
+ *     over-suppress. Needs a live ear to tune; do NOT over-engineer it now.
+ *   - RELEVANCE / "UNRELATED TOPIC": enforced by the instruction below (the model
+ *     judges fit), not by keyword or semantic code. It cannot reliably know that
+ *     football-chat is unrelated to his divorce loop. Best-effort; the real test
+ *     is live. The instruction biases toward UNDER-surfacing (leave it out when
+ *     unsure) — under-surfacing is the safe failure, same logic as over-refusal
+ *     being the safe failure on the harm gate.
+ * Enabling CI_CONTEXT_ENABLED waits on that live verification.
  */
 
 import { getConversationIntelligenceContext } from './surfacing';
@@ -39,6 +55,7 @@ const CI_CALLBACK_INSTRUCTIONS =
 - Say it the way a friend would: "Last time you were dreading telling your kids — how'd that go?" or "You said things were rough with your brother — where's that at now?"
 - NEVER speak like a record. Banned: "Based on our previous conversation…", "According to my records…", "you have 1 open loop…", or listing what you remember. If it sounds like a database, it is wrong.
 - If today's topic is unrelated, or a callback would feel forced or interrogating, DO NOT force it — let it go and be present with what he brought today. Forced continuity is worse than none.
+- When you are NOT SURE it fits, LEAVE IT OUT. A missed callback is far better than a forced or awkward one — under-surfacing is the safe failure. Only reach for it when it clearly belongs.
 - This is for continuing a THREAD, not repeating facts. Do not restate something already stated elsewhere in your context.`;
 
 /**

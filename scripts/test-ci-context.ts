@@ -49,6 +49,8 @@ assert('bans "open loop" record-speak', block.includes('you have 1 open loop'));
 assert('instructs: do not force on unrelated topics', block.toLowerCase().includes('do not force it'));
 assert('instructs: at most one, woven in', block.includes('AT MOST ONE'));
 assert('instructs: thread not facts (dedup)', block.toLowerCase().includes('not repeating facts'));
+assert('instructs: bias toward NOT surfacing when unsure (leave it out)', block.toLowerCase().includes('leave it out'));
+assert('instructs: under-surfacing is the safe failure', block.toLowerCase().includes('under-surfacing is the safe failure'));
 
 console.log('\n── SUMMARY ──');
 console.log(`  passed: ${passed}   failed: ${failed}`);
