@@ -12,6 +12,7 @@ import { createStateEnvelope, trackEnvelopeAgent, recordEnvelopeError, listenerS
 import type { StateEnvelope } from './state-envelope';
 import { analyzeUnderstanding } from '../understanding/stack';
 import { getMemoryContext, extractMemories, getSessionHistory, getStylePreferences } from '../memory/memory-manager';
+import { ciContextEnabled, getCICallbackBlock } from '../intelligence/ci-context';
 import { detectKWML, getKWMLContext, saveKWMLProfile } from '../kwml/detector';
 import { retrieveWisdom, retrieveQuestion } from '../rag/retriever';
 import { detectCrisisType } from '../sentinels/crisis';
@@ -123,6 +124,7 @@ export async function processWithAgents(
       prior_threads: [], session_history: sessHistory, memory_context: memCtx,
       session_count: parseInt(sessionResult.rows[0]?.cnt || '0', 10),
       style_preferences: stylePrefs, returning_patterns: [],
+      ci_context: null, // populated later (flag-gated), once session_count + conversation_id are known
     };
   } catch (err) { recordEnvelopeError(env, 'memory-sentinel', err); }
   finally { memDone(); }
@@ -245,7 +247,25 @@ export async function processWithAgents(
   // archetype, arena) are all populated and the Whisperers do not mutate them.
   const { retrievePreComposer, runComposerPipeline } = await import('./orchestrator-v2-composer');
   const preComposerPromise = retrievePreComposer(env, historyStr);
-  const [, pre] = await Promise.all([whispererPromise, preComposerPromise]);
+
+  // CI callback context (feature/ci-context-readside) — flag-gated, composer-only.
+  // Runs concurrently with the Whisperers / pre-composer (adds no latency), and
+  // only HERE on the post-sentinel path (so the follow-up 'surfaced' mutation never
+  // fires on a crisis / frame-refusal / ai-honesty turn, which return earlier).
+  // Needs session_count + conversation_id (both populated now) so surfacing can
+  // apply READ-TIME dormancy and exclude follow-ups from the current conversation.
+  // Flag OFF → no DB call, ci_context stays null → prompt byte-identical to today.
+  const ciPromise = (async () => {
+    if (!ciContextEnabled()) return;
+    try {
+      env.sentinels.memory.ci_context = (await getCICallbackBlock(env.user_id, {
+        conversationId: env.conversation_id,
+        currentSession: env.sentinels.memory.session_count,
+      })) || null;
+    } catch (err) { recordEnvelopeError(env, 'ci-context', err); }
+  })();
+
+  const [, pre] = await Promise.all([whispererPromise, preComposerPromise, ciPromise]);
   return runComposerPipeline(env, historyStr, pre);
 }
 

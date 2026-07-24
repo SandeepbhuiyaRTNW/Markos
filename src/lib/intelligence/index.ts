@@ -17,6 +17,7 @@ import { appendArcPoint, markStaleLoopsDormant, getOpenLoops, applyCIExtraction 
 import type { ArcPoint } from './types';
 
 export { getConversationIntelligenceContext } from './surfacing';
+export { ciContextEnabled, getCICallbackBlock, renderCICallback, mergeMemoryContext } from './ci-context';
 export { shouldRunCIExtraction, CI_MIN_DEPTH, CI_LLM_EVERY_N_TURNS } from './extraction';
 export { LOOP_DORMANT_AFTER_SESSIONS } from './writer';
 
