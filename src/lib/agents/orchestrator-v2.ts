@@ -12,6 +12,7 @@ import { createStateEnvelope, trackEnvelopeAgent, recordEnvelopeError, listenerS
 import type { StateEnvelope } from './state-envelope';
 import { analyzeUnderstanding } from '../understanding/stack';
 import { getMemoryContext, extractMemories, getSessionHistory, getStylePreferences } from '../memory/memory-manager';
+import { ciContextEnabled, getCICallbackBlock } from '../intelligence/ci-context';
 import { detectKWML, getKWMLContext, saveKWMLProfile } from '../kwml/detector';
 import { retrieveWisdom, retrieveQuestion } from '../rag/retriever';
 import { detectCrisisType } from '../sentinels/crisis';
@@ -114,15 +115,23 @@ export async function processWithAgents(
   // Phase 1: Fast DB fetches
   const memDone = trackEnvelopeAgent(env, 'memory-sentinel');
   try {
-    const [memCtx, kwmlCtx, sessionResult, sessHistory, stylePrefs] = await Promise.all([
+    // CI callback context (feature/ci-context-readside) — flag-gated. Fetched in
+    // PARALLEL with memory so it adds no latency; when the flag is OFF no DB call
+    // is made and nothing reaches the prompt (byte-identical to today). Runs only
+    // here on the post-sentinel path, so the follow-up 'surfaced' mutation never
+    // fires on a crisis / frame-refusal / ai-honesty turn (those return earlier).
+    const ciEnabled = ciContextEnabled();
+    const [memCtx, kwmlCtx, sessionResult, sessHistory, stylePrefs, ciCtx] = await Promise.all([
       getMemoryContext(userId), getKWMLContext(userId),
       query(`SELECT COUNT(*) as cnt FROM conversations WHERE user_id = $1`, [userId]),
       getSessionHistory(userId), getStylePreferences(userId),
+      ciEnabled ? getCICallbackBlock(userId) : Promise.resolve(''),
     ]);
     env.sentinels.memory = {
       prior_threads: [], session_history: sessHistory, memory_context: memCtx,
       session_count: parseInt(sessionResult.rows[0]?.cnt || '0', 10),
       style_preferences: stylePrefs, returning_patterns: [],
+      ci_context: ciCtx || null,
     };
   } catch (err) { recordEnvelopeError(env, 'memory-sentinel', err); }
   finally { memDone(); }

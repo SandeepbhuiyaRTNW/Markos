@@ -16,6 +16,7 @@ import { getPhaseConstraints } from '../assessment/phase-mapper';
 import { retrieveWisdom, retrieveQuestion, type QuestionRetrievalContext } from '../rag/retriever';
 import { analyzeConversation, computeTrajectoryDrift } from './conversation-state';
 import { searchPastMessages } from '../memory/memory-manager';
+import { mergeMemoryContext } from '../intelligence/ci-context';
 import type { AgentResponse } from './orchestrator-v2';
 
 export interface PreComposerResult {
@@ -125,7 +126,10 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
 
     // Build messages — use the existing buildSystemPrompt signature
     const systemContent = buildSystemPrompt({
-      memoryContext: env.sentinels.memory.memory_context || undefined,
+      // CI callback block is appended AFTER the memory_layers facts (both coexist;
+      // CI never replaces memory). When ci_context is null/absent (flag off), this
+      // returns exactly `memory_context || undefined` — byte-identical to before.
+      memoryContext: mergeMemoryContext(env.sentinels.memory.memory_context, env.sentinels.memory.ci_context),
       ragContext: ragWisdom + (uniqueQuestions.length > 0 ? `\n\n## SUGGESTED QUESTIONS (choose at most ONE):\n${uniqueQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : ''),
       kwmlContext: kwmlStr,
       understandingContext: understandingStr,

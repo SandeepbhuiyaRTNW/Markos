@@ -59,6 +59,11 @@ export interface MemoryOutput {
   memory_context: string | null;
   style_preferences: string | null;
   returning_patterns: string[];
+  // CI callback block (feature/ci-context-readside). Optional so existing
+  // constructors are unaffected; undefined/null when CI_CONTEXT_ENABLED is off.
+  // Composer-only: kept separate from memory_context so it never leaks into the
+  // listener-stack / arena LLMs (which read memory_context).
+  ci_context?: string | null;
 }
 
 export interface CulturalOutput {
