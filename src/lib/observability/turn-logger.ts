@@ -91,94 +91,94 @@ export async function ensureTurnLogsTable(): Promise<void> {
 /** Log a completed turn to the turn_logs table */
 export async function logTurn(env: StateEnvelope): Promise<void> {
   try {
-    await query(
-      `INSERT INTO turn_logs (
-        turn_id, user_id, conversation_id, utterance, final_response,
-        crisis_level, crisis_type, boundary_violations,
-        phase, phase_confidence, archetype, shadow,
-        trust_cognitive, trust_affective,
-        silence_type, silence_confidence,
-        arena_primary, arena_weights,
-        wisdom_voices, whisperers_invoked, frameworks_applied,
-        craft_form, craft_pacing,
-        agent_timings, errors,
-        register, faith_context, pathway_candidates,
-        total_ms, regen_triggers,
-        policy_enforced, policy_move, policy_move_rule, policy_asked_question, policy_selected_form,
-        policy_too_early_to_address, policy_knowledge_rule, policy_knowledge_safety_only,
-        policy_knowledge_questions_enabled, policy_knowledge_question_scopes, policy_excluded_domains,
-        policy_final_form, policy_final_question_count, policy_questions_were_retrieved,
-        policy_question_candidates_passed, policy_move_conflict, policy_no_question_override_active
-      ) VALUES (
-        $1, $2, $3, $4, $5,
-        $6, $7, $8,
-        $9, $10, $11, $12,
-        $13, $14,
-        $15, $16,
-        $17, $18,
-        $19, $20, $21,
-        $22, $23,
-        $24, $25,
-        $26, $27, $28,
-        $29, $30,
-        $31, $32, $33, $34,
-        $35, $36, $37,
-        $38, $39, $40,
-        $41, $42, $43,
-        $44, $45, $46
-      )`,
-      [
-        env.turn_id, env.user_id, env.conversation_id,
-        env.utterance, env.final_response,
-        env.sentinels.crisis.level, env.sentinels.crisis.type,
-        env.sentinels.boundary.violations_found,
-        env.assessment.phase.label, env.assessment.phase.confidence,
-        env.assessment.archetype?.active || null, env.assessment.archetype?.shadow || null,
-        env.assessment.trust.cognitive, env.assessment.trust.affective,
-        env.assessment.silence_type?.label || null, env.assessment.silence_type?.confidence || null,
-        env.assessment.arena?.primary || null,
-        env.assessment.arena?.weights ? JSON.stringify(env.assessment.arena.weights) : null,
-        env.wisdom_council.invoked,
-        env.domain_whisperers.invoked,
-        env.domain_whisperers.frameworks_applied,
-        env.craft_directives.form, env.craft_directives.pacing,
-        JSON.stringify(env.agent_timings),
-        env.errors.length > 0 ? JSON.stringify(env.errors) : null,
-        env.sentinels.cultural.register, env.sentinels.cultural.faith_context,
-        env.sentinels.pathway_router.candidates.length > 0
-          ? JSON.stringify(env.sentinels.pathway_router.candidates) : null,
-        env.total_ms,
-        env.regen_triggers.length > 0 ? env.regen_triggers : null,
-        env.policy_diagnostics.enforced,
-        env.move_decision?.move || null,
-        env.policy_diagnostics.move_rule,
-        env.policy_diagnostics.asked_question,
-        env.policy_diagnostics.selected_form,
-        env.policy_diagnostics.too_early_to_address.length > 0
-          ? env.policy_diagnostics.too_early_to_address
-          : null,
-        env.policy_diagnostics.knowledge_rule,
-        env.policy_diagnostics.knowledge_safety_only,
-        env.policy_diagnostics.questions_enabled,
-        env.knowledge_plan?.questions
-          ? JSON.stringify({
-            whispererScope: env.knowledge_plan.questions.whispererScope,
-            arenaScope: env.knowledge_plan.questions.arenaScope,
-          })
-          : null,
-        env.knowledge_plan?.wisdom.excludeDomains?.length ? env.knowledge_plan.wisdom.excludeDomains : null,
-        env.policy_diagnostics.final_form,
-        env.policy_diagnostics.final_question_count,
-        env.policy_diagnostics.questions_were_retrieved,
-        env.policy_diagnostics.question_candidates_passed,
-        env.policy_diagnostics.move_conflict,
-        env.policy_diagnostics.no_question_override_active,
-      ]
-    );
+    const { sql, values } = buildTurnLogInsertValues(env);
+    await query(sql, values);
   } catch (err) {
     console.error('[TurnLogger] Failed to log turn:', err);
   }
 }
+
+const TURN_LOG_COLUMNS = [
+  'turn_id', 'user_id', 'conversation_id', 'utterance', 'final_response',
+  'crisis_level', 'crisis_type', 'boundary_violations',
+  'phase', 'phase_confidence', 'archetype', 'shadow',
+  'trust_cognitive', 'trust_affective',
+  'silence_type', 'silence_confidence',
+  'arena_primary', 'arena_weights',
+  'wisdom_voices', 'whisperers_invoked', 'frameworks_applied',
+  'craft_form', 'craft_pacing',
+  'agent_timings', 'errors',
+  'register', 'faith_context', 'pathway_candidates',
+  'total_ms', 'regen_triggers',
+  'policy_enforced', 'policy_move', 'policy_move_rule', 'policy_asked_question', 'policy_selected_form',
+  'policy_too_early_to_address', 'policy_knowledge_rule', 'policy_knowledge_safety_only',
+  'policy_knowledge_questions_enabled', 'policy_knowledge_question_scopes', 'policy_excluded_domains',
+  'policy_final_form', 'policy_final_question_count', 'policy_questions_were_retrieved',
+  'policy_question_candidates_passed', 'policy_move_conflict', 'policy_no_question_override_active',
+];
+
+function getTurnLogColumns(): string[] {
+  return [...TURN_LOG_COLUMNS];
+}
+
+function buildTurnLogInsertValues(env: StateEnvelope): { sql: string; values: unknown[]; columns: string[] } {
+  const values = [
+    env.turn_id, env.user_id, env.conversation_id,
+    env.utterance, env.final_response,
+    env.sentinels.crisis.level, env.sentinels.crisis.type,
+    env.sentinels.boundary.violations_found,
+    env.assessment.phase.label, env.assessment.phase.confidence,
+    env.assessment.archetype?.active || null, env.assessment.archetype?.shadow || null,
+    env.assessment.trust.cognitive, env.assessment.trust.affective,
+    env.assessment.silence_type?.label || null, env.assessment.silence_type?.confidence || null,
+    env.assessment.arena?.primary || null,
+    env.assessment.arena?.weights ? JSON.stringify(env.assessment.arena.weights) : null,
+    env.wisdom_council.invoked,
+    env.domain_whisperers.invoked,
+    env.domain_whisperers.frameworks_applied,
+    env.craft_directives.form, env.craft_directives.pacing,
+    JSON.stringify(env.agent_timings),
+    env.errors.length > 0 ? JSON.stringify(env.errors) : null,
+    env.sentinels.cultural.register, env.sentinels.cultural.faith_context,
+    env.sentinels.pathway_router.candidates.length > 0
+      ? JSON.stringify(env.sentinels.pathway_router.candidates) : null,
+    env.total_ms,
+    env.regen_triggers.length > 0 ? env.regen_triggers : null,
+    env.policy_diagnostics.enforced,
+    env.move_decision?.move || null,
+    env.policy_diagnostics.move_rule,
+    env.policy_diagnostics.asked_question,
+    env.policy_diagnostics.selected_form,
+    env.policy_diagnostics.too_early_to_address.length > 0
+      ? env.policy_diagnostics.too_early_to_address
+      : null,
+    env.policy_diagnostics.knowledge_rule,
+    env.policy_diagnostics.knowledge_safety_only,
+    env.policy_diagnostics.questions_enabled,
+    env.knowledge_plan?.questions
+      ? JSON.stringify({
+        whispererScope: env.knowledge_plan.questions.whispererScope,
+        arenaScope: env.knowledge_plan.questions.arenaScope,
+      })
+      : null,
+    env.knowledge_plan?.wisdom.excludeDomains?.length ? env.knowledge_plan.wisdom.excludeDomains : null,
+    env.policy_diagnostics.final_form,
+    env.policy_diagnostics.final_question_count,
+    env.policy_diagnostics.questions_were_retrieved,
+    env.policy_diagnostics.question_candidates_passed,
+    env.policy_diagnostics.move_conflict,
+    env.policy_diagnostics.no_question_override_active,
+  ];
+  const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+
+  return {
+    sql: `INSERT INTO turn_logs (${TURN_LOG_COLUMNS.join(', ')}) VALUES (${placeholders})`,
+    values,
+    columns: getTurnLogColumns(),
+  };
+}
+
+export { buildTurnLogInsertValues, getTurnLogColumns };
 
 /**
  * Record the route-level wall-clock (entry -> response-ready, INCLUDING STT and
