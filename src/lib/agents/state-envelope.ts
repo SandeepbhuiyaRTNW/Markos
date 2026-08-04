@@ -8,6 +8,8 @@
 
 import type { UnderstandingAnalysis } from '../understanding/stack';
 import type { KWMLReading } from '../kwml/detector';
+import type { MoveDecision } from '../assessment/move-selector';
+import type { KnowledgePlan } from '../assessment/knowledge-selector';
 
 // ─── Sentinel Outputs ───
 
@@ -165,6 +167,23 @@ export interface CraftDirectives {
   style_override: string | null;
 }
 
+export interface PolicyDiagnostics {
+  move_conflict: boolean;
+  enforced: boolean;
+  move_rule: string | null;
+  selected_form: string | null;
+  asked_question: boolean | null;
+  knowledge_rule: string | null;
+  knowledge_safety_only: boolean | null;
+  questions_enabled: boolean | null;
+  questions_were_retrieved: boolean | null;
+  question_candidates_passed: boolean | null;
+  no_question_override_active: boolean | null;
+  final_form: string | null;
+  final_question_count: number | null;
+  too_early_to_address: string[];
+}
+
 // ─── The State Envelope ───
 
 export interface StateEnvelope {
@@ -221,5 +240,11 @@ export interface StateEnvelope {
   turn_start_ms: number;          // Date.now() at envelope creation
   total_ms: number | null;        // measured wall-clock of the agent pipeline (set before logTurn)
   regen_triggers: string[];       // post-generation checks that forced a regeneration
-}
 
+  // ---------------------------------------------------------------------------
+  // Conversation policy (Move Selector + Knowledge Intelligence) for this turn
+  // ---------------------------------------------------------------------------
+  move_decision: MoveDecision | null;
+  knowledge_plan: KnowledgePlan | null;
+  policy_diagnostics: PolicyDiagnostics;
+}

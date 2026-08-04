@@ -8,15 +8,13 @@
  * State Envelope replaces MCPContext as the internal bus.
  */
 
-import { createStateEnvelope, trackEnvelopeAgent, recordEnvelopeError, listenerStackFromAnalysis, buildEnvelopeContextSummary } from './state-envelope-utils';
+import { createStateEnvelope, trackEnvelopeAgent, recordEnvelopeError, listenerStackFromAnalysis } from './state-envelope-utils';
 import type { StateEnvelope } from './state-envelope';
 import { analyzeUnderstanding } from '../understanding/stack';
-import { getMemoryContext, extractMemories, getSessionHistory, getStylePreferences } from '../memory/memory-manager';
-import { detectKWML, getKWMLContext, saveKWMLProfile } from '../kwml/detector';
-import { retrieveWisdom, retrieveQuestion } from '../rag/retriever';
+import { getMemoryContext, getSessionHistory, getStylePreferences } from '../memory/memory-manager';
+import { detectKWML, getKWMLContext } from '../kwml/detector';
 import { detectCrisisType } from '../sentinels/crisis';
 import { getCrisisResponse, isPostCrisisRetreat, POST_CRISIS_RETREAT_RESPONSE } from '../sentinels/crisis-responses';
-import { runBoundarySentinel, checkBoundary, getBoundaryOverridePrompt } from '../sentinels/boundary';
 import { detectAIIdentityQuestion, getAIHonestyResponse } from '../sentinels/ai-honesty';
 import { detectFrameCollapse, getFrameRefusalResponse } from '../sentinels/frame-refusal';
 import { runPathwayRouter } from '../sentinels/pathway-router';
@@ -25,11 +23,14 @@ import { classifyArena } from '../assessment/arena-classifier';
 import { classifySilence } from '../assessment/silence-typer';
 import { computeTrust } from '../assessment/trust-gauge';
 import { mapPhase } from '../assessment/phase-mapper';
-import { selectWisdomVoices, buildWisdomCouncilPrompt } from '../wisdom/council';
-import { determineCraftDirectives, enforceSocraticDiscipline, applyDeepListener, enforceVocativePrinciple } from '../craft/craft-layer';
+import { selectMove } from '../assessment/move-selector';
+import { selectKnowledgePlan } from '../assessment/knowledge-selector';
+import { selectWisdomVoices } from '../wisdom/council';
+import { enforceVocativePrinciple } from '../craft/craft-layer';
 import { WHISPERER_REGISTRY, WHISPERER_ACTIVATION_THRESHOLD } from '../whisperers';
 import { computePERMASnapshot } from '../assessment/perma-snapshot';
 import { query } from '../db';
+import { analyzeConversation, type ConversationState } from './conversation-state';
 
 // Re-export the same public interface
 export interface AgentResponse {
@@ -200,6 +201,44 @@ export async function processWithAgents(
   env.sentinels.pathway_router = runPathwayRouter(env);
 
   // ═══════════════════════════════════════════
+  // TIER 2.5 — CONVERSATION POLICY
+  // ── Move Selector + Knowledge Intelligence
+  // ═══════════════════════════════════════════
+  const policyEnforced = process.env.MOVE_SELECTOR_ENFORCE === 'true' || process.env.MOVE_SELECTOR_ENFORCE === '1';
+  const moveDone = trackEnvelopeAgent(env, 'move-selector');
+  const knowledgeDone = trackEnvelopeAgent(env, 'knowledge-selector');
+  let conversationState: ConversationState;
+  try {
+    conversationState = await analyzeConversation(env.conversation_history, env.utterance);
+    env.move_decision = selectMove(env, conversationState, {
+      commAssistEnabled: process.env.COMM_ASSIST_ENABLED === 'true' || process.env.COMM_ASSIST_ENABLED === '1',
+    });
+    env.knowledge_plan = selectKnowledgePlan(env, {
+      move: env.move_decision.move,
+      too_early_to_address: env.move_decision.too_early_to_address,
+      child_centered_frame: env.move_decision.child_centered_frame,
+    });
+
+    env.policy_diagnostics.enforced = policyEnforced;
+    env.policy_diagnostics.move_conflict = false;
+    env.policy_diagnostics.move_rule = env.move_decision.rule;
+    env.policy_diagnostics.selected_form = env.move_decision.craft_form;
+    env.policy_diagnostics.asked_question = env.move_decision.ask_question;
+    env.policy_diagnostics.knowledge_rule = env.knowledge_plan.rule;
+    env.policy_diagnostics.knowledge_safety_only = env.knowledge_plan.safetyOnly;
+    env.policy_diagnostics.questions_enabled = env.knowledge_plan.questions.enabled;
+  } catch (err) {
+    recordEnvelopeError(env, 'conversation-policy', err);
+    conversationState = { phase: 'understand', intent: 'exploration', hopelessnessLevel: 0, pushbackCount: 0, adviceLoopCount: 0, trajectoryDrift: 0, emotionalDirection: 'flat', loopBreaker: '', responseTemplate: null };
+    env.move_decision = null;
+    env.knowledge_plan = null;
+    env.policy_diagnostics.enforced = false;
+  } finally {
+    moveDone();
+    knowledgeDone();
+  }
+
+  // ═══════════════════════════════════════════
   // TIER 3 + 4 — WISDOM COUNCIL + WHISPERERS
   // ═══════════════════════════════════════════
   env.wisdom_council = selectWisdomVoices(env);
@@ -244,9 +283,27 @@ export async function processWithAgents(
   // state) concurrently with the Whisperers. Its inputs (memory, listener,
   // archetype, arena) are all populated and the Whisperers do not mutate them.
   const { retrievePreComposer, runComposerPipeline } = await import('./orchestrator-v2-composer');
-  const preComposerPromise = retrievePreComposer(env, historyStr);
+  const preComposerPromise = retrievePreComposer(
+    env,
+    historyStr,
+    conversationState,
+    {
+      moveDecision: env.move_decision,
+      knowledgePlan: env.knowledge_plan,
+      enforceMovePolicy: policyEnforced,
+    },
+  );
   const [, pre] = await Promise.all([whispererPromise, preComposerPromise]);
-  return runComposerPipeline(env, historyStr, pre);
+  return runComposerPipeline(
+    env,
+    historyStr,
+    pre,
+    {
+      moveDecision: env.move_decision,
+      knowledgePlan: env.knowledge_plan,
+      enforceMovePolicy: policyEnforced,
+    },
+  );
 }
 
 function buildResponse(env: StateEnvelope): AgentResponse {
@@ -259,4 +316,3 @@ function buildResponse(env: StateEnvelope): AgentResponse {
     envelope: env,
   };
 }
-

@@ -45,29 +45,57 @@ export async function getEmbedding(text: string): Promise<number[]> {
 export async function retrieveWisdom(
   userMessage: string,
   limit: number = 5,
-  conversationContext?: string
+  conversationContext?: string,
+  excludeDomains: string[] = [],
+  towardDomains: string[] = [],
 ): Promise<string> {
+  const normalizedExcludeDomains = excludeDomains.map((domain) => domain.toLowerCase());
+  const normalizedTowardDomains = towardDomains.map((domain) => domain.toLowerCase());
+
+  type WisdomRow = {
+    content: string;
+    source_title: string;
+    source_type: string;
+    domain: string | null;
+    similarity: number;
+  };
+
   try {
     const embedding = await getEmbedding(userMessage);
     const vectorStr = `[${embedding.join(',')}]`;
 
     // Fetch 2x candidates for re-ranking (wider net, then narrow)
     const candidateLimit = Math.min(limit * 2, 16);
-    const result = await query(
-      `SELECT content, source_title, source_type, 1 - (embedding <=> $1::vector) as similarity
+    let sql = `SELECT content, source_title, source_type, metadata->>'domain' as domain, 1 - (embedding <=> $1::vector) as similarity
        FROM embeddings
        WHERE source_type IN ('book', 'doc')
-       ORDER BY embedding <=> $1::vector
-       LIMIT $2`,
-      [vectorStr, candidateLimit]
-    );
+       ORDER BY embedding <=> $1::vector`;
+    const params: unknown[] = [vectorStr, candidateLimit];
+    let paramIdx = 3;
+
+    if (normalizedExcludeDomains.length > 0) {
+      sql += ` AND (metadata->>'domain' IS NULL OR lower(metadata->>'domain') <> ALL($${paramIdx}::text[]))`;
+      params.push(normalizedExcludeDomains);
+      paramIdx++;
+    }
+
+    sql += ` LIMIT $2`;
+
+    const result = await query(sql, params);
 
     if (result.rows.length === 0) return 'No wisdom passages found in the library yet.';
 
+    const rows: WisdomRow[] = result.rows.map((r: unknown) => r as WisdomRow);
+    const applyTowardDomainBoost = (row: WisdomRow) => {
+      const domain = (row.domain || '').toLowerCase();
+      if (!normalizedTowardDomains.length || !domain) return 0;
+      return normalizedTowardDomains.includes(domain) ? 0.05 : 0;
+    };
+
     // If we have conversation context, re-rank using LLM
-    if (conversationContext && result.rows.length > limit) {
+    if (conversationContext && rows.length > limit) {
       try {
-        const passages = result.rows.map((r: { source_title: string; content: string; similarity: number }, i: number) =>
+        const passages = rows.map((r: WisdomRow, i: number) =>
           `[${i}] ${r.source_title}: ${r.content.substring(0, 300)}`
         ).join('\n\n');
 
@@ -95,13 +123,14 @@ export async function retrieveWisdom(
 
         if (indices.length > 0) {
           const reranked = indices
-            .filter((i: number) => i >= 0 && i < result.rows.length)
+            .filter((i: number) => i >= 0 && i < rows.length)
             .slice(0, limit)
-            .map((i: number) => result.rows[i]);
+            .map((i: number) => rows[i])
+            .sort((a, b) => (b.similarity + applyTowardDomainBoost(b)) - (a.similarity + applyTowardDomainBoost(a)));
 
           if (reranked.length > 0) {
             return reranked
-              .map((r: { source_title: string; content: string; similarity: number }) =>
+              .map((r: WisdomRow) =>
                 `[${r.source_title}] (relevance: ${(r.similarity * 100).toFixed(0)}%)\n${r.content}`
               )
               .join('\n\n---\n\n');
@@ -114,8 +143,8 @@ export async function retrieveWisdom(
 
     // Fallback: use top-N by similarity (also deduplicate by source for diversity)
     const seen = new Set<string>();
-    const diverse: typeof result.rows = [];
-    for (const row of result.rows) {
+    const diverse: WisdomRow[] = [];
+    for (const row of rows) {
       if (diverse.length >= limit) break;
       const key = row.source_title;
       if (seen.size < limit - 1 || !seen.has(key)) {
@@ -124,8 +153,10 @@ export async function retrieveWisdom(
       }
     }
 
+    diverse.sort((a, b) => (b.similarity + applyTowardDomainBoost(b)) - (a.similarity + applyTowardDomainBoost(a)));
+
     return diverse
-      .map((r: { source_title: string; content: string; similarity: number }) =>
+      .map((r: WisdomRow) =>
         `[${r.source_title}] (relevance: ${(r.similarity * 100).toFixed(0)}%)\n${r.content}`
       )
       .join('\n\n---\n\n');
@@ -145,6 +176,8 @@ export interface QuestionRetrievalContext {
   archetype?: string;            // KWML archetype detected this turn
   shadow?: string;               // shadow archetype detected this turn
   arena?: string;                // life arena detected (career, relationship, etc.)
+  whispererScope?: string[];     // restrict by whisperer tag when plan says so
+  arenaScope?: string[];         // restrict to these arenas when plan says so
   previousQuestionIds?: string[]; // question_ids already used this session (avoid repeat)
   permaCoverage?: string[];      // PERMA domains already covered in session
 }
@@ -196,9 +229,11 @@ export async function retrieveQuestion(
     const sessionCount = retrievalCtx?.sessionCount ?? 1;
     const maxDepth = getMaxDepth(sessionCount);
     const trustLevel = getTrustLevel(sessionCount);
+    const whispererScope = retrievalCtx?.whispererScope?.map(scope => scope.toLowerCase()) || [];
+    const arenaScope = retrievalCtx?.arenaScope?.map(scope => scope.toLowerCase()) || [];
 
     // Step 1-4: Build base query with arena, depth, and trust filters
-    let sql = `SELECT question_id, question_text, archetype, shadow, function,
+    let sql = `SELECT question_id, question_text, whisperer, archetype, shadow, function,
                depth_level, arena, risk_polarity, emotion_context, perma_domain,
                trust_level, effectiveness_score, deployment_gate,
                1 - (embedding <=> $1::vector) as similarity
@@ -207,9 +242,19 @@ export async function retrieveQuestion(
     let paramIdx = 3;
 
     // Step 1: Arena filter (soft — prefer matching arena but include general)
-    if (retrievalCtx?.arena) {
+    if (arenaScope.length > 0) {
+      sql += ` AND (lower(arena) = ANY($${paramIdx}::text[]) OR arena = '' OR arena IS NULL OR arena ILIKE '%general%')`;
+      params.push(arenaScope);
+      paramIdx++;
+    } else if (retrievalCtx?.arena) {
       sql += ` AND (arena ILIKE $${paramIdx} OR arena = '' OR arena IS NULL OR arena ILIKE '%general%')`;
       params.push(`%${retrievalCtx.arena}%`);
+      paramIdx++;
+    }
+
+    if (whispererScope.length > 0) {
+      sql += ` AND (lower(whisperer) = ANY($${paramIdx}::text[]) OR whisperer = 'any' OR whisperer IS NULL)`;
+      params.push(whispererScope);
       paramIdx++;
     }
 
@@ -243,7 +288,7 @@ export async function retrieveQuestion(
 
     // Step 5-6, 8-9: Score and re-rank candidates
     interface QRow {
-      question_id: string; question_text: string; archetype: string; shadow: string;
+      question_id: string; question_text: string; whisperer: string; archetype: string; shadow: string;
       function: string; depth_level: number; arena: string; risk_polarity: string;
       emotion_context: string; perma_domain: string; trust_level: string;
       effectiveness_score: number; deployment_gate: unknown; similarity: number;
@@ -315,4 +360,3 @@ export async function retrieveQuestion(
     return [];
   }
 }
-
