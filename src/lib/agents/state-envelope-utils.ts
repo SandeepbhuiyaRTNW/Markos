@@ -51,11 +51,29 @@ export function createStateEnvelope(params: {
     },
 
     wisdom_council: { invoked: [] },
-    domain_whisperers: { invoked: [], question_candidates: [], frameworks_applied: [], landmines: [], context_notes: [] },
-    craft_directives: { form: 'question', pacing: 'full', metaphor_hint: null, style_override: null },
+  domain_whisperers: { invoked: [], question_candidates: [], frameworks_applied: [], landmines: [], context_notes: [] },
+  craft_directives: { form: 'question', pacing: 'full', metaphor_hint: null, style_override: null },
+  move_decision: null,
+  knowledge_plan: null,
+  policy_diagnostics: {
+    move_conflict: false,
+    enforced: false,
+    move_rule: null,
+    selected_form: null,
+    asked_question: null,
+    knowledge_rule: null,
+    knowledge_safety_only: null,
+    questions_enabled: null,
+    questions_were_retrieved: null,
+    question_candidates_passed: null,
+    no_question_override_active: null,
+    final_form: null,
+    final_question_count: null,
+    too_early_to_address: [],
+  },
 
-    composer_output: null,
-    final_response: null,
+  composer_output: null,
+  final_response: null,
     active_agents: [],
     agent_timings: {},
     errors: [],
@@ -100,8 +118,17 @@ export function listenerStackFromAnalysis(analysis: import('../understanding/sta
   };
 }
 
+export interface EnvelopeContextOptions {
+  includeQuestionCandidates?: boolean;
+  includeWhispererContext?: boolean;
+}
+
 /** Build a formatted context summary from the State Envelope for the Composer */
-export function buildEnvelopeContextSummary(env: StateEnvelope): string {
+export function buildEnvelopeContextSummary(
+  env: StateEnvelope,
+  options: EnvelopeContextOptions = {},
+): string {
+  const { includeQuestionCandidates = true, includeWhispererContext = true } = options;
   const parts: string[] = [];
   const mem = env.sentinels.memory;
   if (mem.memory_context && mem.memory_context !== 'No memories stored for this user yet.') {
@@ -131,19 +158,19 @@ export function buildEnvelopeContextSummary(env: StateEnvelope): string {
   if (env.wisdom_council.invoked.length > 0) {
     parts.push(`## WISDOM COUNCIL: ${env.wisdom_council.invoked.join(', ')}`);
   }
-  if (env.domain_whisperers.question_candidates.length > 0) {
+  if (includeQuestionCandidates && env.domain_whisperers.question_candidates.length > 0) {
     const qs = env.domain_whisperers.question_candidates;
     const trust = env.assessment.trust;
     const trustLabel = mem.session_count <= 2 ? 'NEW' : mem.session_count <= 5 ? 'DEVELOPING' : mem.session_count <= 15 ? 'ESTABLISHED' : 'DEEP';
     parts.push(`## QUESTIONS (Trust: ${trustLabel}, Session #${mem.session_count})\nPRIMARY: ${qs[0].text}${qs.length > 1 ? `\nALTERNATIVES:\n${qs.slice(1, 4).map((q, i) => `${i + 2}. ${q.text}`).join('\n')}` : ''}`);
   }
-  if (env.domain_whisperers.frameworks_applied.length > 0) {
+  if (includeWhispererContext && env.domain_whisperers.frameworks_applied.length > 0) {
     parts.push(`## ACTIVE FRAMEWORKS\n${env.domain_whisperers.frameworks_applied.join(', ')}`);
   }
-  if (env.domain_whisperers.landmines.length > 0) {
+  if (includeWhispererContext && env.domain_whisperers.landmines.length > 0) {
     parts.push(`## LANDMINES — DO NOT:\n${env.domain_whisperers.landmines.map(l => `• ${l}`).join('\n')}`);
   }
-  if (env.domain_whisperers.context_notes.length > 0) {
+  if (includeWhispererContext && env.domain_whisperers.context_notes.length > 0) {
     parts.push(`## WHISPERER INTELLIGENCE\n${env.domain_whisperers.context_notes.join('\n')}`);
   }
   if (env.sentinels.pathway_router.candidates.length > 0) {
@@ -155,4 +182,3 @@ export function buildEnvelopeContextSummary(env: StateEnvelope): string {
   parts.push(`## TRUST: cognitive=${env.assessment.trust.cognitive.toFixed(2)}, affective=${env.assessment.trust.affective.toFixed(2)}`);
   return parts.join('\n\n');
 }
-

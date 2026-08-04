@@ -8,6 +8,8 @@ import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
 import { buildSystemPrompt } from '../agent/system-prompt';
 import type { StateEnvelope } from './state-envelope';
+import type { MoveDecision } from '../assessment/move-selector';
+import type { KnowledgePlan } from '../assessment/knowledge-selector';
 import { trackEnvelopeAgent, recordEnvelopeError, buildEnvelopeContextSummary } from './state-envelope-utils';
 import { checkBoundary, getBoundaryOverridePrompt, runBoundarySentinel } from '../sentinels/boundary';
 import { determineCraftDirectives, enforceSocraticDiscipline, applyDeepListener, enforceVocativePrinciple, detectForbiddenPhrases, detectFantasyIdentity, detectVocabSubstitutions } from '../craft/craft-layer';
@@ -15,13 +17,29 @@ import { buildWisdomCouncilPrompt } from '../wisdom/council';
 import { getPhaseConstraints } from '../assessment/phase-mapper';
 import { retrieveWisdom, retrieveQuestion, type QuestionRetrievalContext } from '../rag/retriever';
 import { analyzeConversation, computeTrajectoryDrift } from './conversation-state';
-import { searchPastMessages } from '../memory/memory-manager';
 import type { AgentResponse } from './orchestrator-v2';
 
 export interface PreComposerResult {
   ragWisdom: string;
   legacyQuestions: string[];
   convState: Awaited<ReturnType<typeof analyzeConversation>> | null;
+  questionsWereRetrieved: boolean;
+  knowledgePlanUsed: KnowledgePlan | null;
+}
+
+interface ComposerPolicy {
+  moveDecision: MoveDecision | null;
+  knowledgePlan: KnowledgePlan | null;
+  enforceMovePolicy: boolean;
+}
+
+interface MovePolicyContext {
+  moveDecision: MoveDecision | null;
+  enforceMovePolicy: boolean;
+}
+
+interface PriorityPolicy {
+  allowQuestion: boolean;
 }
 
 /**
@@ -32,53 +50,138 @@ export interface PreComposerResult {
  * Whisperer tier mutates — so the orchestrator runs it concurrently with the
  * Whisperers. Kept callable standalone (composer computes it if not supplied).
  */
-export async function retrievePreComposer(env: StateEnvelope, historyStr: string): Promise<PreComposerResult> {
+export async function retrievePreComposer(
+  env: StateEnvelope,
+  historyStr: string,
+  conversationState: Awaited<ReturnType<typeof analyzeConversation>> | null = null,
+  policy: ComposerPolicy = { moveDecision: null, knowledgePlan: null, enforceMovePolicy: false },
+): Promise<PreComposerResult> {
   // ═══════════════════════════════════════════
   // PRE-COMPOSER: RAG + Legacy question retrieval (parallel)
   // ═══════════════════════════════════════════
   const ragDone = trackEnvelopeAgent(env, 'rag-retrieval');
   let ragWisdom = '';
   let legacyQuestions: string[] = [];
+  let questionsWereRetrieved = false;
   // Escalation engine — loop-breaking, pushback/resistance handling, advice-loop
   // detection, emotional-direction tracking, and hopelessness templates. Computed
   // in parallel with RAG so it adds no extra latency.
   let convState: Awaited<ReturnType<typeof analyzeConversation>> | null = null;
-  try {
-    const retrievalCtx: QuestionRetrievalContext = {
-      sessionCount: env.sentinels.memory.session_count,
-      emotionDetected: env.sentinels.listener_stack?.primary_emotion,
-      archetype: env.assessment.archetype?.active,
-      shadow: env.assessment.archetype?.shadow || undefined,
-      arena: env.assessment.arena?.primary,
-    };
+  const policyEnforced = policy.enforceMovePolicy && policy.moveDecision !== null;
+  const effectivePlan = policyEnforced ? policy.knowledgePlan : null;
+  const effectiveMove = policyEnforced ? policy.moveDecision : null;
+
+  const allowQuestions = policyEnforced
+    ? !!effectivePlan && effectivePlan.questions.enabled && !!effectiveMove?.ask_question
+    : true;
+  const allowWisdom = policyEnforced
+    ? !!effectivePlan && effectivePlan.wisdom.enabled && !effectivePlan.safetyOnly
+    : true;
+
+  const retrievalCtx: QuestionRetrievalContext = {
+    sessionCount: env.sentinels.memory.session_count,
+    emotionDetected: env.sentinels.listener_stack?.primary_emotion,
+    archetype: env.assessment.archetype?.active,
+    shadow: env.assessment.archetype?.shadow || undefined,
+    arena: env.assessment.arena?.primary,
+    whispererScope: effectivePlan?.questions.whispererScope || undefined,
+    arenaScope: effectivePlan?.questions.arenaScope || undefined,
+  };
+
+    try {
+    const retrieveWisdomPromise = (async () => {
+      if (!policyEnforced) return retrieveWisdom(env.utterance, 5, historyStr);
+      if (!allowWisdom) return '';
+      const excludeDomains = effectivePlan?.wisdom.excludeDomains ?? [];
+      const towardDomains = effectivePlan?.wisdom.towardDomains ?? [];
+      return retrieveWisdom(
+        env.utterance,
+        5,
+        historyStr,
+        excludeDomains,
+        towardDomains,
+      );
+    })();
+
+    const retrieveQuestionPromise = (async () => {
+      if (!allowQuestions) return [];
+      questionsWereRetrieved = true;
+      return retrieveQuestion(env.utterance, env.assessment.archetype?.active, undefined, 3, retrievalCtx);
+    })();
+
+    const conversationStatePromise = conversationState
+      ? Promise.resolve(conversationState)
+      : analyzeConversation(env.conversation_history, env.utterance);
+
     const [rw, lq, cs] = await Promise.all([
-      retrieveWisdom(env.utterance, 5, historyStr),
-      retrieveQuestion(env.utterance, env.assessment.archetype?.active, undefined, 3, retrievalCtx),
-      analyzeConversation(env.conversation_history, env.utterance),
+      retrieveWisdomPromise,
+      retrieveQuestionPromise,
+      conversationStatePromise,
     ]);
     ragWisdom = rw; legacyQuestions = lq; convState = cs;
   } catch (err) { recordEnvelopeError(env, 'rag-retrieval', err); }
   finally { ragDone(); }
-  return { ragWisdom, legacyQuestions, convState };
+
+  env.policy_diagnostics.questions_were_retrieved = policyEnforced ? questionsWereRetrieved : null;
+
+  return {
+    ragWisdom,
+    legacyQuestions,
+    convState,
+    questionsWereRetrieved,
+    knowledgePlanUsed: policyEnforced ? effectivePlan : null,
+  };
 }
 
-export async function runComposerPipeline(env: StateEnvelope, historyStr: string, pre?: PreComposerResult): Promise<AgentResponse> {
+export async function runComposerPipeline(
+  env: StateEnvelope,
+  historyStr: string,
+  pre?: PreComposerResult,
+  policy: ComposerPolicy = { moveDecision: null, knowledgePlan: null, enforceMovePolicy: false },
+): Promise<AgentResponse> {
   // Pre-fetch is supplied by the orchestrator (run concurrently with Whisperers);
   // fall back to computing it here when the composer is invoked standalone.
-  const { ragWisdom, legacyQuestions, convState } = pre ?? await retrievePreComposer(env, historyStr);
+  const { ragWisdom, legacyQuestions, convState, questionsWereRetrieved, knowledgePlanUsed } = pre
+    ?? await retrievePreComposer(env, historyStr, null, policy);
 
-  // Merge Whisperer question candidates with legacy questions
+  const policyEnforced = policy.enforceMovePolicy && policy.moveDecision !== null;
+  const effectiveMove = policyEnforced ? policy.moveDecision : null;
+  const effectivePlan = policyEnforced ? policy.knowledgePlan : knowledgePlanUsed;
+  const questionAllowedByMove = policyEnforced ? !!effectiveMove?.ask_question : true;
+  const questionAllowedByPolicy = policyEnforced
+    ? !!effectivePlan && effectivePlan.questions.enabled && questionAllowedByMove
+    : true;
+  const includeWhispererContext = !policyEnforced || !!effectivePlan?.includeWhispererOutput;
+  const scopedWhispererQuestions = policyEnforced && effectivePlan && questionAllowedByPolicy
+    ? filterWhispererQuestionsByScope(env.domain_whisperers.question_candidates, effectivePlan.questions.whispererScope)
+    : env.domain_whisperers.question_candidates;
   const allQuestionTexts = [
-    ...env.domain_whisperers.question_candidates.map(q => q.text),
-    ...legacyQuestions,
+    ...scopedWhispererQuestions.map(q => q.text),
+    ...(questionAllowedByPolicy ? legacyQuestions : []),
   ];
-  // Deduplicate
-  const uniqueQuestions = [...new Set(allQuestionTexts)].slice(0, 5);
+  // Enforce at most one selected question for this turn, so the generation stack
+  // cannot treat one prompt as a menu of question options.
+  const uniqueQuestions = [...new Set(allQuestionTexts)].slice(0, 1);
+  const questionCandidatesPassed = uniqueQuestions.length > 0 && questionAllowedByPolicy;
+  const policyContext: MovePolicyContext = {
+    moveDecision: effectiveMove,
+    enforceMovePolicy: policyEnforced,
+  };
+  const priorityPolicy: PriorityPolicy = {
+    allowQuestion: questionAllowedByPolicy,
+  };
+
+  env.policy_diagnostics.question_candidates_passed = policyEnforced ? questionCandidatesPassed : null;
 
   // ═══════════════════════════════════════════
   // TIER 5 — CRAFT LAYER (pre-Composer directives)
   // ═══════════════════════════════════════════
+  const prePolicyForm = env.craft_directives.form;
   env.craft_directives = determineCraftDirectives(env);
+  if (policyContext.enforceMovePolicy && policyContext.moveDecision) {
+    env.craft_directives = applyMoveCraftPolicy(env.craft_directives, policyContext.moveDecision);
+    env.policy_diagnostics.move_conflict = env.craft_directives.form !== prePolicyForm;
+  }
 
   // ═══════════════════════════════════════════
   // TIER 0 — COMPOSER (Marcus's single voice)
@@ -93,7 +196,10 @@ export async function runComposerPipeline(env: StateEnvelope, historyStr: string
     });
 
     // Build the context injection from State Envelope
-    const envelopeContext = buildEnvelopeContextSummary(env);
+    const envelopeContext = buildEnvelopeContextSummary(env, {
+      includeQuestionCandidates: questionAllowedByPolicy,
+      includeWhispererContext,
+    });
     const wisdomCouncilPrompt = buildWisdomCouncilPrompt(env.wisdom_council);
     const phaseConstraints = getPhaseConstraints(env.assessment.phase.label);
 
@@ -126,7 +232,9 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     // Build messages — use the existing buildSystemPrompt signature
     const systemContent = buildSystemPrompt({
       memoryContext: env.sentinels.memory.memory_context || undefined,
-      ragContext: ragWisdom + (uniqueQuestions.length > 0 ? `\n\n## SUGGESTED QUESTIONS (choose at most ONE):\n${uniqueQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : ''),
+      ragContext: ragWisdom + (questionCandidatesPassed
+        ? `\n\n## SUGGESTED QUESTIONS (choose at most ONE):\n${uniqueQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}`
+        : ''),
       kwmlContext: kwmlStr,
       understandingContext: understandingStr,
       sessionHistory: env.sentinels.memory.session_history || undefined,
@@ -135,7 +243,8 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     });
 
     // Build priority hierarchy — the Composer's marching orders for THIS turn
-    const priorityHierarchy = buildPriorityHierarchy(env);
+    const priorityHierarchy = buildPriorityHierarchy(env, priorityPolicy);
+    const moveDirective = renderMoveDirective(policyContext);
 
     // Escalation directives from the conversation-state engine — these are the
     // loop-breakers (pushback/resistance/advice-loop/worsening) and hard-constraint
@@ -153,7 +262,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     }
 
     // Inject State Envelope intelligence after system prompt
-    const fullSystem = `${systemContent}\n\n${envelopeContext}\n\n${wisdomCouncilPrompt}${phaseAddendum}${craftAddendum}\n\n${priorityHierarchy}${escalationAddendum}`;
+    const fullSystem = `${systemContent}\n\n${envelopeContext}\n\n${wisdomCouncilPrompt}${phaseAddendum}${craftAddendum}\n\n${moveDirective}\n${priorityHierarchy}${escalationAddendum}`;
 
     const messages: (SystemMessage | HumanMessage | AIMessage)[] = [
       new SystemMessage(fullSystem),
@@ -166,6 +275,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     const response = await model.invoke(messages);
     let content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
     content = content || 'Something in what you said hit me. Say that again — slower this time.';
+    content = enforceMovePolicy(content, policyContext);
 
     // ═══════════════════════════════════════════
     // POST-COMPOSER: Craft Layer shaping
@@ -175,6 +285,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
       : false;
     content = enforceSocraticDiscipline(content, env.craft_directives);
     content = applyDeepListener(content, env.craft_directives, isSilenceBreaking);
+    content = enforceMovePolicy(content, policyContext);
 
     // ═══════════════════════════════════════════
     // BOUNDARY SENTINEL (post-Composer)
@@ -205,6 +316,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
         const retryContent = typeof retry.content === 'string' ? retry.content : JSON.stringify(retry.content);
         content = retryContent || content;
         content = enforceSocraticDiscipline(content, env.craft_directives);
+        content = enforceMovePolicy(content, policyContext);
       } else {
         skippedGates.push('boundary');
       }
@@ -224,6 +336,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
             new HumanMessage(`[SYSTEM OVERRIDE] Your response is semantically identical to what you've been saying all session. You are STUCK IN A LOOP. Write a COMPLETELY DIFFERENT response. Change angle entirely. 2-3 sentences. End differently.`)];
           const dedupRetry = await model.invoke(dedupMessages);
           content = typeof dedupRetry.content === 'string' ? dedupRetry.content : content;
+          content = enforceMovePolicy(content, policyContext);
         }
       } catch {}
     } else if (prevMarcus.length >= 2) {
@@ -244,6 +357,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
           new HumanMessage(`[SYSTEM OVERRIDE] Your response contains a forward-projecting fantasy-identity question ("imagine yourself a year from now" pattern). This is a banned template. Rewrite with a PRESENT-TENSE or PAST-EXCAVATING question instead. Ask about what IS happening, not what he wants to become. 2-3 sentences.`)];
         const fantasyRetry = await model.invoke(fantasyOverride);
         content = typeof fantasyRetry.content === 'string' ? fantasyRetry.content : content;
+        content = enforceMovePolicy(content, policyContext);
       } else {
         skippedGates.push('fantasy-identity');
       }
@@ -260,6 +374,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
           new HumanMessage(`[SYSTEM OVERRIDE] Your response translated the user's specific words into clinical abstractions. The user's EXACT words must appear in your response. Return at least one specific noun, verb, or phrase from the user's message verbatim. Do NOT substitute "throw up" with "heavy feeling" or "cheated" with "betrayal" etc. Rewrite using the user's own vocabulary. 2-3 sentences.`)];
         const vocabRetry = await model.invoke(vocabOverride);
         content = typeof vocabRetry.content === 'string' ? vocabRetry.content : content;
+        content = enforceMovePolicy(content, policyContext);
       } else {
         skippedGates.push('vocab-fidelity');
       }
@@ -276,6 +391,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
           new HumanMessage(`[SYSTEM OVERRIDE] Your response contained forbidden phrases (${forbiddenViolations.join(', ')}). These are banned. Rewrite without any of them. Be direct and concrete. 2-3 sentences.`)];
         const forbiddenRetry = await model.invoke(forbiddenOverride);
         content = typeof forbiddenRetry.content === 'string' ? forbiddenRetry.content : content;
+        content = enforceMovePolicy(content, policyContext);
       } else {
         skippedGates.push('forbidden-phrase');
       }
@@ -287,11 +403,38 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
 
     // 4. Vocative Principle Filter — ALWAYS runs last, strips banned vocatives
     content = enforceVocativePrinciple(content, env.user_name);
+    content = enforceMovePolicy(content, policyContext);
 
     // Crisis resource enforcement for elevated/passive crisis
     if (env.sentinels.crisis.level === 'elevated' && !content.includes('988')) {
       content += `\n\n${env.user_name ? env.user_name + ' — ' : ''}988 Suicide & Crisis Lifeline: call or text 988. Crisis Text Line: text HOME to 741741.`;
     }
+
+    const finalQuestionCount = countQuestionSentences(content);
+    if (policyContext.enforceMovePolicy && policyContext.moveDecision) {
+      if (!questionAllowedByPolicy && finalQuestionCount > 0) {
+        console.warn('[V2 Policy] Move selected no-question, but content still contains a question');
+        env.policy_diagnostics.no_question_override_active = true;
+        env.policy_diagnostics.move_conflict = true;
+      } else if (env.policy_diagnostics.move_conflict === false) {
+        env.policy_diagnostics.no_question_override_active = false;
+      }
+      if (effectivePlan && effectivePlan.safetyOnly) {
+        env.policy_diagnostics.knowledge_rule = effectivePlan.rule;
+      }
+    } else {
+      env.policy_diagnostics.no_question_override_active = null;
+    }
+    // Final diagnostic: was a question actually produced?
+    env.policy_diagnostics.final_form = env.craft_directives.form;
+    env.policy_diagnostics.final_question_count = finalQuestionCount;
+    if (questionsWereRetrieved && policyContext.enforceMovePolicy && policyContext.moveDecision) {
+      if (!questionAllowedByPolicy) {
+        console.warn('[V2 Policy] Question retrieval ran despite policy asking for no question');
+        env.policy_diagnostics.questions_were_retrieved = true;
+      }
+    }
+    env.policy_diagnostics.questions_enabled = policyContext.enforceMovePolicy ? !!effectivePlan?.questions.enabled : env.policy_diagnostics.questions_enabled;
 
     env.composer_output = content;
     env.final_response = content;
@@ -367,7 +510,7 @@ async function storeInBackground(env: StateEnvelope): Promise<void> {
  * Build a priority hierarchy that tells the Composer exactly what to focus on.
  * Placed LAST in the system prompt so it has maximum attention weight.
  */
-function buildPriorityHierarchy(env: StateEnvelope): string {
+function buildPriorityHierarchy(env: StateEnvelope, policy: PriorityPolicy = { allowQuestion: true }): string {
   const ls = env.sentinels.listener_stack;
   const whisperers = env.domain_whisperers;
   const depth = ls?.depth_level || 1;
@@ -378,8 +521,8 @@ function buildPriorityHierarchy(env: StateEnvelope): string {
     '',
   ];
 
-  // Priority 1: If there's a silence question, it's the #1 candidate
-  if (ls?.silence_question) {
+  // Priority 1: If we are allowed to ask, the silence question is still highest.
+  if (policy.allowQuestion && ls?.silence_question) {
     lines.push(`PRIORITY 1 — SILENCE QUESTION (from Listener Stack):`);
     lines.push(`"${ls.silence_question}"`);
     lines.push(`This is the DEEPEST question available for this moment. Use it as-is or adapt it to your voice. Do NOT replace it with a safer question unless the man explicitly needs gentleness right now.`);
@@ -419,7 +562,68 @@ function buildPriorityHierarchy(env: StateEnvelope): string {
   }
 
   lines.push('');
-  lines.push('YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then ask ONE question or make ONE statement that pushes toward the depth target above. (3) Keep it 2-4 sentences. End with weight.');
+  lines.push(policy.allowQuestion
+    ? 'YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then ask ONE question or make ONE statement that pushes toward the depth target above. (3) Keep it 2-4 sentences. End with weight.'
+    : 'YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then make ONE statement that pushes toward the depth target above. (3) Keep it 2-4 sentences. End with weight.');
 
   return lines.join('\n');
+}
+
+function renderMoveDirective(policy: MovePolicyContext): string {
+  if (!policy.enforceMovePolicy || !policy.moveDecision) return '';
+  const allowQuestionText = policy.moveDecision.ask_question ? 'MAY ASK' : 'MUST NOT ASK';
+  const tooEarly = policy.moveDecision.too_early_to_address.length > 0
+    ? `topics deferred this turn: ${policy.moveDecision.too_early_to_address.join(', ')}`
+    : 'no topic deferral';
+  return `\n\n## MOVE POLICY\nDecision: ${policy.moveDecision.move}\nQuestion policy: ${allowQuestionText}\nRequired craft form: ${policy.moveDecision.craft_form}\n${tooEarly}.`;
+}
+
+function countQuestionSentences(text: string): number {
+  return (text.match(/\?/g) || []).length;
+}
+
+function enforceMovePolicy(content: string, policy: MovePolicyContext): string {
+  if (!policy.enforceMovePolicy || !policy.moveDecision) return content;
+
+  if (policy.moveDecision.ask_question) return content;
+
+  const lines = content.split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .filter(line => !line.endsWith('?'));
+
+  // Safety net for single-line or inline question-only responses.
+  if (lines.length === 0) {
+    return content.replace(/\b(what|how|why|when|where|who|which|can|could|would|should|do you|did you|are you)\b[^\?]*\?/gi, '').trim();
+  }
+
+  return lines.join('\n');
+}
+
+function filterWhispererQuestionsByScope(
+  questions: StateEnvelope['domain_whisperers']['question_candidates'],
+  scope: string[] | null,
+): typeof questions {
+  if (!scope || scope.length === 0) return questions;
+  const lower = scope.map((s) => s.toLowerCase());
+  return questions.filter((q) => lower.includes((q.whisperer || '').toLowerCase()));
+}
+
+function applyMoveCraftPolicy(current: StateEnvelope['craft_directives'], moveDecision: MoveDecision): StateEnvelope['craft_directives'] {
+  const next: StateEnvelope['craft_directives'] = {
+    ...current,
+    form: moveDecision.craft_form,
+  };
+
+  const isQuestion = moveDecision.ask_question;
+  if (!isQuestion) {
+    const base = next.style_override ?? '';
+    const containsQuestionDirective = /(question|ask|probe|inquire|deeper|ask him|ask her)/i.test(base);
+    if (containsQuestionDirective) {
+      next.style_override = null;
+    } else if (!base) {
+      next.style_override = null;
+    }
+  }
+  return next;
 }

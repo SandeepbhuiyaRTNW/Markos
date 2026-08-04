@@ -295,18 +295,18 @@ export function determineCraftDirectives(env: StateEnvelope): CraftDirectives {
  * If the response should end with a question, enforce single-question discipline.
  */
 export function enforceSocraticDiscipline(response: string, directives: CraftDirectives): string {
-  if (directives.form === 'presence' || directives.form === 'statement') {
-    // Remove trailing questions for presence/statement forms
-    const lines = response.split('\n').filter(l => l.trim());
-    if (lines.length > 1 && lines[lines.length - 1].trim().endsWith('?')) {
-      // Keep only if the response is just one question
-      const questionCount = response.split('?').length - 1;
-      if (questionCount > 1) {
-        // Remove all but the last question
-        return response;
-      }
+  if (directives.form === 'presence' || directives.form === 'statement' || directives.form === 'reflection') {
+    // Remove questions from response for non-question forms.
+    const lines = response.split('\n').map(l => l.trim()).filter(Boolean);
+    const kept = lines.filter((line) => !line.endsWith('?'));
+
+    // Safety for one-liners or edge cases where everything is question text.
+    if (kept.length === 0) {
+      const noPunct = response.replace(/\b(would|would you|can you|could you|did you|are you|how about|what if|what\s+would|what\s+about)\b[^.!?]*\?/gi, '').trim();
+      return noPunct || lines[0].replace(/\?+$/, '').trim();
     }
-    return response;
+
+    return kept.join('\n').trim();
   }
 
   if (directives.form === 'question') {
@@ -353,4 +353,3 @@ export function applyDeepListener(
 
   return response;
 }
-

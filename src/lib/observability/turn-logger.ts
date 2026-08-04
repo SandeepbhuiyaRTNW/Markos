@@ -63,6 +63,25 @@ export async function ensureTurnLogsTable(): Promise<void> {
     )
   `).catch(() => {});
 
+  // Policy-layer columns added for move-selector/knowledge-intelligence observability.
+  await query(`ALTER TABLE turn_logs ADD COLUMN IF NOT EXISTS policy_enforced BOOLEAN`).catch(() => {});
+  await query(`ALTER TABLE turn_logs ADD COLUMN IF NOT EXISTS policy_move TEXT`).catch(() => {});
+  await query(`ALTER TABLE turn_logs ADD COLUMN IF NOT EXISTS policy_move_rule TEXT`).catch(() => {});
+  await query(`ALTER TABLE turn_logs ADD COLUMN IF NOT EXISTS policy_asked_question BOOLEAN`).catch(() => {});
+  await query(`ALTER TABLE turn_logs ADD COLUMN IF NOT EXISTS policy_selected_form TEXT`).catch(() => {});
+  await query(`ALTER TABLE turn_logs ADD COLUMN IF NOT EXISTS policy_too_early_to_address TEXT[]`).catch(() => {});
+  await query(`ALTER TABLE turn_logs ADD COLUMN IF NOT EXISTS policy_knowledge_rule TEXT`).catch(() => {});
+  await query(`ALTER TABLE turn_logs ADD COLUMN IF NOT EXISTS policy_knowledge_safety_only BOOLEAN`).catch(() => {});
+  await query(`ALTER TABLE turn_logs ADD COLUMN IF NOT EXISTS policy_knowledge_questions_enabled BOOLEAN`).catch(() => {});
+  await query(`ALTER TABLE turn_logs ADD COLUMN IF NOT EXISTS policy_knowledge_question_scopes JSONB`).catch(() => {});
+  await query(`ALTER TABLE turn_logs ADD COLUMN IF NOT EXISTS policy_excluded_domains TEXT[]`).catch(() => {});
+  await query(`ALTER TABLE turn_logs ADD COLUMN IF NOT EXISTS policy_final_form TEXT`).catch(() => {});
+  await query(`ALTER TABLE turn_logs ADD COLUMN IF NOT EXISTS policy_final_question_count INT`).catch(() => {});
+  await query(`ALTER TABLE turn_logs ADD COLUMN IF NOT EXISTS policy_questions_were_retrieved BOOLEAN`).catch(() => {});
+  await query(`ALTER TABLE turn_logs ADD COLUMN IF NOT EXISTS policy_question_candidates_passed BOOLEAN`).catch(() => {});
+  await query(`ALTER TABLE turn_logs ADD COLUMN IF NOT EXISTS policy_move_conflict BOOLEAN`).catch(() => {});
+  await query(`ALTER TABLE turn_logs ADD COLUMN IF NOT EXISTS policy_no_question_override_active BOOLEAN`).catch(() => {});
+
   // Index for fast queries
   await query(`CREATE INDEX IF NOT EXISTS idx_turn_logs_user ON turn_logs(user_id)`).catch(() => {});
   await query(`CREATE INDEX IF NOT EXISTS idx_turn_logs_conv ON turn_logs(conversation_id)`).catch(() => {});
@@ -84,7 +103,12 @@ export async function logTurn(env: StateEnvelope): Promise<void> {
         craft_form, craft_pacing,
         agent_timings, errors,
         register, faith_context, pathway_candidates,
-        total_ms, regen_triggers
+        total_ms, regen_triggers,
+        policy_enforced, policy_move, policy_move_rule, policy_asked_question, policy_selected_form,
+        policy_too_early_to_address, policy_knowledge_rule, policy_knowledge_safety_only,
+        policy_knowledge_questions_enabled, policy_knowledge_question_scopes, policy_excluded_domains,
+        policy_final_form, policy_final_question_count, policy_questions_were_retrieved,
+        policy_question_candidates_passed, policy_move_conflict, policy_no_question_override_active
       ) VALUES (
         $1, $2, $3, $4, $5,
         $6, $7, $8,
@@ -96,7 +120,12 @@ export async function logTurn(env: StateEnvelope): Promise<void> {
         $22, $23,
         $24, $25,
         $26, $27, $28,
-        $29, $30
+        $29, $30,
+        $31, $32, $33, $34,
+        $35, $36, $37,
+        $38, $39, $40,
+        $41, $42, $43,
+        $44, $45, $46
       )`,
       [
         env.turn_id, env.user_id, env.conversation_id,
@@ -120,6 +149,30 @@ export async function logTurn(env: StateEnvelope): Promise<void> {
           ? JSON.stringify(env.sentinels.pathway_router.candidates) : null,
         env.total_ms,
         env.regen_triggers.length > 0 ? env.regen_triggers : null,
+        env.policy_diagnostics.enforced,
+        env.move_decision?.move || null,
+        env.policy_diagnostics.move_rule,
+        env.policy_diagnostics.asked_question,
+        env.policy_diagnostics.selected_form,
+        env.policy_diagnostics.too_early_to_address.length > 0
+          ? env.policy_diagnostics.too_early_to_address
+          : null,
+        env.policy_diagnostics.knowledge_rule,
+        env.policy_diagnostics.knowledge_safety_only,
+        env.policy_diagnostics.questions_enabled,
+        env.knowledge_plan?.questions
+          ? JSON.stringify({
+            whispererScope: env.knowledge_plan.questions.whispererScope,
+            arenaScope: env.knowledge_plan.questions.arenaScope,
+          })
+          : null,
+        env.knowledge_plan?.wisdom.excludeDomains?.length ? env.knowledge_plan.wisdom.excludeDomains : null,
+        env.policy_diagnostics.final_form,
+        env.policy_diagnostics.final_question_count,
+        env.policy_diagnostics.questions_were_retrieved,
+        env.policy_diagnostics.question_candidates_passed,
+        env.policy_diagnostics.move_conflict,
+        env.policy_diagnostics.no_question_override_active,
       ]
     );
   } catch (err) {
@@ -174,4 +227,3 @@ export async function getArchetypePath(userId: string, limit: number = 20): Prom
   );
   return result.rows;
 }
-
