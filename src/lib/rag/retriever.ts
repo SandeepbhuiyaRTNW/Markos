@@ -66,22 +66,10 @@ export async function retrieveWisdom(
 
     // Fetch 2x candidates for re-ranking (wider net, then narrow)
     const candidateLimit = Math.min(limit * 2, 16);
-    let sql = `SELECT content, source_title, source_type, metadata->>'domain' as domain, 1 - (embedding <=> $1::vector) as similarity
-       FROM embeddings
-       WHERE source_type IN ('book', 'doc')
-       ORDER BY embedding <=> $1::vector`;
-    const params: unknown[] = [vectorStr, candidateLimit];
-    let paramIdx = 3;
+    const querySpec = buildWisdomRetrievalQuery(vectorStr, candidateLimit, normalizedExcludeDomains, normalizedTowardDomains);
+    const sql = querySpec.sql;
 
-    if (normalizedExcludeDomains.length > 0) {
-      sql += ` AND (metadata->>'domain' IS NULL OR lower(metadata->>'domain') <> ALL($${paramIdx}::text[]))`;
-      params.push(normalizedExcludeDomains);
-      paramIdx++;
-    }
-
-    sql += ` LIMIT $2`;
-
-    const result = await query(sql, params);
+    const result = await query(sql, querySpec.params);
 
     if (result.rows.length === 0) return 'No wisdom passages found in the library yet.';
 
@@ -164,6 +152,31 @@ export async function retrieveWisdom(
     console.error('RAG retrieval error:', error);
     return 'Wisdom retrieval temporarily unavailable.';
   }
+}
+
+export function buildWisdomRetrievalQuery(
+  _vectorStr: string,
+  candidateLimit: number,
+  excludeDomains: string[] = [],
+  _towardDomains: string[] = [],
+): { sql: string; params: unknown[] } {
+  const normalizedExcludeDomains = excludeDomains.map((domain) => domain.toLowerCase());
+  let sql = `SELECT content, source_title, source_type, metadata->>'domain' as domain, 1 - (embedding <=> $1::vector) as similarity
+       FROM embeddings
+       WHERE source_type IN ('book', 'doc')`;
+  const params: unknown[] = [_vectorStr, candidateLimit];
+  let paramIdx = 3;
+
+  if (normalizedExcludeDomains.length > 0) {
+    sql += ` AND (metadata->>'domain' IS NULL OR lower(metadata->>'domain') <> ALL($${paramIdx}::text[]))`;
+    params.push(normalizedExcludeDomains);
+    paramIdx += 1;
+  }
+
+  sql += ` ORDER BY embedding <=> $1::vector`;
+  sql += ` LIMIT $2`;
+
+  return { sql, params };
 }
 
 /**
