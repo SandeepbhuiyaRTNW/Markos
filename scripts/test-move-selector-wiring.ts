@@ -137,6 +137,14 @@ assert('per-user allowlist: no userId -> disabled', moveSelectorEnabled() === fa
 process.env.MOVE_SELECTOR_ENABLED = '1';
 assert('global flag: enabled for anyone', moveSelectorEnabled('random-999') === true);
 delete process.env.MOVE_SELECTOR_ENABLED; delete process.env.MOVE_SELECTOR_ENABLED_USERS;
+// TEMPORARY email allowlist (test-on-your-login-by-email).
+process.env.MOVE_SELECTOR_ENABLED_EMAILS = 'me@x.com, Founder@Example.com';
+assert('email allowlist: my email enabled (case-insensitive)', moveSelectorEnabled(null, 'ME@X.com') === true);
+assert('email allowlist: founder mixed-case matches', moveSelectorEnabled('some-id', 'founder@example.com') === true);
+assert('email allowlist: a different email stays disabled', moveSelectorEnabled(null, 'other@x.com') === false);
+assert('email allowlist: no email provided -> disabled', moveSelectorEnabled('some-id') === false);
+delete process.env.MOVE_SELECTOR_ENABLED_EMAILS;
+assert('email allowlist cleared -> disabled (byte-identical)', moveSelectorEnabled(null, 'me@x.com') === false);
 
 console.log('\n── H. Finding 1 (P1) — crisis overrides all pacing (both paths) ──');
 const crisisMove = selectMove(makeEnv({ crisis: 'acute', utterance: 'i want to end it' }));

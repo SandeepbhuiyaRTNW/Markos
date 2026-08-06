@@ -113,7 +113,12 @@ async function respondNode(state: OrchestratorStateType): Promise<Partial<Orches
   // NOT fire here; crisis, explicit-advice, just-listen, and the depth/observe
   // defaults do. The post-gen strip still guarantees no trailing question on a
   // no-ask move. Flag OFF -> this whole block is skipped -> V1 byte-identical.
-  if (moveSelectorEnabled(state.ctx.userId)) {
+  // Resolve email ONLY when the (temporary) email allowlist is set — zero cost otherwise.
+  let moveEmail: string | null = null;
+  if (process.env.MOVE_SELECTOR_ENABLED_EMAILS) {
+    try { const r = await query(`SELECT email FROM users WHERE id = $1`, [state.ctx.userId]); moveEmail = r.rows[0]?.email || null; } catch { /* best-effort */ }
+  }
+  if (moveSelectorEnabled(state.ctx.userId, moveEmail)) {
     try {
       const ctx = state.ctx;
       if (ctx.marcusResponse) {

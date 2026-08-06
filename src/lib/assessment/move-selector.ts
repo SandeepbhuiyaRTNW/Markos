@@ -186,13 +186,24 @@ function commAssistEnabled(): boolean {
 // separated userId allowlist so the founder can enable it for HIS OWN login only
 // and test live before any real user sees it. A user NOT in the list stays
 // byte-identical to today.
-export function moveSelectorEnabled(userId?: string | null): boolean {
+export function moveSelectorEnabled(userId?: string | null, email?: string | null): boolean {
   const on = (v?: string) => v === 'true' || v === '1';
   if (on(process.env.MOVE_SELECTOR_ENABLED) || on(process.env.MOVE_SELECTOR_ENFORCE)) return true;
+  // Permanent per-user allowlist (userId).
   const allow = process.env.MOVE_SELECTOR_ENABLED_USERS;
   if (allow && userId) {
     const ids = allow.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
     if (ids.includes(userId)) return true;
+  }
+  // TEMPORARY — FOR TESTING ONLY. Email allowlist so the founder can enable it by
+  // login email without looking up his UUID. This is NOT the permanent mechanism;
+  // remove MOVE_SELECTOR_ENABLED_EMAILS (and this block) once live testing is done.
+  // Case-insensitive. Read at runtime like the rest.
+  const allowEmails = process.env.MOVE_SELECTOR_ENABLED_EMAILS;
+  if (allowEmails && email) {
+    const wanted = email.trim().toLowerCase();
+    const list = allowEmails.split(/[,\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+    if (list.includes(wanted)) return true;
   }
   return false;
 }
