@@ -112,7 +112,7 @@ async function respondNode(state: OrchestratorStateType): Promise<Partial<Orches
   // NOT fire here; crisis, explicit-advice, just-listen, and the depth/observe
   // defaults do. The post-gen strip still guarantees no trailing question on a
   // no-ask move. Flag OFF -> this whole block is skipped -> V1 byte-identical.
-  if (moveSelectorEnabled()) {
+  if (moveSelectorEnabled(state.ctx.userId)) {
     try {
       const ctx = state.ctx;
       if (ctx.marcusResponse) {

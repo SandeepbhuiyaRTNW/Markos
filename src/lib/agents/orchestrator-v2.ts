@@ -207,7 +207,7 @@ export async function processWithAgents(
   // MOVE_SELECTOR_ENABLED (default OFF) gates whether the move/knowledge policy
   // actually shapes the response. OFF -> shadow-only (computed + logged); response
   // byte-identical to today. Shared helper so V1 and V2 read the flag identically.
-  const policyEnforced = moveSelectorEnabled();
+  const policyEnforced = moveSelectorEnabled(userId);
   const moveDone = trackEnvelopeAgent(env, 'move-selector');
   const knowledgeDone = trackEnvelopeAgent(env, 'knowledge-selector');
   let conversationState: ConversationState;

@@ -577,19 +577,38 @@ export function buildPriorityHierarchy(env: StateEnvelope, policy: PriorityPolic
   return lines.join('\n');
 }
 
+// PRIMARY mechanism for non-asking moves: tell Marcus HOW to respond like a real
+// friend — warm, present, complete — so he never writes a question in the first
+// place. The post-gen strip is only the backstop for one that slips through.
+const NON_ASK_GUIDANCE: Record<string, string> = {
+  reflect_only:
+    'Reflect the specific weight of what he said back to him, in his own words. Name the hard thing plainly and sit in it with him. A full, warm thought — not a clipped line.',
+  stay_present:
+    'Just be with him. Acknowledge the hard thing simply and warmly, the way you would for a friend who is hurting. No advice, no fixing, no pivot.',
+  make_observation:
+    'Offer ONE grounded observation about what you notice in what he said — a statement that lands, not a question.',
+  give_practical_advice:
+    'He asked for direction — give one concrete, grounded piece of it as a statement. Do not turn it back into a probe.',
+};
+
 export function renderMoveDirective(policy: MovePolicyContext): string {
   if (!policy.enforceMovePolicy || !policy.moveDecision) return '';
-  const allowQuestionText = policy.moveDecision.ask_question ? 'MAY ASK' : 'MUST NOT ASK';
-  const tooEarly = policy.moveDecision.too_early_to_address.length > 0
-    ? `topics deferred this turn: ${policy.moveDecision.too_early_to_address.join(', ')}`
+  const move = policy.moveDecision;
+  const allowQuestionText = move.ask_question ? 'MAY ASK' : 'MUST NOT ASK';
+  const tooEarly = move.too_early_to_address.length > 0
+    ? `topics deferred this turn: ${move.too_early_to_address.join(', ')}`
     : 'no topic deferral';
-  // Hard override of the persona's built-in "end with a question" instinct when the
-  // move forbids a question. The post-gen strip is the backstop; this reduces how
-  // often it has to fire.
-  const hardNoAsk = policy.moveDecision.ask_question
-    ? ''
-    : '\nOVERRIDE (highest priority): Do NOT end on a question this turn. End on a statement that lands. This overrides any persona instinct or instruction to ask a question.';
-  return `\n\n## MOVE POLICY\nDecision: ${policy.moveDecision.move}\nQuestion policy: ${allowQuestionText}\nRequired craft form: ${policy.moveDecision.craft_form}\n${tooEarly}.${hardNoAsk}`;
+  let noAskBlock = '';
+  if (!move.ask_question) {
+    const guidance = NON_ASK_GUIDANCE[move.move]
+      || 'Respond with a complete, warm, human reply and no question.';
+    // Directive is the PRIMARY fix (generate a natural no-question reply); the
+    // OVERRIDE + post-gen strip are the backstop.
+    noAskBlock =
+      `\nRESPOND LIKE A FRIEND, NOT AN INTERVIEWER: ${guidance} Talk to him the way a close friend talks to someone who is hurting — warm, present, unhurried. This is a conversation, not an interview.` +
+      `\nOVERRIDE (highest priority): Do NOT end on a question this turn. This overrides any persona instinct or instruction to ask a question.`;
+  }
+  return `\n\n## MOVE POLICY\nDecision: ${move.move}\nQuestion policy: ${allowQuestionText}\nRequired craft form: ${move.craft_form}\n${tooEarly}.${noAskBlock}`;
 }
 
 function countQuestionSentences(text: string): number {

@@ -7,7 +7,7 @@
  * question-source suppression in the priority hierarchy; and flag-off parity.
  */
 
-import { selectMove, MOVE_TO_FORM } from '../src/lib/assessment/move-selector';
+import { selectMove, MOVE_TO_FORM, moveSelectorEnabled } from '../src/lib/assessment/move-selector';
 import { stripQuestionSentences, enforceSocraticDiscipline } from '../src/lib/craft/craft-layer';
 import { enforceMovePolicy, renderMoveDirective, buildPriorityHierarchy } from '../src/lib/agents/orchestrator-v2-composer';
 import { createStateEnvelope } from '../src/lib/agents/state-envelope-utils';
@@ -95,6 +95,28 @@ assert('not enforced -> NO move directive injected (empty)',
   renderMoveDirective({ moveDecision: noAskMove, enforceMovePolicy: false }) === '');
 assert('enforced + no-ask move -> MOVE POLICY block with MUST NOT ASK',
   (() => { const d = renderMoveDirective({ moveDecision: noAskMove, enforceMovePolicy: true }); return d.includes('MOVE POLICY') && d.includes('MUST NOT ASK'); })());
+
+console.log('\n── F. Natural non-asking directive (PRIMARY mechanism) ──');
+const reflectDir = renderMoveDirective({ moveDecision: shock, enforceMovePolicy: true });
+assert('no-ask directive tells Marcus to respond like a friend, not interview',
+  reflectDir.includes('RESPOND LIKE A FRIEND, NOT AN INTERVIEWER'));
+assert('no-ask directive carries reflect_only natural guidance (reflect the weight, in his words)',
+  reflectDir.includes('Reflect the specific weight'));
+assert('no-ask directive still says MUST NOT ASK', reflectDir.includes('MUST NOT ASK'));
+const askDir = renderMoveDirective({ moveDecision: askMove, enforceMovePolicy: true });
+assert('ASK move directive does NOT inject the non-asking friend guidance',
+  !askDir.includes('RESPOND LIKE A FRIEND') && askDir.includes('MAY ASK'));
+
+console.log('\n── G. Per-user / env flag (test on your own login, not global-only) ──');
+delete process.env.MOVE_SELECTOR_ENABLED; delete process.env.MOVE_SELECTOR_ENFORCE; delete process.env.MOVE_SELECTOR_ENABLED_USERS;
+assert('nothing set -> disabled for everyone (flag-off byte-identical)', moveSelectorEnabled('u1') === false);
+process.env.MOVE_SELECTOR_ENABLED_USERS = 'founder-123, other-456';
+assert('per-user allowlist: founder is enabled', moveSelectorEnabled('founder-123') === true);
+assert('per-user allowlist: a different user stays disabled (unaffected)', moveSelectorEnabled('random-999') === false);
+assert('per-user allowlist: no userId -> disabled', moveSelectorEnabled() === false);
+process.env.MOVE_SELECTOR_ENABLED = '1';
+assert('global flag: enabled for anyone', moveSelectorEnabled('random-999') === true);
+delete process.env.MOVE_SELECTOR_ENABLED; delete process.env.MOVE_SELECTOR_ENABLED_USERS;
 
 console.log('\n── SUMMARY ──');
 console.log(`  passed: ${passed}   failed: ${failed}`);

@@ -181,9 +181,20 @@ function commAssistEnabled(): boolean {
 // MOVE_SELECTOR_ENABLED (default OFF) turns the move policy from shadow into
 // enforcement across BOTH composer paths (V1 + V2). MOVE_SELECTOR_ENFORCE is kept
 // as a deprecated alias. OFF everywhere = byte-identical to today.
-export function moveSelectorEnabled(): boolean {
+// Global flag OR per-user opt-in. MOVE_SELECTOR_ENABLED / MOVE_SELECTOR_ENFORCE
+// (alias) flip it for everyone; MOVE_SELECTOR_ENABLED_USERS is a comma/space-
+// separated userId allowlist so the founder can enable it for HIS OWN login only
+// and test live before any real user sees it. A user NOT in the list stays
+// byte-identical to today.
+export function moveSelectorEnabled(userId?: string | null): boolean {
   const on = (v?: string) => v === 'true' || v === '1';
-  return on(process.env.MOVE_SELECTOR_ENABLED) || on(process.env.MOVE_SELECTOR_ENFORCE);
+  if (on(process.env.MOVE_SELECTOR_ENABLED) || on(process.env.MOVE_SELECTOR_ENFORCE)) return true;
+  const allow = process.env.MOVE_SELECTOR_ENABLED_USERS;
+  if (allow && userId) {
+    const ids = allow.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+    if (ids.includes(userId)) return true;
+  }
+  return false;
 }
 
 // BROAD phrasing coverage (spec Step 2) — deliberately wider than frame-refusal's
