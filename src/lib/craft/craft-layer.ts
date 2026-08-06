@@ -291,6 +291,26 @@ export function determineCraftDirectives(env: StateEnvelope): CraftDirectives {
 }
 
 /**
+ * Strip QUESTION sentences from a response, preserving the non-question ones.
+ *
+ * Load-bearing B2 enforcement: when the move selector forbids a question, the
+ * persona STILL pushes Marcus to end on one, so the post-gen filter must remove
+ * it or the feature is cosmetic (directive says don't-ask, Marcus asks anyway).
+ * Sentence-level (not line-level): "You let it rot. What made you hold on?" keeps
+ * "You let it rot." and drops the question. If EVERY sentence is a question (there
+ * is nothing to keep), returns the original content unchanged rather than blanking
+ * the response — the caller logs the conflict for observability.
+ */
+export function stripQuestionSentences(content: string): string {
+  const text = (content || '').trim();
+  if (!text) return content;
+  const sentences = text.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean);
+  const kept = sentences.filter(s => !s.endsWith('?'));
+  const result = kept.join(' ').trim();
+  return result || content; // never blank the whole response
+}
+
+/**
  * Socratic Questioner — ensure responses end with weight, not filler.
  * If the response should end with a question, enforce single-question discipline.
  */

@@ -12,7 +12,7 @@ import type { MoveDecision } from '../assessment/move-selector';
 import type { KnowledgePlan } from '../assessment/knowledge-selector';
 import { trackEnvelopeAgent, recordEnvelopeError, buildEnvelopeContextSummary } from './state-envelope-utils';
 import { checkBoundary, getBoundaryOverridePrompt, runBoundarySentinel } from '../sentinels/boundary';
-import { determineCraftDirectives, enforceSocraticDiscipline, applyDeepListener, enforceVocativePrinciple, detectForbiddenPhrases, detectFantasyIdentity, detectVocabSubstitutions } from '../craft/craft-layer';
+import { determineCraftDirectives, enforceSocraticDiscipline, applyDeepListener, enforceVocativePrinciple, detectForbiddenPhrases, detectFantasyIdentity, detectVocabSubstitutions, stripQuestionSentences } from '../craft/craft-layer';
 import { buildWisdomCouncilPrompt } from '../wisdom/council';
 import { getPhaseConstraints } from '../assessment/phase-mapper';
 import { retrieveWisdom, retrieveQuestion, type QuestionRetrievalContext } from '../rag/retriever';
@@ -236,7 +236,9 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
         ? `\n\n## SUGGESTED QUESTIONS (choose at most ONE):\n${uniqueQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}`
         : ''),
       kwmlContext: kwmlStr,
-      understandingContext: understandingStr,
+      // Suppress the Silence Question line when the move forbids a question, so it
+      // is not a back-door question source (the move selector is the sole authority).
+      understandingContext: questionAllowedByPolicy ? understandingStr : understandingStr?.replace(/\n?Silence Question:[^\n]*/i, ''),
       sessionHistory: env.sentinels.memory.session_history || undefined,
       userName: env.user_name || undefined,
       stylePreferences: env.sentinels.memory.style_preferences || undefined,
@@ -245,6 +247,12 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     // Build priority hierarchy — the Composer's marching orders for THIS turn
     const priorityHierarchy = buildPriorityHierarchy(env, priorityPolicy);
     const moveDirective = renderMoveDirective(policyContext);
+    // Neutralize the phase-addendum's "ask the one question" nudge when the move
+    // forbids a question (another back-door question source). No-op when the flag
+    // is off (questionAllowedByPolicy is always true then) — byte-identical.
+    const phaseAddendumSafe = questionAllowedByPolicy
+      ? phaseAddendum
+      : phaseAddendum.replace(/ask the one question that lives at his level/gi, 'name the one thing that lives at his level');
 
     // Escalation directives from the conversation-state engine — these are the
     // loop-breakers (pushback/resistance/advice-loop/worsening) and hard-constraint
@@ -262,7 +270,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     }
 
     // Inject State Envelope intelligence after system prompt
-    const fullSystem = `${systemContent}\n\n${envelopeContext}\n\n${wisdomCouncilPrompt}${phaseAddendum}${craftAddendum}\n\n${moveDirective}\n${priorityHierarchy}${escalationAddendum}`;
+    const fullSystem = `${systemContent}\n\n${envelopeContext}\n\n${wisdomCouncilPrompt}${phaseAddendumSafe}${craftAddendum}\n\n${moveDirective}\n${priorityHierarchy}${escalationAddendum}`;
 
     const messages: (SystemMessage | HumanMessage | AIMessage)[] = [
       new SystemMessage(fullSystem),
@@ -510,7 +518,7 @@ async function storeInBackground(env: StateEnvelope): Promise<void> {
  * Build a priority hierarchy that tells the Composer exactly what to focus on.
  * Placed LAST in the system prompt so it has maximum attention weight.
  */
-function buildPriorityHierarchy(env: StateEnvelope, policy: PriorityPolicy = { allowQuestion: true }): string {
+export function buildPriorityHierarchy(env: StateEnvelope, policy: PriorityPolicy = { allowQuestion: true }): string {
   const ls = env.sentinels.listener_stack;
   const whisperers = env.domain_whisperers;
   const depth = ls?.depth_level || 1;
@@ -569,35 +577,32 @@ function buildPriorityHierarchy(env: StateEnvelope, policy: PriorityPolicy = { a
   return lines.join('\n');
 }
 
-function renderMoveDirective(policy: MovePolicyContext): string {
+export function renderMoveDirective(policy: MovePolicyContext): string {
   if (!policy.enforceMovePolicy || !policy.moveDecision) return '';
   const allowQuestionText = policy.moveDecision.ask_question ? 'MAY ASK' : 'MUST NOT ASK';
   const tooEarly = policy.moveDecision.too_early_to_address.length > 0
     ? `topics deferred this turn: ${policy.moveDecision.too_early_to_address.join(', ')}`
     : 'no topic deferral';
-  return `\n\n## MOVE POLICY\nDecision: ${policy.moveDecision.move}\nQuestion policy: ${allowQuestionText}\nRequired craft form: ${policy.moveDecision.craft_form}\n${tooEarly}.`;
+  // Hard override of the persona's built-in "end with a question" instinct when the
+  // move forbids a question. The post-gen strip is the backstop; this reduces how
+  // often it has to fire.
+  const hardNoAsk = policy.moveDecision.ask_question
+    ? ''
+    : '\nOVERRIDE (highest priority): Do NOT end on a question this turn. End on a statement that lands. This overrides any persona instinct or instruction to ask a question.';
+  return `\n\n## MOVE POLICY\nDecision: ${policy.moveDecision.move}\nQuestion policy: ${allowQuestionText}\nRequired craft form: ${policy.moveDecision.craft_form}\n${tooEarly}.${hardNoAsk}`;
 }
 
 function countQuestionSentences(text: string): number {
   return (text.match(/\?/g) || []).length;
 }
 
-function enforceMovePolicy(content: string, policy: MovePolicyContext): string {
+export function enforceMovePolicy(content: string, policy: MovePolicyContext): string {
   if (!policy.enforceMovePolicy || !policy.moveDecision) return content;
-
   if (policy.moveDecision.ask_question) return content;
-
-  const lines = content.split('\n')
-    .map(line => line.trim())
-    .filter(Boolean)
-    .filter(line => !line.endsWith('?'));
-
-  // Safety net for single-line or inline question-only responses.
-  if (lines.length === 0) {
-    return content.replace(/\b(what|how|why|when|where|who|which|can|could|would|should|do you|did you|are you)\b[^\?]*\?/gi, '').trim();
-  }
-
-  return lines.join('\n');
+  // Load-bearing B2 enforcement: the move forbids a question, so strip any that
+  // the persona produced. Sentence-level so a reflection fused with a question on
+  // one line keeps the reflection. See craft-layer.stripQuestionSentences.
+  return stripQuestionSentences(content);
 }
 
 function filterWhispererQuestionsByScope(

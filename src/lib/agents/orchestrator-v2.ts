@@ -23,7 +23,7 @@ import { classifyArena } from '../assessment/arena-classifier';
 import { classifySilence } from '../assessment/silence-typer';
 import { computeTrust } from '../assessment/trust-gauge';
 import { mapPhase } from '../assessment/phase-mapper';
-import { selectMove } from '../assessment/move-selector';
+import { selectMove, moveSelectorEnabled } from '../assessment/move-selector';
 import { selectKnowledgePlan } from '../assessment/knowledge-selector';
 import { selectWisdomVoices } from '../wisdom/council';
 import { enforceVocativePrinciple } from '../craft/craft-layer';
@@ -204,7 +204,10 @@ export async function processWithAgents(
   // TIER 2.5 — CONVERSATION POLICY
   // ── Move Selector + Knowledge Intelligence
   // ═══════════════════════════════════════════
-  const policyEnforced = process.env.MOVE_SELECTOR_ENFORCE === 'true' || process.env.MOVE_SELECTOR_ENFORCE === '1';
+  // MOVE_SELECTOR_ENABLED (default OFF) gates whether the move/knowledge policy
+  // actually shapes the response. OFF -> shadow-only (computed + logged); response
+  // byte-identical to today. Shared helper so V1 and V2 read the flag identically.
+  const policyEnforced = moveSelectorEnabled();
   const moveDone = trackEnvelopeAgent(env, 'move-selector');
   const knowledgeDone = trackEnvelopeAgent(env, 'knowledge-selector');
   let conversationState: ConversationState;

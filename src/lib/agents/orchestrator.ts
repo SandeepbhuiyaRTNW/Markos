@@ -12,6 +12,9 @@ import type { MCPContext } from './mcp-context';
 import { createMCPContext, trackAgent, recordError } from './mcp-context';
 import { runRAGAgent } from './rag-agent';
 import { runConversationalAgent } from './conversational-agent';
+import { selectMove, moveSelectorEnabled } from '../assessment/move-selector';
+import { createStateEnvelope, listenerStackFromAnalysis } from './state-envelope-utils';
+import { stripQuestionSentences } from '../craft/craft-layer';
 import { analyzeUnderstanding } from '../understanding/stack';
 import { getMemoryContext, extractMemories, getSessionHistory, getStylePreferences } from '../memory/memory-manager';
 import { detectKWML, getKWMLContext, saveKWMLProfile } from '../kwml/detector';
@@ -98,6 +101,37 @@ async function enrichNode(state: OrchestratorStateType): Promise<Partial<Orchest
 /** Node 3: Respond — Generate Marcus's response using all context */
 async function respondNode(state: OrchestratorStateType): Promise<Partial<OrchestratorStateType>> {
   await runConversationalAgent(state.ctx);
+
+  // MOVE SELECTOR — V1 fallback wiring (feature/move-selector-cutover), flag-gated.
+  // V1 is reachable: marcus.ts falls back here on ANY uncaught V2 exception. So the
+  // "don't go too deep / don't ask too early" fix must not silently drop on fallback.
+  // We run the SAME selectMove (single authority) on a lite envelope built from the
+  // MCPContext, then apply the load-bearing question strip when the move forbids one.
+  // REDUCED SIGNALS: V1 does not compute arena / silence_type / trust / phase /
+  // pathway, so arena-specific rungs (early_divorce_shock, grief, loss-naming) can
+  // NOT fire here; crisis, explicit-advice, just-listen, and the depth/observe
+  // defaults do. The post-gen strip still guarantees no trailing question on a
+  // no-ask move. Flag OFF -> this whole block is skipped -> V1 byte-identical.
+  if (moveSelectorEnabled()) {
+    try {
+      const ctx = state.ctx;
+      if (ctx.marcusResponse) {
+        const liteEnv = createStateEnvelope({
+          userId: ctx.userId, conversationId: ctx.conversationId,
+          utterance: ctx.userMessage, conversationHistory: ctx.conversationHistory,
+          userName: ctx.userName,
+        });
+        if (ctx.understanding) liteEnv.sentinels.listener_stack = listenerStackFromAnalysis(ctx.understanding);
+        liteEnv.sentinels.memory.session_count = ctx.sessionCount;
+        liteEnv.sentinels.memory.style_preferences = ctx.stylePreferences;
+        const move = selectMove(liteEnv, null);
+        if (!move.ask_question) {
+          ctx.marcusResponse = stripQuestionSentences(ctx.marcusResponse);
+        }
+      }
+    } catch (err) { recordError(state.ctx, 'move-selector-v1', err); }
+  }
+
   return { ctx: state.ctx };
 }
 

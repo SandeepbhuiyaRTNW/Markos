@@ -177,6 +177,15 @@ function commAssistEnabled(): boolean {
   return v === 'true' || v === '1';
 }
 
+// ─── Move Selector cutover flag (feature/move-selector-cutover) ───
+// MOVE_SELECTOR_ENABLED (default OFF) turns the move policy from shadow into
+// enforcement across BOTH composer paths (V1 + V2). MOVE_SELECTOR_ENFORCE is kept
+// as a deprecated alias. OFF everywhere = byte-identical to today.
+export function moveSelectorEnabled(): boolean {
+  const on = (v?: string) => v === 'true' || v === '1';
+  return on(process.env.MOVE_SELECTOR_ENABLED) || on(process.env.MOVE_SELECTOR_ENFORCE);
+}
+
 // BROAD phrasing coverage (spec Step 2) — deliberately wider than frame-refusal's
 // narrow DRAFT_PATTERNS, including the asymmetric cases the audit found slipping
 // ("help me respond to my ex-wife", "rewrite this text", "rehearse what to say").
