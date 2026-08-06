@@ -8,6 +8,7 @@
  */
 
 import { selectMove, MOVE_TO_FORM, moveSelectorEnabled } from '../src/lib/assessment/move-selector';
+import { MOVE_CALIBRATION } from '../src/lib/agents/move-calibration';
 import { stripQuestionSentences, enforceSocraticDiscipline } from '../src/lib/craft/craft-layer';
 import { enforceMovePolicy, renderMoveDirective, buildPriorityHierarchy } from '../src/lib/agents/orchestrator-v2-composer';
 import { createStateEnvelope } from '../src/lib/agents/state-envelope-utils';
@@ -96,16 +97,34 @@ assert('not enforced -> NO move directive injected (empty)',
 assert('enforced + no-ask move -> MOVE POLICY block with MUST NOT ASK',
   (() => { const d = renderMoveDirective({ moveDecision: noAskMove, enforceMovePolicy: true }); return d.includes('MOVE POLICY') && d.includes('MUST NOT ASK'); })());
 
-console.log('\n── F. Natural non-asking directive (PRIMARY mechanism) ──');
-const reflectDir = renderMoveDirective({ moveDecision: shock, enforceMovePolicy: true });
-assert('no-ask directive tells Marcus to respond like a friend, not interview',
-  reflectDir.includes('RESPOND LIKE A FRIEND, NOT AN INTERVIEWER'));
-assert('no-ask directive carries reflect_only natural guidance (reflect the weight, in his words)',
-  reflectDir.includes('Reflect the specific weight'));
-assert('no-ask directive still says MUST NOT ASK', reflectDir.includes('MUST NOT ASK'));
-const askDir = renderMoveDirective({ moveDecision: askMove, enforceMovePolicy: true });
-assert('ASK move directive does NOT inject the non-asking friend guidance',
-  !askDir.includes('RESPOND LIKE A FRIEND') && askDir.includes('MAY ASK'));
+console.log('\n── F. Calibration directive — per-move, from the guide, SELECTED MOVE ONLY ──');
+const reflectDir = renderMoveDirective({ moveDecision: shock, enforceMovePolicy: true }); // shock -> reflect_only
+assert('reflect_only: carries Moment / Voice / Length calibration',
+  reflectDir.includes('Moment:') && reflectDir.includes('Voice:') && reflectDir.includes('Length:'));
+assert('reflect_only: voice = say the feeling back as a complete thought (from the guide)',
+  reflectDir.includes('Say back the feeling'));
+assert('reflect_only: friend-not-interviewer + no-question override + MUST NOT ASK',
+  reflectDir.includes('RESPOND LIKE A FRIEND') && reflectDir.includes('do NOT end on a question') && reflectDir.includes('MUST NOT ASK'));
+assert('reflect_only: length leans SHORT', reflectDir.includes('Short'));
+assert('reflect_only: directive itself contains NO question mark (reads as a statement)',
+  !reflectDir.includes('?'));
+// ONE MOVE ONLY — the reflect_only directive must not carry any other move's calibration.
+assert('ONE MOVE ONLY: reflect_only excludes give_practical_advice calibration',
+  !reflectDir.includes('Fuller') && !reflectDir.toLowerCase().includes('asking for actual help'));
+assert('ONE MOVE ONLY: reflect_only excludes stay_present calibration',
+  !reflectDir.includes('more words weaken it'));
+// Asking move: gets calibration but NOT the no-question override.
+const askDir = renderMoveDirective({ moveDecision: askMove, enforceMovePolicy: true }); // ask_grounding
+assert('ask_grounding: MAY ASK + calibration present, NO friend-no-question override',
+  askDir.includes('MAY ASK') && askDir.includes('Voice:') && !askDir.includes('RESPOND LIKE A FRIEND'));
+// give_practical_advice: fuller length, still non-asking.
+const practicalDir = renderMoveDirective({ moveDecision: practical, enforceMovePolicy: true });
+assert('give_practical_advice: length runs FULLER', practicalDir.includes('Fuller'));
+assert('give_practical_advice: still no-ask -> no-question override present', practicalDir.includes('do NOT end on a question'));
+// All 7 guide moves calibrated; acknowledge present though not yet selectable.
+assert('all 7 guide moves have calibration (moment/voice/length)',
+  ['reflect_only','stay_present','make_observation','acknowledge','ask_grounding_question','ask_loss_naming_question','give_practical_advice']
+    .every(m => !!MOVE_CALIBRATION[m]?.moment && !!MOVE_CALIBRATION[m]?.voice && !!MOVE_CALIBRATION[m]?.length));
 
 console.log('\n── G. Per-user / env flag (test on your own login, not global-only) ──');
 delete process.env.MOVE_SELECTOR_ENABLED; delete process.env.MOVE_SELECTOR_ENFORCE; delete process.env.MOVE_SELECTOR_ENABLED_USERS;

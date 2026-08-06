@@ -18,6 +18,7 @@ import { getPhaseConstraints } from '../assessment/phase-mapper';
 import { retrieveWisdom, retrieveQuestion, type QuestionRetrievalContext } from '../rag/retriever';
 import { analyzeConversation, computeTrajectoryDrift } from './conversation-state';
 import type { AgentResponse } from './orchestrator-v2';
+import { MOVE_CALIBRATION } from './move-calibration';
 
 export interface PreComposerResult {
   ragWisdom: string;
@@ -577,20 +578,6 @@ export function buildPriorityHierarchy(env: StateEnvelope, policy: PriorityPolic
   return lines.join('\n');
 }
 
-// PRIMARY mechanism for non-asking moves: tell Marcus HOW to respond like a real
-// friend — warm, present, complete — so he never writes a question in the first
-// place. The post-gen strip is only the backstop for one that slips through.
-const NON_ASK_GUIDANCE: Record<string, string> = {
-  reflect_only:
-    'Reflect the specific weight of what he said back to him, in his own words. Name the hard thing plainly and sit in it with him. A full, warm thought — not a clipped line.',
-  stay_present:
-    'Just be with him. Acknowledge the hard thing simply and warmly, the way you would for a friend who is hurting. No advice, no fixing, no pivot.',
-  make_observation:
-    'Offer ONE grounded observation about what you notice in what he said — a statement that lands, not a question.',
-  give_practical_advice:
-    'He asked for direction — give one concrete, grounded piece of it as a statement. Do not turn it back into a probe.',
-};
-
 export function renderMoveDirective(policy: MovePolicyContext): string {
   if (!policy.enforceMovePolicy || !policy.moveDecision) return '';
   const move = policy.moveDecision;
@@ -598,17 +585,18 @@ export function renderMoveDirective(policy: MovePolicyContext): string {
   const tooEarly = move.too_early_to_address.length > 0
     ? `topics deferred this turn: ${move.too_early_to_address.join(', ')}`
     : 'no topic deferral';
-  let noAskBlock = '';
-  if (!move.ask_question) {
-    const guidance = NON_ASK_GUIDANCE[move.move]
-      || 'Respond with a complete, warm, human reply and no question.';
-    // Directive is the PRIMARY fix (generate a natural no-question reply); the
-    // OVERRIDE + post-gen strip are the backstop.
-    noAskBlock =
-      `\nRESPOND LIKE A FRIEND, NOT AN INTERVIEWER: ${guidance} Talk to him the way a close friend talks to someone who is hurting — warm, present, unhurried. This is a conversation, not an interview.` +
-      `\nOVERRIDE (highest priority): Do NOT end on a question this turn. This overrides any persona instinct or instruction to ask a question.`;
-  }
-  return `\n\n## MOVE POLICY\nDecision: ${move.move}\nQuestion policy: ${allowQuestionText}\nRequired craft form: ${move.craft_form}\n${tooEarly}.${noAskBlock}`;
+  // Inject ONLY the SELECTED move's calibration (moment / voice / length), distilled
+  // from docs/marcus-response-calibration.md via MOVE_CALIBRATION. One move selected
+  // -> exactly one calibration block reaches the model; no other move's guidance does.
+  const cal = MOVE_CALIBRATION[move.move];
+  const calBlock = cal ? `\nMoment: ${cal.moment}\nVoice: ${cal.voice}\nLength: ${cal.length}` : '';
+  // Non-asking moves: the calibration above is the PRIMARY mechanism (generate a
+  // warm, complete, no-question reply in the first place). This line + the post-gen
+  // strip are the backstop only.
+  const noAskBlock = move.ask_question
+    ? ''
+    : '\nRESPOND LIKE A FRIEND, NOT AN INTERVIEWER — write a complete, warm reply and do NOT end on a question. This overrides any persona instinct to ask.';
+  return `\n\n## MOVE POLICY (response calibration — this move only)\nDecision: ${move.move}\nQuestion policy: ${allowQuestionText}\nRequired craft form: ${move.craft_form}\n${tooEarly}.${calBlock}${noAskBlock}`;
 }
 
 function countQuestionSentences(text: string): number {
