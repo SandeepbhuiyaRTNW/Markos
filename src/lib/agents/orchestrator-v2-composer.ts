@@ -68,7 +68,11 @@ export async function retrievePreComposer(
   // detection, emotional-direction tracking, and hopelessness templates. Computed
   // in parallel with RAG so it adds no extra latency.
   let convState: Awaited<ReturnType<typeof analyzeConversation>> | null = null;
-  const policyEnforced = policy.enforceMovePolicy && policy.moveDecision !== null;
+  // Finding 1 (P1): crisis overrides ALL pacing/calibration. When the move is
+  // crisis_protocol the policy is fully disengaged this turn — no suppression, no
+  // stripping, no directive — so the crisis response (and its safety question)
+  // passes through untouched.
+  const policyEnforced = policy.enforceMovePolicy && policy.moveDecision !== null && policy.moveDecision.move !== 'crisis_protocol';
   const effectivePlan = policyEnforced ? policy.knowledgePlan : null;
   const effectiveMove = policyEnforced ? policy.moveDecision : null;
 
@@ -145,7 +149,11 @@ export async function runComposerPipeline(
   const { ragWisdom, legacyQuestions, convState, questionsWereRetrieved, knowledgePlanUsed } = pre
     ?? await retrievePreComposer(env, historyStr, null, policy);
 
-  const policyEnforced = policy.enforceMovePolicy && policy.moveDecision !== null;
+  // Finding 1 (P1): crisis overrides ALL pacing/calibration. When the move is
+  // crisis_protocol the policy is fully disengaged this turn — no suppression, no
+  // stripping, no directive — so the crisis response (and its safety question)
+  // passes through untouched.
+  const policyEnforced = policy.enforceMovePolicy && policy.moveDecision !== null && policy.moveDecision.move !== 'crisis_protocol';
   const effectiveMove = policyEnforced ? policy.moveDecision : null;
   const effectivePlan = policyEnforced ? policy.knowledgePlan : knowledgePlanUsed;
   const questionAllowedByMove = policyEnforced ? !!effectiveMove?.ask_question : true;
@@ -580,6 +588,8 @@ export function buildPriorityHierarchy(env: StateEnvelope, policy: PriorityPolic
 
 export function renderMoveDirective(policy: MovePolicyContext): string {
   if (!policy.enforceMovePolicy || !policy.moveDecision) return '';
+  // Finding 1 (P1): no move directive on a crisis turn — crisis protocol owns it.
+  if (policy.moveDecision.move === 'crisis_protocol') return '';
   const move = policy.moveDecision;
   const allowQuestionText = move.ask_question ? 'MAY ASK' : 'MUST NOT ASK';
   const tooEarly = move.too_early_to_address.length > 0
@@ -605,6 +615,9 @@ function countQuestionSentences(text: string): number {
 
 export function enforceMovePolicy(content: string, policy: MovePolicyContext): string {
   if (!policy.enforceMovePolicy || !policy.moveDecision) return content;
+  // Finding 1 (P1): NEVER strip a crisis response — it must keep its safety question
+  // (988 / somewhere-safe inquiry). Crisis overrides all pacing, always.
+  if (policy.moveDecision.move === 'crisis_protocol') return content;
   if (policy.moveDecision.ask_question) return content;
   // Load-bearing B2 enforcement: the move forbids a question, so strip any that
   // the persona produced. Sentence-level so a reflection fused with a question on

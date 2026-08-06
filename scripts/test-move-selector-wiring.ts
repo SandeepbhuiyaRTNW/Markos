@@ -9,6 +9,7 @@
 
 import { selectMove, MOVE_TO_FORM, moveSelectorEnabled } from '../src/lib/assessment/move-selector';
 import { MOVE_CALIBRATION } from '../src/lib/agents/move-calibration';
+import { buildEnvelopeContextSummary } from '../src/lib/agents/state-envelope-utils';
 import { stripQuestionSentences, enforceSocraticDiscipline } from '../src/lib/craft/craft-layer';
 import { enforceMovePolicy, renderMoveDirective, buildPriorityHierarchy } from '../src/lib/agents/orchestrator-v2-composer';
 import { createStateEnvelope } from '../src/lib/agents/state-envelope-utils';
@@ -136,6 +137,30 @@ assert('per-user allowlist: no userId -> disabled', moveSelectorEnabled() === fa
 process.env.MOVE_SELECTOR_ENABLED = '1';
 assert('global flag: enabled for anyone', moveSelectorEnabled('random-999') === true);
 delete process.env.MOVE_SELECTOR_ENABLED; delete process.env.MOVE_SELECTOR_ENABLED_USERS;
+
+console.log('\n── H. Finding 1 (P1) — crisis overrides all pacing (both paths) ──');
+const crisisMove = selectMove(makeEnv({ crisis: 'acute', utterance: 'i want to end it' }));
+assert('crisis env -> crisis_protocol', crisisMove.move === 'crisis_protocol');
+const crisisResp = 'That matters that you said it out loud. Put 988 in your phone right now. Is there somewhere safe you can go tonight?';
+assert('V2: enforceMovePolicy on crisis_protocol -> UNCHANGED (safety question preserved)',
+  enforceMovePolicy(crisisResp, { moveDecision: crisisMove, enforceMovePolicy: true }) === crisisResp);
+assert('V2: renderMoveDirective on crisis_protocol -> no directive injected',
+  renderMoveDirective({ moveDecision: crisisMove, enforceMovePolicy: true }) === '');
+assert('V1 guard: crisis turn -> strip SKIPPED (safety question preserved)',
+  (!crisisMove.ask_question && crisisMove.move !== 'crisis_protocol') === false);
+assert('contrast: a normal no-ask move WOULD strip', (!noAskMove.ask_question && noAskMove.move !== 'crisis_protocol') === true);
+
+console.log('\n── I. Finding 2 — silence-question suppressed on no-ask turns ──');
+const envSQ = makeEnv({ silenceQ: 'What are you not saying about her?' });
+assert('no-ask (includeQuestionCandidates=false) -> NO SILENCE QUESTION block reaches the prompt',
+  !buildEnvelopeContextSummary(envSQ, { includeQuestionCandidates: false }).includes('SILENCE QUESTION'));
+assert('flag-off (includeQuestionCandidates=true) -> SILENCE QUESTION present (byte-identical)',
+  buildEnvelopeContextSummary(envSQ, { includeQuestionCandidates: true }).includes('SILENCE QUESTION'));
+
+console.log('\n── J. Finding 3 — backstop catches WRAPPED / emphasized questions ──');
+assert('quoted trailing question stripped', stripQuestionSentences('You let it rot. "What now?"') === 'You let it rot.');
+assert('markdown-emphasized trailing question stripped', stripQuestionSentences('That lands hard. **What should I do?**') === 'That lands hard.');
+assert('plain reflection (no question) -> unchanged', stripQuestionSentences('You let it rot, man.') === 'You let it rot, man.');
 
 console.log('\n── SUMMARY ──');
 console.log(`  passed: ${passed}   failed: ${failed}`);

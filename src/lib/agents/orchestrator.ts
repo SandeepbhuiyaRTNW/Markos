@@ -15,6 +15,7 @@ import { runConversationalAgent } from './conversational-agent';
 import { selectMove, moveSelectorEnabled } from '../assessment/move-selector';
 import { createStateEnvelope, listenerStackFromAnalysis } from './state-envelope-utils';
 import { stripQuestionSentences } from '../craft/craft-layer';
+import { detectCrisisType } from '../sentinels/crisis';
 import { analyzeUnderstanding } from '../understanding/stack';
 import { getMemoryContext, extractMemories, getSessionHistory, getStylePreferences } from '../memory/memory-manager';
 import { detectKWML, getKWMLContext, saveKWMLProfile } from '../kwml/detector';
@@ -124,8 +125,18 @@ async function respondNode(state: OrchestratorStateType): Promise<Partial<Orches
         if (ctx.understanding) liteEnv.sentinels.listener_stack = listenerStackFromAnalysis(ctx.understanding);
         liteEnv.sentinels.memory.session_count = ctx.sessionCount;
         liteEnv.sentinels.memory.style_preferences = ctx.stylePreferences;
+        // Finding 1 (P1): carry any detected crisis into selection so selectMove
+        // returns crisis_protocol, and NEVER strip a crisis response — it keeps its
+        // safety question (988 / somewhere-safe inquiry). Crisis overrides all pacing.
+        const crisisType = detectCrisisType(ctx.userMessage);
+        if (crisisType) {
+          liteEnv.sentinels.crisis = {
+            level: crisisType === 'passive_crisis' ? 'elevated' : 'acute',
+            type: crisisType, protocol: null, forced_response: null,
+          };
+        }
         const move = selectMove(liteEnv, null);
-        if (!move.ask_question) {
+        if (!move.ask_question && move.move !== 'crisis_protocol') {
           ctx.marcusResponse = stripQuestionSentences(ctx.marcusResponse);
         }
       }

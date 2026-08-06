@@ -304,8 +304,12 @@ export function determineCraftDirectives(env: StateEnvelope): CraftDirectives {
 export function stripQuestionSentences(content: string): string {
   const text = (content || '').trim();
   if (!text) return content;
+  // Finding 3: a sentence counts as a question if it ends in '?' possibly WRAPPED in
+  // trailing quotes, emphasis markers, brackets, or spaces — "What now?" or
+  // **What should I do?** — so the model can't hide a question behind a delimiter.
+  const endsInQuestion = (s: string) => /\?["'”’*_`)\]\s]*$/.test(s);
   const sentences = text.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean);
-  const kept = sentences.filter(s => !s.endsWith('?'));
+  const kept = sentences.filter(s => !endsInQuestion(s));
   const result = kept.join(' ').trim();
   return result || content; // never blank the whole response
 }
