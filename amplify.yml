@@ -15,9 +15,6 @@ frontend:
         - echo "ELEVENLABS_VOICE_ID=$ELEVENLABS_VOICE_ID" >> .env.production
         - echo "S3_BUCKET=$S3_BUCKET" >> .env.production
         - echo "NEXTAUTH_SECRET=$NEXTAUTH_SECRET" >> .env.production
-        - echo "MOVE_SELECTOR_ENABLED=$MOVE_SELECTOR_ENABLED" >> .env.production
-        - echo "MOVE_SELECTOR_ENABLED_USERS=$MOVE_SELECTOR_ENABLED_USERS" >> .env.production
-        - echo "MOVE_SELECTOR_ENABLED_EMAILS=$MOVE_SELECTOR_ENABLED_EMAILS" >> .env.production
         - echo "SES_ACCESS_KEY_ID=$SES_ACCESS_KEY_ID" >> .env.production
         - echo "SES_SECRET_ACCESS_KEY=$SES_SECRET_ACCESS_KEY" >> .env.production
         - echo "SES_SENDER_EMAIL=$SES_SENDER_EMAIL" >> .env.production
