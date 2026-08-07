@@ -8,6 +8,7 @@ import { MOVE_CALIBRATION } from '../src/lib/agents/move-calibration';
 import { renderMoveDirective, enforceMovePolicy } from '../src/lib/agents/orchestrator-v2-composer';
 import { stripQuestionSentences } from '../src/lib/craft/craft-layer';
 import { detectCrisisType } from '../src/lib/sentinels/crisis';
+import { getCrisisResponse } from '../src/lib/sentinels/crisis-responses';
 import { createStateEnvelope } from '../src/lib/agents/state-envelope-utils';
 import type { StateEnvelope, ListenerStackOutput, CrisisLevel } from '../src/lib/agents/state-envelope';
 
@@ -78,6 +79,25 @@ delete process.env.MOVE_SELECTOR_ENFORCE;
 assert('flag off: renderMoveDirective -> empty', renderMoveDirective({ moveDecision: reflect, enforceMovePolicy: false }) === '');
 assert('flag off: enforceMovePolicy -> passthrough (question preserved)',
   enforceMovePolicy('You let it rot. What are you afraid of?', { moveDecision: reflect, enforceMovePolicy: false }) === 'You let it rot. What are you afraid of?');
+
+console.log('\n── E. Crisis-detection fix (Option A) — the two disclosures route to SUPPORT, not pacing ──');
+const abuseMsg = "I'm getting abused mentally and physically";
+const friendMsg = "My friend is going through a divorce, he's very depressed and has some serious thoughts, I don't know what to do";
+const tAbuse = detectCrisisType(abuseMsg);
+const tFriend = detectCrisisType(friendMsg);
+assert('abuse disclosure -> CLASSIFIED as crisis (was null before)', tAbuse !== null, String(tAbuse));
+assert('abuse -> domestic_violence_victim', tAbuse === 'domestic_violence_victim');
+assert('abuse -> support response WITH resources (DV hotline 1-800-799-7233)', (getCrisisResponse(tAbuse) || '').includes('1-800-799-7233'));
+assert('third-party (friend) -> CLASSIFIED as crisis (was null before)', tFriend !== null, String(tFriend));
+assert('third-party -> third_party_risk', tFriend === 'third_party_risk');
+assert('third-party -> support response WITH 988', (getCrisisResponse(tFriend) || '').includes('988'));
+assert('both are non-none, non-passive -> crisis-bypass skips pacing on these turns',
+  tAbuse !== null && tAbuse !== 'passive_crisis' && tFriend !== null && tFriend !== 'passive_crisis');
+// Controls: first-person risk unaffected; benign turn does not over-trigger.
+assert('control: "I want to die" still -> suicide (first-person unaffected)', detectCrisisType('I want to die') === 'suicide');
+assert('control: "she left me and i want to die" -> suicide, NOT third_party (mention of ex doesn\'t misroute)',
+  detectCrisisType('she left me and i want to die') === 'suicide');
+assert('control: benign turn -> null (no over-trigger)', detectCrisisType('work was busy today and i feel tired') === null);
 
 console.log('\n── SUMMARY ──');
 console.log(`  passed: ${passed}   failed: ${failed}`);

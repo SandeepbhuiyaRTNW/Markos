@@ -28,7 +28,8 @@ export interface ListenerStackOutput {
 
 export type CrisisLevel = 'none' | 'elevated' | 'acute';
 export type CrisisType = 'suicide' | 'violence_toward_others' | 'domestic_violence_perpetrating'
-  | 'domestic_violence_victim' | 'substance_crisis' | 'passive_crisis' | null;
+  | 'domestic_violence_victim' | 'substance_crisis' | 'passive_crisis'
+  | 'third_party_risk' | null;
 
 export interface CrisisOutput {
   level: CrisisLevel;
