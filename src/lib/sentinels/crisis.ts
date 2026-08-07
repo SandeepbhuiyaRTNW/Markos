@@ -2,6 +2,20 @@
  * Crisis Sentinel — Tier 1, §5.2
  * Two-stage: fast classifier for recall, LLM verifier for precision.
  * Acute crisis forces a specific response and disables Tier 4 Whisperers.
+ *
+ * v3 RE-CALIBRATION — three tiers, drawn so ordinary hard emotions never hotline:
+ *   1. CRISIS (detectCrisisType != null): EXPLICIT suicidal intent/ideation or
+ *      self-harm, abuse/DV disclosure, explicit third-party risk, violence,
+ *      substance emergency, and genuinely VEILED passive SI (contemplating not
+ *      existing / not waking / being gone). -> forced support + 988/hotline.
+ *   2. GENTLE CHECK-IN (needsGentleCheckIn == true, crisis == none): the ambiguous
+ *      middle — "i can't do this anymore", "what's the point", "nothing works",
+ *      "so tired of all this", "i'm done", "no one cares", "die alone". These are
+ *      normal despair/exhaustion. NO hotline — a caring check-in FIRST; crisis only
+ *      escalates if a later turn surfaces explicit intent (detected per-turn).
+ *   3. NORMAL: sadness, grief, divorce, breakup, job loss, loneliness, "i feel like
+ *      a failure", "i don't know what to do" — plain empathetic conversation.
+ * Sadness is not a crisis; the line is EXPLICIT intent, not intensity of pain.
  */
 
 import type { CrisisOutput, CrisisType, CrisisLevel } from '../agents/state-envelope';
@@ -12,7 +26,9 @@ import type { StateEnvelope } from '../agents/state-envelope';
 
 const SUICIDE_PATTERNS = [
   // --- Direct statements ---
-  /\b(suicid|kill\s*my\s*self|end\s*(my|it|things)|checking\s*out|better\s*off\s*(without|dead))\b/i,
+  // v3: added the gerund forms (kill→killing, end→ending) so explicit ideation like
+  // "thinking about killing myself" / "ending it" is caught, not just "kill myself".
+  /\b(suicid|kill(ing)?\s*my\s*self|end(ing)?\s*(my|it|things)|checking\s*out|better\s*off\s*(without|dead))\b/i,
   /\b(want\s*to\s*die|don'?t\s*want\s*to\s*(be\s*here|live|exist|wake\s*up))\b/i,
   /\b(self[\s-]*harm|cut\s*my\s*self|hurt\s*my\s*self)\b/i,
   /\b(no\s*(point|reason)\s*(in\s*)?(living|going\s*on|being\s*here))\b/i,
@@ -29,7 +45,11 @@ const SUICIDE_PATTERNS = [
   /\b(step\s*(in\s*front\s*of|into)\s*(traffic|a\s*train|the\s*train))\b/i,
 
   // --- Passive / oblique ---
-  /\b(wouldn'?t\s*miss\s*me|world\s*(is\s*)?better\s*without|nobody\s*(would\s*)?(care|notice))\b/i,
+  // v3: tightened — require the "gone" framing (conditional "would") so present-tense
+  // loneliness ("nobody cares", "no one gets me") is NOT read as suicidal ideation.
+  // It routes to a gentle check-in instead. "better off without/dead" still hits
+  // pattern 1 above, so genuine SI framing is unaffected.
+  /\b(wouldn'?t\s*miss\s*me|world\s*(is|would\s*be)?\s*better\s*(off\s*)?without\s*me|nobody\s*would\s*(care|notice|miss))\b/i,
   /\b(giving\s*(away|everything)|getting\s*(my\s*)?(affairs|things)\s*in\s*order)\b/i,
   /\b(wrote\s*(a\s*)?(note|letter)\s*(to|for)\s*(my|the)\s*(kids|family|wife))\b/i,
   /\b(made\s*(my|a)\s*(peace|plan)|have\s*a\s*plan)\b/i,
@@ -105,24 +125,39 @@ const SUBSTANCE_CRISIS_PATTERNS = [
   /\b(about\s*to\s*(drink|use|take)\s*(and\s*)?drive)\b/i,
 ];
 
+// v3 NARROWED — genuinely VEILED passive suicidal ideation ONLY (contemplating not
+// existing / not waking / being gone), and only phrasings the explicit SUICIDE set
+// above doesn't already catch. Ordinary despair and exhaustion were REMOVED from
+// here and now route to a gentle check-in (GENTLE_CHECK_IN_PATTERNS below) — they
+// must not produce a hotline. Anything here is elevated (composer runs + 988 append).
 const PASSIVE_CRISIS_PATTERNS = [
-  /\b(what'?s\s*the\s*point)\b/i,
-  /\b(nothing\s*(matters|changes|helps|works))\b/i,
-  /\b(so\s*tired\s*of\s*(everything|this|living|trying|fighting))\b/i,
-  /\b(can'?t\s*(do\s*this|keep\s*(going|doing\s*this)|take\s*(it|this|any\s*more)))\b/i,
-  /\b(i'?m\s*(done|finished|through|over\s*it))\b/i,
-  /\b(no\s*one\s*(cares|would\s*(miss|notice)))\b/i,
-  /\b((feel|want)\s*(like\s*)?(disappearing|vanishing|fading))\b/i,
-  /\b(want\s*to\s*(disappear|vanish|fade\s*away))\b/i,
-  /\b(gave\s*away|settling\s*my\s*(affairs|debts))\b/i,
-  /\b(not\s*existing)\b/i,
-  /\b(wish\s*i\s*(could|can)\s*(just\s*)?(check\s*out|disappear|not\s*(be|exist)|go\s*away|vanish))\b/i,
-  /\b(just\s*not\s*(be\s*here|exist|be\s*around|wake\s*up))\b/i,
-  /\b(check\s*out\s*(for\s*a\s*while|permanently|from\s*(everything|life|all\s*this)))\b/i,
-  /\b(think\s*about\s*(just\s*)?(not\s*existing|not\s*being\s*here|disappearing|checking\s*out))\b/i,
-  /\b(wouldn'?t\s*(mind|care)\s*(if\s*i\s*)?(not\s*waking|didn'?t\s*wake|just\s*went\s*away))\b/i,
-  /\b(don'?t\s*(really\s*)?(care\s*)?what\s*happens\s*to\s*me)\b/i,
-  /\b(die\s*alone)\b/i,
+  /\bjust\s*(want(ing)?\s*to\s*)?not\s*(be\s*here|exist|wake\s*up|be\s*alive)\b/i,
+  /\bwish\s*i\s*(could|would)\s*(just\s*)?(not\s*(wake\s*up|be\s*here|exist)|never\s*wake(\s*up)?|disappear\s*(for\s*good|forever))\b/i,
+  /\bwouldn'?t\s*(mind|care)\s*(if\s*i\s*)?(didn'?t\s*wake|never\s*woke|wasn'?t\s*here|weren'?t\s*here)\b/i,
+  /\b(so\s*)?tired\s*of\s*(living|being\s*alive|waking\s*up|breathing)\b/i,
+  /\b(not\s*existing|stop\s*existing|cease\s*to\s*exist)\b/i,
+  /\bcheck\s*out\s*(permanently|for\s*good|from\s*(everything|life|it\s*all))\b/i,
+  /\bthink(ing)?\s*about\s*(just\s*)?not\s*(being\s*here|existing|waking\s*up)\b/i,
+  /\bdon'?t\s*(really\s*)?care\s*(any\s*more|anymore)?\s*(if|whether)\s*i\s*(live|wake\s*up|die|survive)\b/i,
+  /\b(settling\s*my\s*(affairs|debts)|gave\s*away\s*(my\s*(stuff|things|belongings)|everything))\b/i,
+];
+
+// v3 GENTLE CHECK-IN — the ambiguous middle. Real despair/exhaustion that must NOT
+// hotline: a caring general check-in comes first ("that sounds heavy — when you say
+// you can't do this, what's going on for you right now?"). If a later turn surfaces
+// explicit intent, detectCrisisType fires on that turn and escalates. These are the
+// phrasings v3 pulled OUT of PASSIVE_CRISIS_PATTERNS.
+const GENTLE_CHECK_IN_PATTERNS = [
+  /\bcan'?t\s*(do\s*this|keep\s*(going|doing\s*this)|take\s*(it|this|much\s*more|any\s*more|anymore))\b/i,
+  /\bwhat'?s\s*the\s*point\b/i,
+  /\bnothing\s*(matters|changes|helps|works|gets\s*better)\b/i,
+  /\b(so|really)\s*tired\s*of\s*(everything|this|it\s*all|all\s*(of\s*)?this|trying|fighting|the\s*fighting)\b/i,
+  /\bi'?m\s*(so\s*)?(done|finished|through|over\s*it|spent|drained|exhausted)\b/i,
+  /\b(want\s*to\s*(disappear|vanish|fade\s*away)|feel\s*like\s*(disappearing|vanishing|fading))\b/i,
+  /\b(no\s*one\s*cares|nobody\s*cares|no\s*one\s*(gets|understands?)\s*me)\b/i,
+  /\b(die\s*alone|end\s*up\s*alone)\b/i,
+  /\b(at\s*the\s*end\s*of\s*my\s*rope|hanging\s*by\s*a\s*thread|barely\s*holding\s*(on|it\s*together)|don'?t\s*know\s*how\s*much\s*(longer|more)\s*i\s*can)\b/i,
+  /\b(i\s*give\s*up|ready\s*to\s*give\s*up|feel\s*like\s*giving\s*up)\b/i,
 ];
 
 /** Fast classifier — stage 1 */
@@ -137,5 +172,18 @@ export function detectCrisisType(message: string): CrisisType {
   if (SUBSTANCE_CRISIS_PATTERNS.some(p => p.test(message))) return 'substance_crisis';
   if (PASSIVE_CRISIS_PATTERNS.some(p => p.test(message))) return 'passive_crisis';
   return null;
+}
+
+/**
+ * v3 gentle-check-in tier. True when the message is ambiguous distress that should
+ * get a caring check-in FIRST rather than a hotline ("i can't do this anymore",
+ * "what's the point", "so tired of all this", "no one cares", "die alone").
+ * Returns false whenever an explicit crisis fires — crisis always wins — so this is
+ * strictly the ambiguous middle between CRISIS and NORMAL. The composer uses it to
+ * prefer a gentle check-in; it never triggers hotline language on its own.
+ */
+export function needsGentleCheckIn(message: string): boolean {
+  if (detectCrisisType(message) !== null) return false;
+  return GENTLE_CHECK_IN_PATTERNS.some(p => p.test(message));
 }
 

@@ -18,7 +18,7 @@ import { getPhaseConstraints } from '../assessment/phase-mapper';
 import { retrieveWisdom, retrieveQuestion, type QuestionRetrievalContext } from '../rag/retriever';
 import { analyzeConversation, computeTrajectoryDrift } from './conversation-state';
 import type { AgentResponse } from './orchestrator-v2';
-import { MOVE_CALIBRATION } from './move-calibration';
+import { MOVE_CALIBRATION, GOVERNING_BAR } from './move-calibration';
 
 export interface PreComposerResult {
   ragWisdom: string;
@@ -592,7 +592,10 @@ export function renderMoveDirective(policy: MovePolicyContext): string {
   const noAskBlock = move.ask_question
     ? ''
     : '\nDo NOT end on a question this turn — react like a friend; a plain reaction with no question is the move. This overrides any instinct to ask.';
-  return `\n\n## MOVE POLICY (talk like Marcus — a real guy, not a therapist; short, plain, human)\nDecision: ${move.move}\nQuestion policy: ${allowQuestionText}\nRequired craft form: ${move.craft_form}\n${tooEarly}.${calBlock}${noAskBlock}`;
+  // v3: the governing bar rides ABOVE the per-move calibration on every non-crisis
+  // enforced turn — the depth mandate (add insight, don't just mirror; vary the
+  // shape; read the mode; hold space when that's truer). Crisis returned '' above.
+  return `\n\n## MOVE POLICY (talk like Marcus — a real guy, not a therapist; short, plain, human)\n${GOVERNING_BAR}\n\nDecision: ${move.move}\nQuestion policy: ${allowQuestionText}\nRequired craft form: ${move.craft_form}\n${tooEarly}.${calBlock}${noAskBlock}`;
 }
 
 function countQuestionSentences(text: string): number {

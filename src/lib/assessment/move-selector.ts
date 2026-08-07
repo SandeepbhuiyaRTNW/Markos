@@ -38,8 +38,12 @@
  *                                  -> ask_loss_naming_question
  *  9. ask_grounding               avoidance-silence + depth<=3 (side door)
  *                                  -> ask_grounding_question
- * 10. default_reflect_deep         depth >= 3 -> reflect_only
- * 11. default_observe             (total) -> make_observation
+ * 10. default_make_inference       depth >= 3 + cross-turn history (>=4 msgs)
+ *                                  -> make_inference [v3: offer a read that adds
+ *                                     insight instead of another mirror]
+ * 11. default_reflect_deep         depth >= 3 (early, little history yet)
+ *                                  -> reflect_only
+ * 12. default_observe             (total) -> make_observation
  *
  * Rules 8–9 are a safe refinement of the depth-default tail so the selector can
  * choose the RIGHT question, not just avoid the wrong one. Everything above them
@@ -66,6 +70,7 @@ export type ConversationMove =
   | 'stay_present'
   | 'reflect_only'
   | 'make_observation'
+  | 'make_inference'         // v3: offer a read that goes one layer past what he said (adds insight, not a mirror)
   | 'ask_grounding_question'
   | 'ask_loss_naming_question'
   | 'give_practical_advice'
@@ -97,12 +102,40 @@ export const MOVE_TO_FORM: Record<ConversationMove, CraftForm> = {
   stay_present: 'presence',
   reflect_only: 'reflection',
   make_observation: 'statement',
+  make_inference: 'statement',
   ask_grounding_question: 'question',
   ask_loss_naming_question: 'question',
   give_practical_advice: 'statement',
   help_communicate: 'statement',
   refer_to_human_support: 'statement',
 };
+
+// ─── v3: move "shape" taxonomy ───
+// Consecutive turns should not repeat the same SHAPE (mirror twice, ask twice).
+// reflect / observe / infer are THREE DISTINCT statement shapes the selector can
+// rotate between at depth; the hard-gated moves keep their own shapes. The live
+// anti-repeat is a directive (GOVERNING_BAR) the composer injects; this taxonomy
+// is the shared contract those variety checks/tests read.
+export type MoveShape =
+  | 'reflect' | 'observe' | 'infer' | 'ask' | 'advise' | 'present' | 'protocol' | 'communicate' | 'refer';
+
+export const MOVE_SHAPE: Record<ConversationMove, MoveShape> = {
+  crisis_protocol: 'protocol',
+  stay_present: 'present',
+  reflect_only: 'reflect',
+  make_observation: 'observe',
+  make_inference: 'infer',
+  ask_grounding_question: 'ask',
+  ask_loss_naming_question: 'ask',
+  give_practical_advice: 'advise',
+  help_communicate: 'communicate',
+  refer_to_human_support: 'refer',
+};
+
+/** True when two moves share a shape (would read as the same kind of turn back-to-back). */
+export function sameMoveShape(a: ConversationMove, b: ConversationMove): boolean {
+  return MOVE_SHAPE[a] === MOVE_SHAPE[b];
+}
 
 const ASK_MOVES = new Set<ConversationMove>(['ask_grounding_question', 'ask_loss_naming_question']);
 
@@ -136,6 +169,9 @@ const NO_QUESTION_PREF_KEYS = [
 // ─── Signal readers (all reuse envelope fields; derive nothing new) ───
 
 function depthOf(env: StateEnvelope): number { return env.sentinels.listener_stack?.depth_level || 1; }
+// v3: how much of the conversation has actually happened — the gate that keeps
+// make_inference from firing on turn one (nothing to infer from yet).
+function historyTurns(env: StateEnvelope): number { return (env.conversation_history || []).length; }
 function sessionOf(env: StateEnvelope): number { return env.sentinels.memory.session_count || 0; }
 function arenaWeight(env: StateEnvelope, key: string): number { return env.assessment.arena?.weights?.[key] || 0; }
 
@@ -286,6 +322,13 @@ const RULES: Rule[] = [
     predicate: (e) => e.assessment.silence_type?.label === 'avoidance' && depthOf(e) <= 3,
     move: 'ask_grounding_question' },
 
+  // v3 default at real depth WITH cross-turn material: don't just mirror — offer a
+  // read that goes one layer past what he said. History-gated so it never fires on
+  // turn one; early deep turns still reflect (below).
+  { name: 'default_make_inference',
+    predicate: (e) => depthOf(e) >= 3 && historyTurns(e) >= 4,
+    move: 'make_inference' },
+
   { name: 'default_reflect_deep',
     predicate: (e) => depthOf(e) >= 3,
     move: 'reflect_only' },
@@ -306,7 +349,8 @@ const RULE_RATIONALE: Record<string, string> = {
   explicit_practical_advice: 'He asked a direct practical question — answer it, do not force reflection.',
   ask_loss_naming: 'Grief with trust and depth — gently invite him to name the loss.',
   ask_grounding: 'Avoidance — a better, grounding question through the side door.',
-  default_reflect_deep: 'Real depth present — reflect rather than probe.',
+  default_make_inference: 'Real depth and cross-turn material — offer a read that adds insight, not another mirror.',
+  default_reflect_deep: 'Real depth present, little history yet — reflect rather than probe.',
   default_observe: 'Nothing earned a stronger move — a gentle observation.',
 };
 

@@ -3,7 +3,7 @@
  * Usage: npx tsx scripts/test-unit.ts
  */
 
-import { detectCrisisType } from '../src/lib/sentinels/crisis';
+import { detectCrisisType, needsGentleCheckIn } from '../src/lib/sentinels/crisis';
 import { checkBoundary } from '../src/lib/sentinels/boundary';
 import { runCulturalContext } from '../src/lib/sentinels/cultural';
 import { computeTrust } from '../src/lib/assessment/trust-gauge';
@@ -24,10 +24,15 @@ assert('Violence detected', detectCrisisType("I'm going to kill her") === 'viole
 assert('DV perp detected', detectCrisisType("I hit my wife last night") === 'domestic_violence_perpetrating');
 assert('DV victim detected', detectCrisisType("She hit me and I'm scared for my life") === 'domestic_violence_victim');
 assert('Substance crisis', detectCrisisType("I took too many pills") === 'substance_crisis');
-assert('Passive crisis', detectCrisisType("What's the point of anything anymore") === 'passive_crisis');
+// v3 re-calibration: ambiguous despair no longer hotlines — it routes to a gentle
+// check-in (was 'passive_crisis' before; that over-triggered on ordinary hard days).
+assert('Ambiguous despair -> gentle check-in, NOT crisis ("what\'s the point")',
+  detectCrisisType("What's the point of anything anymore") === null && needsGentleCheckIn("What's the point of anything anymore") === true);
 assert('No crisis on normal', detectCrisisType("I've been thinking about my career") === null);
 assert('Better off dead', detectCrisisType("Everyone would be better off without me") === 'suicide');
-assert('Can\'t keep going', detectCrisisType("I can't keep going like this") === 'passive_crisis');
+assert('Ambiguous "can\'t keep going" -> gentle check-in, NOT crisis',
+  detectCrisisType("I can't keep going like this") === null && needsGentleCheckIn("I can't keep going like this") === true);
+assert('Veiled passive SI still crisis ("tired of living")', detectCrisisType("I'm so tired of living") === 'passive_crisis');
 assert('Bought a gun', detectCrisisType("I bought a gun yesterday") === 'violence_toward_others');
 assert('She threatens', detectCrisisType("She threatens to kill me every night") === 'domestic_violence_victim');
 assert('Mixing pills', detectCrisisType("I'm mixing pills and alcohol right now") === 'substance_crisis');
