@@ -591,7 +591,7 @@ export function renderMoveDirective(policy: MovePolicyContext): string {
   // Non-asking moves: a plain reaction with NO question is the right, frequent move.
   const noAskBlock = move.ask_question
     ? ''
-    : '\nDo NOT end on a question this turn — react like a friend; a plain reaction with no question is the move. This overrides any instinct to ask.';
+    : '\nDo NOT end on a question this turn — but don\'t leave it a dead stop either: land on a statement, then leave a soft door open (a half-thought, an observation that invites a reply, or plain warmth and space). React like a friend, not an interviewer. This overrides any instinct to tack on a question.';
   // v3: the governing bar rides ABOVE the per-move calibration on every non-crisis
   // enforced turn — the depth mandate (add insight, don't just mirror; vary the
   // shape; read the mode; hold space when that's truer). Crisis returned '' above.
