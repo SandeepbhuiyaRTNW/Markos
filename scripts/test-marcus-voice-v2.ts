@@ -70,14 +70,16 @@ assert('ask_loss_naming uses plain question, not therapist phrasing',
   MOVE_CALIBRATION['ask_loss_naming_question'].voice.includes('what do you actually miss most') && MOVE_CALIBRATION['ask_loss_naming_question'].voice.includes('not "how did that shape'));
 assert('give_practical_advice offers one tiny doable thing', MOVE_CALIBRATION['give_practical_advice'].voice.toLowerCase().includes('sketchbook'));
 
-console.log('\n── D. Flag: MOVE_SELECTOR_ENFORCE default OFF (byte-identical) ──');
+console.log('\n── D. Flag: MOVE_SELECTOR_ENFORCE — TEMPORARY default-ON + kill-switch ──');
 delete process.env.MOVE_SELECTOR_ENFORCE;
-assert('default OFF', moveSelectorEnforced() === false);
+assert('default ON (temporary)', moveSelectorEnforced() === true);
+process.env.MOVE_SELECTOR_ENFORCE = 'false'; assert('kill-switch =false -> OFF for everyone', moveSelectorEnforced() === false);
+process.env.MOVE_SELECTOR_ENFORCE = '0'; assert('kill-switch =0 -> OFF', moveSelectorEnforced() === false);
 process.env.MOVE_SELECTOR_ENFORCE = '1'; assert('=1 -> on', moveSelectorEnforced() === true);
-process.env.MOVE_SELECTOR_ENFORCE = 'true'; assert('=true -> on', moveSelectorEnforced() === true);
 delete process.env.MOVE_SELECTOR_ENFORCE;
-assert('flag off: renderMoveDirective -> empty', renderMoveDirective({ moveDecision: reflect, enforceMovePolicy: false }) === '');
-assert('flag off: enforceMovePolicy -> passthrough (question preserved)',
+// The policy functions still gate on the passed enforceMovePolicy flag (independent of the env default):
+assert('enforceMovePolicy=false -> renderMoveDirective empty', renderMoveDirective({ moveDecision: reflect, enforceMovePolicy: false }) === '');
+assert('enforceMovePolicy=false -> passthrough (question preserved)',
   enforceMovePolicy('You let it rot. What are you afraid of?', { moveDecision: reflect, enforceMovePolicy: false }) === 'You let it rot. What are you afraid of?');
 
 console.log('\n── E. Crisis-detection fix (Option A) — the two disclosures route to SUPPORT, not pacing ──');

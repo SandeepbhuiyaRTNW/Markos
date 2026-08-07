@@ -181,8 +181,13 @@ function commAssistEnabled(): boolean {
 // DEFAULT OFF. When off, the move policy is shadow-only and behavior is byte-
 // identical. Shared so V1 and V2 read the flag identically.
 export function moveSelectorEnforced(): boolean {
+  // TEMPORARY DEFAULT-ON: while only the owner + founder use the app, the move
+  // selector (crisis-safe voice) ships ON. KILL-SWITCH: MOVE_SELECTOR_ENFORCE=false
+  // (or 0) disables it for everyone. To restore the permanent default-OFF, change
+  // the final `return true` back to `return false`.
   const v = process.env.MOVE_SELECTOR_ENFORCE;
-  return v === 'true' || v === '1';
+  if (v === 'false' || v === '0') return false;
+  return true;
 }
 
 // BROAD phrasing coverage (spec Step 2) — deliberately wider than frame-refusal's
