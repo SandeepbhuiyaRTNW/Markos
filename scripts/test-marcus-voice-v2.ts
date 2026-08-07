@@ -7,7 +7,7 @@ import { selectMove, moveSelectorEnforced, MOVE_SHAPE, sameMoveShape } from '../
 import { MOVE_CALIBRATION, GOVERNING_BAR } from '../src/lib/agents/move-calibration';
 import { renderMoveDirective, enforceMovePolicy } from '../src/lib/agents/orchestrator-v2-composer';
 import { stripQuestionSentences } from '../src/lib/craft/craft-layer';
-import { detectCrisisType } from '../src/lib/sentinels/crisis';
+import { detectCrisisType, needsGentleCheckIn } from '../src/lib/sentinels/crisis';
 import { getCrisisResponse } from '../src/lib/sentinels/crisis-responses';
 import { createStateEnvelope } from '../src/lib/agents/state-envelope-utils';
 import type { StateEnvelope, ListenerStackOutput, CrisisLevel } from '../src/lib/agents/state-envelope';
@@ -100,6 +100,39 @@ assert('control: "I want to die" still -> suicide (first-person unaffected)', de
 assert('control: "she left me and i want to die" -> suicide, NOT third_party (mention of ex doesn\'t misroute)',
   detectCrisisType('she left me and i want to die') === 'suicide');
 assert('control: benign turn -> null (no over-trigger)', detectCrisisType('work was busy today and i feel tired') === null);
+
+console.log('\n── G. v3 PART 1 — crisis RE-CALIBRATION (draw the line at EXPLICIT intent) ──');
+// The 4 spec proofs: sad-divorce -> normal (NO hotline); explicit -> crisis; abuse
+// unchanged; ambiguous -> gentle check-in FIRST (no hotline).
+const sadDivorce = 'I\'m just really sad about my divorce';
+assert('SPEC 1: "just really sad about my divorce" -> NO crisis (normal conversation, no hotline)', detectCrisisType(sadDivorce) === null);
+assert('SPEC 1b: sad-divorce is NOT even a check-in — it routes to plain empathetic talk', needsGentleCheckIn(sadDivorce) === false);
+assert('SPEC 2: "I want to end it all" -> suicide (crisis / hotline)', detectCrisisType('I want to end it all') === 'suicide');
+assert('SPEC 3: "I\'m being abused" -> domestic_violence_victim (unchanged)', detectCrisisType('I\'m being abused') === 'domestic_violence_victim');
+const ambiguous = "I can't do this anymore";
+assert('SPEC 4: ambiguous "I can\'t do this anymore" -> NO hotline (crisis == none)', detectCrisisType(ambiguous) === null);
+assert('SPEC 4b: ambiguous -> gentle check-in FIRST (needsGentleCheckIn true)', needsGentleCheckIn(ambiguous) === true);
+
+// Ordinary hard emotions that USED to hotline (passive over-trigger) now DON'T.
+for (const msg of ['what\'s the point anymore', 'nothing works no matter what i try', 'i\'m so tired of all this fighting', 'i feel like i\'ll die alone', 'no one cares about me', 'i just feel like a failure', 'i lost my job and i don\'t know what to do', 'i feel so lonely since she left']) {
+  assert(`over-trigger fixed: "${msg}" -> NOT crisis`, detectCrisisType(msg) === null);
+}
+// ...but they DO get a caring check-in where the phrasing is ambiguous distress.
+assert('ambiguous distress still flagged for a check-in ("what\'s the point", "tired of all this", "die alone", "no one cares")',
+  needsGentleCheckIn('what\'s the point anymore') && needsGentleCheckIn('i\'m so tired of all this') && needsGentleCheckIn('i feel like i\'ll die alone') && needsGentleCheckIn('no one cares about me'));
+// Plain sadness/job-loss/loneliness is NORMAL — not a check-in trigger either.
+assert('plain sadness / job loss / loneliness -> normal (no check-in trigger)',
+  !needsGentleCheckIn('i just feel like a failure') && !needsGentleCheckIn('i lost my job') && !needsGentleCheckIn('i feel so lonely since she left'));
+
+// Explicit SI / self-harm / veiled-SI STILL fire (recall preserved), and crisis
+// always beats a check-in on the same turn.
+assert('explicit SI still crisis: "I want to end it"', detectCrisisType('I want to end it') === 'suicide');
+assert('explicit SI still crisis: "thinking about killing myself"', detectCrisisType('thinking about killing myself') === 'suicide');
+assert('explicit SI still crisis: "I don\'t want to be here anymore"', detectCrisisType('I don\'t want to be here anymore') === 'suicide');
+assert('self-harm still crisis: "I want to hurt myself"', detectCrisisType('I want to hurt myself') === 'suicide');
+assert('veiled passive SI still crisis: "tired of living"', detectCrisisType('i\'m so tired of living') === 'passive_crisis');
+assert('veiled passive SI still crisis: "wish i just wouldn\'t wake up"', detectCrisisType("i wish i could just not wake up") === 'passive_crisis');
+assert('crisis ALWAYS wins over check-in on the same turn (explicit SI -> needsGentleCheckIn false)', needsGentleCheckIn('I want to end it all') === false);
 
 console.log('\n── F. v3 — depth, inference, governing bar & shape variety ──');
 // Build an env WITH cross-turn history so the inference rung can fire.
