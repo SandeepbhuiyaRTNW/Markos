@@ -3,8 +3,8 @@
  * Run: npx tsx scripts/test-marcus-voice-v2.ts   (deterministic; no DB, no LLM)
  */
 
-import { selectMove, moveSelectorEnforced } from '../src/lib/assessment/move-selector';
-import { MOVE_CALIBRATION } from '../src/lib/agents/move-calibration';
+import { selectMove, moveSelectorEnforced, MOVE_SHAPE, sameMoveShape } from '../src/lib/assessment/move-selector';
+import { MOVE_CALIBRATION, GOVERNING_BAR } from '../src/lib/agents/move-calibration';
 import { renderMoveDirective, enforceMovePolicy } from '../src/lib/agents/orchestrator-v2-composer';
 import { stripQuestionSentences } from '../src/lib/craft/craft-layer';
 import { detectCrisisType } from '../src/lib/sentinels/crisis';
@@ -100,6 +100,62 @@ assert('control: "I want to die" still -> suicide (first-person unaffected)', de
 assert('control: "she left me and i want to die" -> suicide, NOT third_party (mention of ex doesn\'t misroute)',
   detectCrisisType('she left me and i want to die') === 'suicide');
 assert('control: benign turn -> null (no over-trigger)', detectCrisisType('work was busy today and i feel tired') === null);
+
+console.log('\n── F. v3 — depth, inference, governing bar & shape variety ──');
+// Build an env WITH cross-turn history so the inference rung can fire.
+function makeEnvV3(o: { utterance?: string; depth?: number; silence?: 'grief' | 'avoidance' | null; historyLen?: number } = {}): StateEnvelope {
+  const n = o.historyLen ?? 4;
+  const history = Array.from({ length: n }, (_, i) => ({ role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant', content: `turn ${i}` }));
+  const env = createStateEnvelope({ userId: 'u', conversationId: 'c', utterance: o.utterance ?? '', conversationHistory: history, userName: null });
+  env.sentinels.listener_stack = stubListener(o.depth ?? 4);
+  if (o.silence) env.assessment.silence_type = { label: o.silence, evidence: '', confidence: 0.8 };
+  return env;
+}
+
+// 1) The new default: real depth + cross-turn material -> make_inference (not a mirror).
+const infer = selectMove(makeEnvV3({ utterance: "i keep busy so i don't have to sit with it", depth: 4, historyLen: 4 }));
+assert('depth>=3 + history>=4 -> make_inference (v3 default, not reflect_only)', infer.move === 'make_inference', infer.move);
+assert('make_inference is a NO-ASK move', infer.ask_question === false);
+assert('make_inference craft form = statement', infer.craft_form === 'statement');
+// Early deep turn (no history yet) still REFLECTS — don't infer too much too early.
+const earlyDeep = selectMove(makeEnvV3({ utterance: 'my dad died and i never cried', depth: 4, historyLen: 0 }));
+assert('depth>=3 but NO history -> reflect_only (inference gated to later turns)', earlyDeep.move === 'reflect_only', earlyDeep.move);
+
+// 2) make_inference directive text: a tentative read, no question, no-ask enforced.
+const inferDir = renderMoveDirective({ moveDecision: infer, enforceMovePolicy: true });
+assert('make_inference directive carries Moment/Voice/Length', inferDir.includes('Moment:') && inferDir.includes('Voice:') && inferDir.includes('Length:'));
+assert('make_inference voice offers a tentative READ ("sounds like", goes past his words)', inferDir.includes('sounds like') && inferDir.includes('goes PAST his words'));
+assert('make_inference is MUST NOT ASK + no question mark in the directive', inferDir.includes('MUST NOT ASK') && inferDir.includes('Do NOT end on a question') && !inferDir.includes('?'));
+
+// 3) Governing bar rides above every non-crisis move; crisis sees none of it.
+assert('governing bar present on a non-crisis directive (THE BAR + FAILURE mandate)', inferDir.includes('THE BAR') && inferDir.includes('FAILURE'));
+assert('governing bar caps mirroring + demands the unexpected', GOVERNING_BAR.includes('one turn in five') && GOVERNING_BAR.includes("didn't expect"));
+assert('governing bar instructs shape variety (no same move two turns in a row)', GOVERNING_BAR.includes('same move two turns in a row'));
+assert('governing bar reads the mode + allows restraint', GOVERNING_BAR.toLowerCase().includes('venting') && GOVERNING_BAR.toLowerCase().includes('restraint'));
+assert('governing bar keeps the v2 voice underneath (plain, not a therapist)', GOVERNING_BAR.includes('real guy on a couch') && GOVERNING_BAR.includes('Not a poet'));
+assert('governing bar contains NO question mark (no-ask moves stay question-free)', !GOVERNING_BAR.includes('?'));
+assert('CRISIS turn still gets NO governing bar (bypass intact)', renderMoveDirective({ moveDecision: crisisMove, enforceMovePolicy: true }) === '');
+
+// 4) reflect_only now caps mirroring — insight required, not just a warm rephrase.
+assert('reflect_only directive demands MORE than a mirror (lead-in, a miss)', reflectDir.includes('lead-in') && reflectDir.includes('miss'));
+
+// 5) Building question: ask_grounding offers a direction/fork, not a blank open question.
+const grounding = selectMove(makeEnvV3({ utterance: 'everything is a blur right now', depth: 2, silence: 'avoidance', historyLen: 2 }));
+assert('avoidance + shallow -> ask_grounding_question', grounding.move === 'ask_grounding_question', grounding.move);
+const groundingDir = renderMoveDirective({ moveDecision: grounding, enforceMovePolicy: true });
+assert('ask_grounding is a BUILDING question (offers a fork, MAY ASK)', groundingDir.includes('BUILDING question') && groundingDir.includes('fork') && groundingDir.includes('MAY ASK'));
+
+// 6) Shape taxonomy: reflect / observe / infer are three DISTINCT shapes to rotate between.
+assert('reflect / observe / infer are distinct shapes', !sameMoveShape('reflect_only', 'make_observation') && !sameMoveShape('make_observation', 'make_inference') && !sameMoveShape('reflect_only', 'make_inference'));
+assert('both ask_* moves share the ASK shape', sameMoveShape('ask_grounding_question', 'ask_loss_naming_question') === true);
+assert('MOVE_SHAPE maps every move (make_inference -> infer, reflect_only -> reflect)', MOVE_SHAPE['make_inference'] === 'infer' && MOVE_SHAPE['reflect_only'] === 'reflect');
+
+// 7) Flag OFF -> byte-identical: no governing bar, no make_inference directive leaks.
+assert('enforce=false -> make_inference directive empty (v3 gated behind the flag)', renderMoveDirective({ moveDecision: infer, enforceMovePolicy: false }) === '');
+assert('enforce=false -> make_inference passthrough preserves a stray question',
+  enforceMovePolicy("sounds like you're carrying it alone. right?", { moveDecision: infer, enforceMovePolicy: false }) === "sounds like you're carrying it alone. right?");
+assert('enforce=true -> make_inference strips a stray question (no-ask backstop)',
+  !enforceMovePolicy("sounds like you're carrying it alone. right?", { moveDecision: infer, enforceMovePolicy: true }).includes('?'));
 
 console.log('\n── SUMMARY ──');
 console.log(`  passed: ${passed}   failed: ${failed}`);
