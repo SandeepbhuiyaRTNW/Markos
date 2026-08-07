@@ -137,7 +137,9 @@ export function buildEnvelopeContextSummary(
   if (env.sentinels.listener_stack) {
     const ls = env.sentinels.listener_stack;
     parts.push(`## UNDERSTANDING ANALYSIS\nEmotion: ${ls.primary_emotion} | Depth: ${ls.depth_level}/5 | Trajectory: ${ls.emotional_trajectory}\nPattern: ${ls.pattern}\nThe Man: ${ls.the_man}\nThe Silence: ${ls.the_silence}`);
-    if (ls.silence_question) parts.push(`### SILENCE QUESTION (HIGH PRIORITY — use this or adapt it)\n"${ls.silence_question}"`);
+    // Silence question is an "ask this" source — gate it on includeQuestionCandidates
+    // so a non-asking move suppresses it too. Default true => flag-off byte-identical.
+    if (includeQuestionCandidates && ls.silence_question) parts.push(`### SILENCE QUESTION (HIGH PRIORITY — use this or adapt it)\n"${ls.silence_question}"`);
     if (ls.depth_opportunity) parts.push(`### DEPTH MOVE (follow this direction)\n${ls.depth_opportunity}`);
   }
   if (env.assessment.silence_type) {

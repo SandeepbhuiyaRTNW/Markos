@@ -12,6 +12,10 @@ import type { MCPContext } from './mcp-context';
 import { createMCPContext, trackAgent, recordError } from './mcp-context';
 import { runRAGAgent } from './rag-agent';
 import { runConversationalAgent } from './conversational-agent';
+import { selectMove, moveSelectorEnforced } from '../assessment/move-selector';
+import { createStateEnvelope, listenerStackFromAnalysis } from './state-envelope-utils';
+import { stripQuestionSentences } from '../craft/craft-layer';
+import { detectCrisisType } from '../sentinels/crisis';
 import { analyzeUnderstanding } from '../understanding/stack';
 import { getMemoryContext, extractMemories, getSessionHistory, getStylePreferences } from '../memory/memory-manager';
 import { detectKWML, getKWMLContext, saveKWMLProfile } from '../kwml/detector';
@@ -98,6 +102,33 @@ async function enrichNode(state: OrchestratorStateType): Promise<Partial<Orchest
 /** Node 3: Respond — Generate Marcus's response using all context */
 async function respondNode(state: OrchestratorStateType): Promise<Partial<OrchestratorStateType>> {
   await runConversationalAgent(state.ctx);
+
+  // Move selector — V1 fallback wiring (feature/marcus-voice-v2), flag-gated by
+  // MOVE_SELECTOR_ENFORCE (default OFF). PART 1A CRISIS BYPASS: if a crisis is
+  // detected, skip the pacing layer ENTIRELY — never strip/shorten a crisis support
+  // response. Otherwise run the SAME selectMove on a lite envelope and strip a
+  // trailing question only on a non-asking, non-crisis move. Flag off => skipped =>
+  // V1 byte-identical.
+  if (moveSelectorEnforced()) {
+    try {
+      const ctx = state.ctx;
+      if (ctx.marcusResponse && !detectCrisisType(ctx.userMessage)) {
+        const liteEnv = createStateEnvelope({
+          userId: ctx.userId, conversationId: ctx.conversationId,
+          utterance: ctx.userMessage, conversationHistory: ctx.conversationHistory,
+          userName: ctx.userName,
+        });
+        if (ctx.understanding) liteEnv.sentinels.listener_stack = listenerStackFromAnalysis(ctx.understanding);
+        liteEnv.sentinels.memory.session_count = ctx.sessionCount;
+        liteEnv.sentinels.memory.style_preferences = ctx.stylePreferences;
+        const move = selectMove(liteEnv, null);
+        if (!move.ask_question && move.move !== 'crisis_protocol') {
+          ctx.marcusResponse = stripQuestionSentences(ctx.marcusResponse);
+        }
+      }
+    } catch (err) { recordError(state.ctx, 'move-selector-v1', err); }
+  }
+
   return { ctx: state.ctx };
 }
 

@@ -177,6 +177,14 @@ function commAssistEnabled(): boolean {
   return v === 'true' || v === '1';
 }
 
+// Move-selector enforcement gate (feature/marcus-voice-v2). MOVE_SELECTOR_ENFORCE,
+// DEFAULT OFF. When off, the move policy is shadow-only and behavior is byte-
+// identical. Shared so V1 and V2 read the flag identically.
+export function moveSelectorEnforced(): boolean {
+  const v = process.env.MOVE_SELECTOR_ENFORCE;
+  return v === 'true' || v === '1';
+}
+
 // BROAD phrasing coverage (spec Step 2) — deliberately wider than frame-refusal's
 // narrow DRAFT_PATTERNS, including the asymmetric cases the audit found slipping
 // ("help me respond to my ex-wife", "rewrite this text", "rehearse what to say").

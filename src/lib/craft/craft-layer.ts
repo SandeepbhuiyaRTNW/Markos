@@ -291,6 +291,23 @@ export function determineCraftDirectives(env: StateEnvelope): CraftDirectives {
 }
 
 /**
+ * Strip QUESTION sentences from a response, preserving the non-question ones.
+ * BACKSTOP for non-asking moves (the calibration directive is the primary path).
+ * Sentence-level, and delimiter-aware so a wrapped question ("What now?" /
+ * **What should I do?**) can't hide from the endsWith('?') check. If EVERY sentence
+ * is a question, returns the original unchanged rather than blanking the reply.
+ */
+export function stripQuestionSentences(content: string): string {
+  const text = (content || '').trim();
+  if (!text) return content;
+  const endsInQuestion = (s: string) => /\?["'”’*_`)\]\s]*$/.test(s);
+  const sentences = text.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean);
+  const kept = sentences.filter(s => !endsInQuestion(s));
+  const result = kept.join(' ').trim();
+  return result || content;
+}
+
+/**
  * Socratic Questioner — ensure responses end with weight, not filler.
  * If the response should end with a question, enforce single-question discipline.
  */
