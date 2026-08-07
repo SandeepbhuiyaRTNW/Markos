@@ -127,24 +127,19 @@ assert('all 7 guide moves have calibration (moment/voice/length)',
   ['reflect_only','stay_present','make_observation','acknowledge','ask_grounding_question','ask_loss_naming_question','give_practical_advice']
     .every(m => !!MOVE_CALIBRATION[m]?.moment && !!MOVE_CALIBRATION[m]?.voice && !!MOVE_CALIBRATION[m]?.length));
 
-console.log('\n── G. Per-user / env flag (test on your own login, not global-only) ──');
-delete process.env.MOVE_SELECTOR_ENABLED; delete process.env.MOVE_SELECTOR_ENFORCE; delete process.env.MOVE_SELECTOR_ENABLED_USERS;
-assert('nothing set -> disabled for everyone (flag-off byte-identical)', moveSelectorEnabled('u1') === false);
-process.env.MOVE_SELECTOR_ENABLED_USERS = 'founder-123, other-456';
-assert('per-user allowlist: founder is enabled', moveSelectorEnabled('founder-123') === true);
-assert('per-user allowlist: a different user stays disabled (unaffected)', moveSelectorEnabled('random-999') === false);
-assert('per-user allowlist: no userId -> disabled', moveSelectorEnabled() === false);
+console.log('\n── G. Flag: TEMPORARY DEFAULT-ON + kill-switch ──');
+delete process.env.MOVE_SELECTOR_ENABLED; delete process.env.MOVE_SELECTOR_ENFORCE; delete process.env.MOVE_SELECTOR_ENABLED_USERS; delete process.env.MOVE_SELECTOR_ENABLED_EMAILS;
+assert('DEFAULT ON: enabled for everyone when nothing is set',
+  moveSelectorEnabled('u1') === true && moveSelectorEnabled(null, 'x@y.com') === true && moveSelectorEnabled() === true);
+process.env.MOVE_SELECTOR_ENABLED = 'false';
+assert('kill-switch: MOVE_SELECTOR_ENABLED=false -> disabled for EVERYONE',
+  moveSelectorEnabled('u1') === false && moveSelectorEnabled(null, 'x@y.com') === false);
+process.env.MOVE_SELECTOR_ENABLED = '0';
+assert('kill-switch: MOVE_SELECTOR_ENABLED=0 -> disabled', moveSelectorEnabled('u1') === false);
 process.env.MOVE_SELECTOR_ENABLED = '1';
-assert('global flag: enabled for anyone', moveSelectorEnabled('random-999') === true);
-delete process.env.MOVE_SELECTOR_ENABLED; delete process.env.MOVE_SELECTOR_ENABLED_USERS;
-// TEMPORARY email allowlist (test-on-your-login-by-email).
-process.env.MOVE_SELECTOR_ENABLED_EMAILS = 'me@x.com, Founder@Example.com';
-assert('email allowlist: my email enabled (case-insensitive)', moveSelectorEnabled(null, 'ME@X.com') === true);
-assert('email allowlist: founder mixed-case matches', moveSelectorEnabled('some-id', 'founder@example.com') === true);
-assert('email allowlist: a different email stays disabled', moveSelectorEnabled(null, 'other@x.com') === false);
-assert('email allowlist: no email provided -> disabled', moveSelectorEnabled('some-id') === false);
-delete process.env.MOVE_SELECTOR_ENABLED_EMAILS;
-assert('email allowlist cleared -> disabled (byte-identical)', moveSelectorEnabled(null, 'me@x.com') === false);
+assert('explicit on -> enabled', moveSelectorEnabled('u1') === true);
+delete process.env.MOVE_SELECTOR_ENABLED;
+assert('cleared -> back to DEFAULT ON', moveSelectorEnabled('u1') === true);
 
 console.log('\n── H. Finding 1 (P1) — crisis overrides all pacing (both paths) ──');
 const crisisMove = selectMove(makeEnv({ crisis: 'acute', utterance: 'i want to end it' }));

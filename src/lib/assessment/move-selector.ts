@@ -188,6 +188,13 @@ function commAssistEnabled(): boolean {
 // byte-identical to today.
 export function moveSelectorEnabled(userId?: string | null, email?: string | null): boolean {
   const on = (v?: string) => v === 'true' || v === '1';
+  const off = (v?: string) => v === 'false' || v === '0';
+  // TEMPORARY DEFAULT-ON: while only the founder + owner use the app, the move
+  // selector ships ENABLED FOR EVERYONE by default (no env var needed). KILL-SWITCH:
+  // set MOVE_SELECTOR_ENABLED=false (or 0) to disable it for everyone without a code
+  // change (still needs an Amplify redeploy to apply). To restore the PERMANENT
+  // default-OFF + allowlist model, change the final `return true` back to `return false`.
+  if (off(process.env.MOVE_SELECTOR_ENABLED)) return false;
   if (on(process.env.MOVE_SELECTOR_ENABLED) || on(process.env.MOVE_SELECTOR_ENFORCE)) return true;
   // Permanent per-user allowlist (userId).
   const allow = process.env.MOVE_SELECTOR_ENABLED_USERS;
@@ -205,7 +212,7 @@ export function moveSelectorEnabled(userId?: string | null, email?: string | nul
     const list = allowEmails.split(/[,\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
     if (list.includes(wanted)) return true;
   }
-  return false;
+  return true; // TEMPORARY DEFAULT ON (change to `return false` to restore default-OFF)
 }
 
 // BROAD phrasing coverage (spec Step 2) — deliberately wider than frame-refusal's
