@@ -73,10 +73,28 @@ const DV_PERPETRATING_PATTERNS = [
 ];
 
 const DV_VICTIM_PATTERNS = [
-  /\b((she|he)\s*(hit|slapped|punched|shoved|pushed|choked|beat)\s*me)\b/i,
-  /\b((she|he)\s*(threatens?|threatened)\s*(to\s*)?(kill|hurt)\s*me)\b/i,
+  /\b((she|he|they)\s*(hit|hits|slapped|punched|shoved|pushed|choked|beat|beats|hurts?)\s*me)\b/i,
+  /\b((she|he|they)\s*(threatens?|threatened)\s*(to\s*)?(kill|hurt|hit)\s*me)\b/i,
   /\b(i'?m\s*(afraid|scared)\s*(of|for)\s*(my\s*)?(life|safety))\b/i,
-  /\b((she|he)\s*(has|got|keeps)\s*a\s*(gun|weapon|knife))\b/i,
+  /\b((she|he|they)\s*(has|got|keeps)\s*a\s*(gun|weapon|knife))\b/i,
+  // Abuse / DV-victim disclosure ("abused", "being abused", "abusive relationship",
+  // "he/she abuses me", "not safe at home") -> routes to the DV support response.
+  /\b(getting|being|been|i'?m|i\s*am)\s+((mentally|physically|emotionally|verbally|sexually)\s+(and\s+)?)*abus(ed|ive)\b/i,
+  /\babus(ed|ive)\s+(at\s*home|by\s+(my|her|him|them|his|a)|in\s+(my|this|the)\s+(relationship|marriage|home))\b/i,
+  /\babusive\s+(relationship|marriage|partner|home|situation|husband|wife|spouse|boyfriend|girlfriend)\b/i,
+  /\b((she|he|they|my\s+(wife|husband|partner|ex|mom|dad|mother|father|boyfriend|girlfriend))\s+(abuses?|is\s+abusing|abused)\s+me)\b/i,
+  /\bnot\s+safe\s+(at\s*home|in\s+my\s+(home|house|relationship|marriage)|with\s+(her|him|them))\b/i,
+  /\b(scared|afraid|terrified)\s+to\s+go\s+home\b/i,
+];
+
+// Third-party / indirect risk — the user is worried about SOMEONE ELSE's safety.
+// Anchored on an explicit other-person NOUN (not a bare pronoun) near a risk phrase,
+// so a first-person turn that merely mentions an ex ("she left me and I want to die")
+// is NOT swallowed here — that still routes to the first-person suicide response.
+const THIRD_PARTY_RISK_PATTERNS = [
+  /\b(my\s+)?(friend|buddy|pal|brother|sister|son|daughter|dad|father|mom|mother|co-?worker|mate|neighbor|roommate|cousin|nephew|someone(\s+i\s+know)?|a\s+(friend|guy|buddy|mate|co-?worker))\b[^.?!]{0,90}\b(depress|suicid|kill(ing)?\s+(him|her|them)self|hurt(ing)?\s+(him|her|them)self|serious\s+thoughts|wants?\s+to\s+(die|end\s+it|kill)|end\s+(his|her|their)\s+life|dark\s+(place|thoughts)|not\s+want(ing)?\s+to\s+(be\s+here|live|go\s+on))\b/i,
+  /\b(worried|scared|afraid|concerned|terrified|don'?t\s+know\s+(what\s+to\s+do|how\s+to\s+help))\b[^.?!]{0,60}\b(he'?ll|she'?ll|they'?ll|he\s+(is|might|could|will)|she\s+(is|might|could|will))\b[^.?!]{0,40}\b(hurt\s+(him|her|them)self|kill\s+(him|her|them)self|end\s+(it|his|her|their)|do\s+something\s+(to\s+himself|to\s+herself|stupid))\b/i,
+  /\b(he|she|they)\s+(has|have|is\s+having|keeps\s+having|been\s+having|'s\s+having)\s+(some\s+)?serious\s+thoughts\b/i,
 ];
 
 const SUBSTANCE_CRISIS_PATTERNS = [
@@ -113,6 +131,9 @@ export function detectCrisisType(message: string): CrisisType {
   if (VIOLENCE_PATTERNS.some(p => p.test(message))) return 'violence_toward_others';
   if (DV_PERPETRATING_PATTERNS.some(p => p.test(message))) return 'domestic_violence_perpetrating';
   if (DV_VICTIM_PATTERNS.some(p => p.test(message))) return 'domestic_violence_victim';
+  // Third-party AFTER first-person suicide/violence/DV (the user's own risk wins),
+  // BEFORE substance/passive.
+  if (THIRD_PARTY_RISK_PATTERNS.some(p => p.test(message))) return 'third_party_risk';
   if (SUBSTANCE_CRISIS_PATTERNS.some(p => p.test(message))) return 'substance_crisis';
   if (PASSIVE_CRISIS_PATTERNS.some(p => p.test(message))) return 'passive_crisis';
   return null;

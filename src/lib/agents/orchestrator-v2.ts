@@ -23,7 +23,7 @@ import { classifyArena } from '../assessment/arena-classifier';
 import { classifySilence } from '../assessment/silence-typer';
 import { computeTrust } from '../assessment/trust-gauge';
 import { mapPhase } from '../assessment/phase-mapper';
-import { selectMove } from '../assessment/move-selector';
+import { selectMove, moveSelectorEnforced } from '../assessment/move-selector';
 import { selectKnowledgePlan } from '../assessment/knowledge-selector';
 import { selectWisdomVoices } from '../wisdom/council';
 import { enforceVocativePrinciple } from '../craft/craft-layer';
@@ -204,7 +204,7 @@ export async function processWithAgents(
   // TIER 2.5 — CONVERSATION POLICY
   // ── Move Selector + Knowledge Intelligence
   // ═══════════════════════════════════════════
-  const policyEnforced = process.env.MOVE_SELECTOR_ENFORCE === 'true' || process.env.MOVE_SELECTOR_ENFORCE === '1';
+  const policyEnforced = moveSelectorEnforced();
   const moveDone = trackEnvelopeAgent(env, 'move-selector');
   const knowledgeDone = trackEnvelopeAgent(env, 'knowledge-selector');
   let conversationState: ConversationState;

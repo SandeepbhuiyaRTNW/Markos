@@ -66,6 +66,14 @@ Poison Control: 1-800-222-1222 if you have taken something.
 
 Will you make that call?`,
 
+  third_party_risk: `It is good that you are paying attention to this — a lot of people miss it, and you did not.
+
+I am an AI, so let me point you to the real help. If your friend might be in danger, the 988 Suicide and Crisis Lifeline (call or text 988) is for you too — you can call to figure out how to help someone you are worried about. If it feels immediate, 911.
+
+What helps most: ask him directly and plainly — "are you thinking about hurting yourself?" It does not plant the idea; it tells him he is not alone. If it feels urgent, do not leave him alone, and help him make that call or get to someone who can.
+
+You do not have to carry this by yourself either.`,
+
   passive_crisis: `That is real. And it matters that you said it.
 
 One thing: put 988 in your phone right now. That is the Suicide and Crisis Lifeline — call or text, any time. You can also text HOME to 741741. Not because I think you are about to do anything. Because you should not be without it.

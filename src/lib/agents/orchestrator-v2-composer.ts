@@ -12,12 +12,13 @@ import type { MoveDecision } from '../assessment/move-selector';
 import type { KnowledgePlan } from '../assessment/knowledge-selector';
 import { trackEnvelopeAgent, recordEnvelopeError, buildEnvelopeContextSummary } from './state-envelope-utils';
 import { checkBoundary, getBoundaryOverridePrompt, runBoundarySentinel } from '../sentinels/boundary';
-import { determineCraftDirectives, enforceSocraticDiscipline, applyDeepListener, enforceVocativePrinciple, detectForbiddenPhrases, detectFantasyIdentity, detectVocabSubstitutions } from '../craft/craft-layer';
+import { determineCraftDirectives, enforceSocraticDiscipline, applyDeepListener, enforceVocativePrinciple, detectForbiddenPhrases, detectFantasyIdentity, detectVocabSubstitutions, stripQuestionSentences } from '../craft/craft-layer';
 import { buildWisdomCouncilPrompt } from '../wisdom/council';
 import { getPhaseConstraints } from '../assessment/phase-mapper';
 import { retrieveWisdom, retrieveQuestion, type QuestionRetrievalContext } from '../rag/retriever';
 import { analyzeConversation, computeTrajectoryDrift } from './conversation-state';
 import type { AgentResponse } from './orchestrator-v2';
+import { MOVE_CALIBRATION } from './move-calibration';
 
 export interface PreComposerResult {
   ragWisdom: string;
@@ -67,7 +68,10 @@ export async function retrievePreComposer(
   // detection, emotional-direction tracking, and hopelessness templates. Computed
   // in parallel with RAG so it adds no extra latency.
   let convState: Awaited<ReturnType<typeof analyzeConversation>> | null = null;
-  const policyEnforced = policy.enforceMovePolicy && policy.moveDecision !== null;
+  // PART 1A — CRISIS BYPASS (hard requirement): when a crisis is detected, the
+  // ENTIRE move-policy layer is disengaged this turn — no stripping, no shallowing,
+  // no calibration — so the full crisis/support response passes through untouched.
+  const policyEnforced = policy.enforceMovePolicy && policy.moveDecision !== null && env.sentinels.crisis.level === 'none';
   const effectivePlan = policyEnforced ? policy.knowledgePlan : null;
   const effectiveMove = policyEnforced ? policy.moveDecision : null;
 
@@ -144,7 +148,10 @@ export async function runComposerPipeline(
   const { ragWisdom, legacyQuestions, convState, questionsWereRetrieved, knowledgePlanUsed } = pre
     ?? await retrievePreComposer(env, historyStr, null, policy);
 
-  const policyEnforced = policy.enforceMovePolicy && policy.moveDecision !== null;
+  // PART 1A — CRISIS BYPASS (hard requirement): when a crisis is detected, the
+  // ENTIRE move-policy layer is disengaged this turn — no stripping, no shallowing,
+  // no calibration — so the full crisis/support response passes through untouched.
+  const policyEnforced = policy.enforceMovePolicy && policy.moveDecision !== null && env.sentinels.crisis.level === 'none';
   const effectiveMove = policyEnforced ? policy.moveDecision : null;
   const effectivePlan = policyEnforced ? policy.knowledgePlan : knowledgePlanUsed;
   const questionAllowedByMove = policyEnforced ? !!effectiveMove?.ask_question : true;
@@ -569,35 +576,37 @@ function buildPriorityHierarchy(env: StateEnvelope, policy: PriorityPolicy = { a
   return lines.join('\n');
 }
 
-function renderMoveDirective(policy: MovePolicyContext): string {
+export function renderMoveDirective(policy: MovePolicyContext): string {
   if (!policy.enforceMovePolicy || !policy.moveDecision) return '';
-  const allowQuestionText = policy.moveDecision.ask_question ? 'MAY ASK' : 'MUST NOT ASK';
-  const tooEarly = policy.moveDecision.too_early_to_address.length > 0
-    ? `topics deferred this turn: ${policy.moveDecision.too_early_to_address.join(', ')}`
+  const move = policy.moveDecision;
+  // PART 1A: crisis owns the turn — inject NO move directive on a crisis turn.
+  if (move.move === 'crisis_protocol') return '';
+  const allowQuestionText = move.ask_question ? 'MAY ASK' : 'MUST NOT ASK';
+  const tooEarly = move.too_early_to_address.length > 0
+    ? `topics deferred this turn: ${move.too_early_to_address.join(', ')}`
     : 'no topic deferral';
-  return `\n\n## MOVE POLICY\nDecision: ${policy.moveDecision.move}\nQuestion policy: ${allowQuestionText}\nRequired craft form: ${policy.moveDecision.craft_form}\n${tooEarly}.`;
+  // Inject ONLY the selected move's calibration (moment / voice / length).
+  const cal = MOVE_CALIBRATION[move.move];
+  const calBlock = cal ? `\nMoment: ${cal.moment}\nVoice: ${cal.voice}\nLength: ${cal.length}` : '';
+  // Non-asking moves: a plain reaction with NO question is the right, frequent move.
+  const noAskBlock = move.ask_question
+    ? ''
+    : '\nDo NOT end on a question this turn — react like a friend; a plain reaction with no question is the move. This overrides any instinct to ask.';
+  return `\n\n## MOVE POLICY (talk like Marcus — a real guy, not a therapist; short, plain, human)\nDecision: ${move.move}\nQuestion policy: ${allowQuestionText}\nRequired craft form: ${move.craft_form}\n${tooEarly}.${calBlock}${noAskBlock}`;
 }
 
 function countQuestionSentences(text: string): number {
   return (text.match(/\?/g) || []).length;
 }
 
-function enforceMovePolicy(content: string, policy: MovePolicyContext): string {
+export function enforceMovePolicy(content: string, policy: MovePolicyContext): string {
   if (!policy.enforceMovePolicy || !policy.moveDecision) return content;
-
+  // PART 1A: NEVER strip a crisis response — it keeps its full support + safety
+  // question (988 / somewhere-safe). Crisis overrides all pacing, always.
+  if (policy.moveDecision.move === 'crisis_protocol') return content;
   if (policy.moveDecision.ask_question) return content;
-
-  const lines = content.split('\n')
-    .map(line => line.trim())
-    .filter(Boolean)
-    .filter(line => !line.endsWith('?'));
-
-  // Safety net for single-line or inline question-only responses.
-  if (lines.length === 0) {
-    return content.replace(/\b(what|how|why|when|where|who|which|can|could|would|should|do you|did you|are you)\b[^\?]*\?/gi, '').trim();
-  }
-
-  return lines.join('\n');
+  // Backstop for a no-ask move: strip any question the persona still produced.
+  return stripQuestionSentences(content);
 }
 
 function filterWhispererQuestionsByScope(
