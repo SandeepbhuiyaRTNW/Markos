@@ -161,7 +161,7 @@ assert('make_inference voice offers a tentative READ ("sounds like", goes past h
 assert('make_inference is MUST NOT ASK + no question mark in the directive', inferDir.includes('MUST NOT ASK') && inferDir.includes('Do NOT end on a question') && !inferDir.includes('?'));
 
 // 3) Governing bar rides above every non-crisis move; crisis sees none of it.
-assert('governing bar present on a non-crisis directive (THE BAR + FAILURE mandate)', inferDir.includes('THE BAR') && inferDir.includes('FAILURE'));
+assert('governing bar present on a non-crisis directive (THE GOAL mandate)', inferDir.includes('THE GOAL') && inferDir.includes('MORE understood than he expected'));
 assert('governing bar caps mirroring + demands the unexpected', GOVERNING_BAR.includes('one turn in five') && GOVERNING_BAR.includes("didn't expect"));
 assert('governing bar instructs shape variety (no same move two turns in a row)', GOVERNING_BAR.includes('same move two turns in a row'));
 assert('governing bar reads the mode + allows restraint', GOVERNING_BAR.toLowerCase().includes('venting') && GOVERNING_BAR.toLowerCase().includes('restraint'));
@@ -189,6 +189,43 @@ assert('enforce=false -> make_inference passthrough preserves a stray question',
   enforceMovePolicy("sounds like you're carrying it alone. right?", { moveDecision: infer, enforceMovePolicy: false }) === "sounds like you're carrying it alone. right?");
 assert('enforce=true -> make_inference strips a stray question (no-ask backstop)',
   !enforceMovePolicy("sounds like you're carrying it alone. right?", { moveDecision: infer, enforceMovePolicy: true }).includes('?'));
+
+console.log('\n── H. v3.1 — feel understood: goal, human openers, invitation, no-formula ──');
+// The ONE GOAL leads the bar.
+assert('goal: make him feel MORE understood than he expected', GOVERNING_BAR.includes('MORE understood than he expected') && GOVERNING_BAR.includes('put into words'));
+assert('bar: add something new every time (never a bare restatement)', GOVERNING_BAR.includes('Add something new every time') && GOVERNING_BAR.includes('Never a bare restatement'));
+// Human openers + banned therapy clichés.
+assert('human openers present ("that\'s rough", "I\'m sorry you\'re dealing with that", "changes things")',
+  GOVERNING_BAR.includes("that's rough") && GOVERNING_BAR.includes("I'm sorry you're dealing with that") && GOVERNING_BAR.includes('changes things'));
+assert('therapy clichés BANNED ("I hear you", "how does that make you feel", "it sounds like you\'re feeling")',
+  GOVERNING_BAR.includes('I hear you') && GOVERNING_BAR.includes('how does that make you feel') && GOVERNING_BAR.includes("it sounds like you're feeling"));
+assert('use contractions / drop essay paragraphs', GOVERNING_BAR.toLowerCase().includes('contractions'));
+// End with an invitation, not a dead stop — and NOT always a question.
+assert('bar: end with an invitation, not a dead stop (soft door open)', GOVERNING_BAR.includes('invitation') && GOVERNING_BAR.includes('door open'));
+assert('bar: invitation is NOT "always end with a question"', GOVERNING_BAR.includes('NOT "always end with a question"'));
+// Tone shifts across the moment.
+assert('bar: tone shifts across warmth / curiosity / reflection / lightness',
+  GOVERNING_BAR.includes('warmth') && GOVERNING_BAR.includes('curiosity') && GOVERNING_BAR.includes('lightness'));
+// Memory-connects callback, with a concrete linking example.
+assert('bar: callbacks CONNECT threads (concrete example), not just prove memory',
+  GOVERNING_BAR.includes('CONNECT threads') && GOVERNING_BAR.includes('same thing showing up here'));
+assert('bar still contains NO question mark (no-ask moves depend on it)', !GOVERNING_BAR.includes('?'));
+
+// The no-ask directive now leaves a door open instead of a dead stop.
+const noAskDir = renderMoveDirective({ moveDecision: reflect, enforceMovePolicy: true });
+assert('no-ask move: land on a statement, leave a door open, NOT a dead stop',
+  noAskDir.includes('Do NOT end on a question') && noAskDir.includes('door open') && noAskDir.includes('dead stop') && !noAskDir.includes('?'));
+
+// reflect_only (the main non-asking move) opens human + leaves a door open.
+assert('reflect_only opens like a person ("man, that\'s rough") and leaves a door open',
+  MOVE_CALIBRATION['reflect_only'].voice.includes("man, that's rough") && MOVE_CALIBRATION['reflect_only'].voice.includes('leave a door open'));
+// make_inference leaves the read open for him to grab or push back on.
+assert('make_inference leaves the read open (grab or push back), no dead-stop',
+  inferDir.includes('push back') && inferDir.includes("don't dead-stop"));
+
+// Consecutive replies shouldn't repeat the same move shape (variety contract).
+assert('consecutive-shape: reflect->reflect repeats (avoid); reflect->infer & observe->infer vary',
+  sameMoveShape('reflect_only', 'reflect_only') === true && sameMoveShape('reflect_only', 'make_inference') === false && sameMoveShape('make_observation', 'make_inference') === false);
 
 console.log('\n── SUMMARY ──');
 console.log(`  passed: ${passed}   failed: ${failed}`);
