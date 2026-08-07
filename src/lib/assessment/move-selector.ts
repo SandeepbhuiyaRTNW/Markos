@@ -177,6 +177,44 @@ function commAssistEnabled(): boolean {
   return v === 'true' || v === '1';
 }
 
+// ─── Move Selector cutover flag (feature/move-selector-cutover) ───
+// MOVE_SELECTOR_ENABLED (default OFF) turns the move policy from shadow into
+// enforcement across BOTH composer paths (V1 + V2). MOVE_SELECTOR_ENFORCE is kept
+// as a deprecated alias. OFF everywhere = byte-identical to today.
+// Global flag OR per-user opt-in. MOVE_SELECTOR_ENABLED / MOVE_SELECTOR_ENFORCE
+// (alias) flip it for everyone; MOVE_SELECTOR_ENABLED_USERS is a comma/space-
+// separated userId allowlist so the founder can enable it for HIS OWN login only
+// and test live before any real user sees it. A user NOT in the list stays
+// byte-identical to today.
+export function moveSelectorEnabled(userId?: string | null, email?: string | null): boolean {
+  const on = (v?: string) => v === 'true' || v === '1';
+  const off = (v?: string) => v === 'false' || v === '0';
+  // TEMPORARY DEFAULT-ON: while only the founder + owner use the app, the move
+  // selector ships ENABLED FOR EVERYONE by default (no env var needed). KILL-SWITCH:
+  // set MOVE_SELECTOR_ENABLED=false (or 0) to disable it for everyone without a code
+  // change (still needs an Amplify redeploy to apply). To restore the PERMANENT
+  // default-OFF + allowlist model, change the final `return true` back to `return false`.
+  if (off(process.env.MOVE_SELECTOR_ENABLED)) return false;
+  if (on(process.env.MOVE_SELECTOR_ENABLED) || on(process.env.MOVE_SELECTOR_ENFORCE)) return true;
+  // Permanent per-user allowlist (userId).
+  const allow = process.env.MOVE_SELECTOR_ENABLED_USERS;
+  if (allow && userId) {
+    const ids = allow.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+    if (ids.includes(userId)) return true;
+  }
+  // TEMPORARY — FOR TESTING ONLY. Email allowlist so the founder can enable it by
+  // login email without looking up his UUID. This is NOT the permanent mechanism;
+  // remove MOVE_SELECTOR_ENABLED_EMAILS (and this block) once live testing is done.
+  // Case-insensitive. Read at runtime like the rest.
+  const allowEmails = process.env.MOVE_SELECTOR_ENABLED_EMAILS;
+  if (allowEmails && email) {
+    const wanted = email.trim().toLowerCase();
+    const list = allowEmails.split(/[,\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+    if (list.includes(wanted)) return true;
+  }
+  return true; // TEMPORARY DEFAULT ON (change to `return false` to restore default-OFF)
+}
+
 // BROAD phrasing coverage (spec Step 2) — deliberately wider than frame-refusal's
 // narrow DRAFT_PATTERNS, including the asymmetric cases the audit found slipping
 // ("help me respond to my ex-wife", "rewrite this text", "rehearse what to say").
