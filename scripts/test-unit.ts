@@ -24,15 +24,18 @@ assert('Violence detected', detectCrisisType("I'm going to kill her") === 'viole
 assert('DV perp detected', detectCrisisType("I hit my wife last night") === 'domestic_violence_perpetrating');
 assert('DV victim detected', detectCrisisType("She hit me and I'm scared for my life") === 'domestic_violence_victim');
 assert('Substance crisis', detectCrisisType("I took too many pills") === 'substance_crisis');
-// v3 re-calibration: ambiguous despair no longer hotlines — it routes to a gentle
-// check-in (was 'passive_crisis' before; that over-triggered on ordinary hard days).
-assert('Ambiguous despair -> gentle check-in, NOT crisis ("what\'s the point")',
-  detectCrisisType("What's the point of anything anymore") === null && needsGentleCheckIn("What's the point of anything anymore") === true);
+// v3.2: INDIRECT suicidal ideation ESCALATED to the suicide response (safety-forward).
+// NOTE: this reverses the earlier re-calibration for the "what's the point [of
+// living / of anything / anymore]" family and for "tired of living" — those now fire.
+assert('Indirect SI "what\'s the point of anything anymore" -> suicide (escalated)',
+  detectCrisisType("What's the point of anything anymore") === 'suicide');
+assert('Bare "what\'s the point" (no existential anchor) -> gentle check-in, NOT crisis',
+  detectCrisisType("what's the point") === null && needsGentleCheckIn("what's the point") === true);
 assert('No crisis on normal', detectCrisisType("I've been thinking about my career") === null);
 assert('Better off dead', detectCrisisType("Everyone would be better off without me") === 'suicide');
 assert('Ambiguous "can\'t keep going" -> gentle check-in, NOT crisis',
   detectCrisisType("I can't keep going like this") === null && needsGentleCheckIn("I can't keep going like this") === true);
-assert('Veiled passive SI still crisis ("tired of living")', detectCrisisType("I'm so tired of living") === 'passive_crisis');
+assert('Indirect SI "tired of living" -> suicide (escalated from passive)', detectCrisisType("I'm so tired of living") === 'suicide');
 assert('Bought a gun', detectCrisisType("I bought a gun yesterday") === 'violence_toward_others');
 assert('She threatens', detectCrisisType("She threatens to kill me every night") === 'domestic_violence_victim');
 assert('Mixing pills', detectCrisisType("I'm mixing pills and alcohol right now") === 'substance_crisis');
