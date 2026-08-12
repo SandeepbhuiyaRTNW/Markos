@@ -393,8 +393,8 @@ export default function Home() {
     <header className={`relative z-30 sticky top-0 ${transparent ? 'bg-transparent' : 'bg-white border-b border-border'}`}>
       <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3 lg:px-6">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#a3785e]/12 to-[#a3785e]/4 border border-[#a3785e]/15 flex items-center justify-center">
-            <span className="text-lg font-light text-[#a3785e]">M</span>
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#b0611f]/12 to-[#b0611f]/4 border border-[#b0611f]/15 flex items-center justify-center">
+            <span className="text-lg font-light text-[#b0611f]">M</span>
           </div>
           <div>
             <h1 className="text-base font-semibold text-foreground leading-tight">mrkos.ai</h1>
@@ -424,7 +424,7 @@ export default function Home() {
     return (
       <div className="h-screen flex flex-col items-center justify-center relative gap-4">
         <div className="ambient-bg" />
-        <div className="w-8 h-8 rounded-full border-2 border-[#a3785e]/20 border-t-[#a3785e] animate-spin" />
+        <div className="w-8 h-8 rounded-full border-2 border-[#b0611f]/20 border-t-[#b0611f] animate-spin" />
       </div>
     );
   }
@@ -438,8 +438,8 @@ export default function Home() {
         <div className="relative z-10 flex-1">
           {/* Hero Section */}
           <section className="max-w-4xl mx-auto px-6 pt-16 pb-20 text-center fade-in-up">
-            <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#a3785e]/15 to-[#a3785e]/5 border border-[#a3785e]/20 flex items-center justify-center mx-auto mb-8">
-              <span className="text-5xl font-light text-[#a3785e]">M</span>
+            <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#b0611f]/15 to-[#b0611f]/5 border border-[#b0611f]/20 flex items-center justify-center mx-auto mb-8">
+              <span className="text-5xl font-light text-[#b0611f]">M</span>
             </div>
             <h2 className="text-5xl sm:text-6xl font-semibold tracking-tight text-foreground mb-4 leading-tight">
               Your Stoic<br />Companion
@@ -478,7 +478,7 @@ export default function Home() {
                         Change email
                       </button>
                       <span className="text-muted-foreground/30">·</span>
-                      <button onClick={handleSendCode} disabled={sendingCode} className="text-xs text-[#a3785e] hover:text-[#8a6550] transition-colors disabled:opacity-50">
+                      <button onClick={handleSendCode} disabled={sendingCode} className="text-xs text-[#b0611f] hover:text-[#8a6550] transition-colors disabled:opacity-50">
                         {sendingCode ? 'Sending…' : 'Use verification code instead'}
                       </button>
                     </div>
@@ -496,7 +496,7 @@ export default function Home() {
                       {verifyingCode ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Verifying…</> : <>Verify & Sign In <ChevronRight className="w-4 h-4 ml-2" /></>}
                     </Button>
                     <div className="flex items-center justify-center gap-4">
-                      <button onClick={handleSendCode} disabled={sendingCode} className="text-xs text-[#a3785e] hover:text-[#8a6550] transition-colors disabled:opacity-50">
+                      <button onClick={handleSendCode} disabled={sendingCode} className="text-xs text-[#b0611f] hover:text-[#8a6550] transition-colors disabled:opacity-50">
                         {sendingCode ? 'Sending…' : 'Resend code'}
                       </button>
                       <span className="text-muted-foreground/30">·</span>
@@ -522,22 +522,22 @@ export default function Home() {
           <section className="max-w-4xl mx-auto px-6 pb-20">
             <div className="grid sm:grid-cols-3 gap-6">
               <div className="glass-strong rounded-2xl p-6 text-center">
-                <div className="w-12 h-12 rounded-xl bg-[#a3785e]/8 flex items-center justify-center mx-auto mb-4">
-                  <Mic className="w-6 h-6 text-[#a3785e]/60" />
+                <div className="w-12 h-12 rounded-xl bg-[#b0611f]/8 flex items-center justify-center mx-auto mb-4">
+                  <Mic className="w-6 h-6 text-[#b0611f]/60" />
                 </div>
                 <h3 className="text-sm font-semibold text-foreground mb-2">Voice-First</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">Speak naturally. Marcus listens deeply and responds with the weight of 2,000 years of Stoic wisdom.</p>
               </div>
               <div className="glass-strong rounded-2xl p-6 text-center">
-                <div className="w-12 h-12 rounded-xl bg-[#a3785e]/8 flex items-center justify-center mx-auto mb-4">
-                  <BookOpen className="w-6 h-6 text-[#a3785e]/60" />
+                <div className="w-12 h-12 rounded-xl bg-[#b0611f]/8 flex items-center justify-center mx-auto mb-4">
+                  <BookOpen className="w-6 h-6 text-[#b0611f]/60" />
                 </div>
                 <h3 className="text-sm font-semibold text-foreground mb-2">Stoic Library</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">Draws from Meditations, Seneca, Epictetus, Frankl, and more — woven into every conversation.</p>
               </div>
               <div className="glass-strong rounded-2xl p-6 text-center">
-                <div className="w-12 h-12 rounded-xl bg-[#a3785e]/8 flex items-center justify-center mx-auto mb-4">
-                  <Brain className="w-6 h-6 text-[#a3785e]/60" />
+                <div className="w-12 h-12 rounded-xl bg-[#b0611f]/8 flex items-center justify-center mx-auto mb-4">
+                  <Brain className="w-6 h-6 text-[#b0611f]/60" />
                 </div>
                 <h3 className="text-sm font-semibold text-foreground mb-2">Remembers You</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">Marcus remembers your struggles, patterns, and growth — each session builds on the last.</p>
@@ -547,7 +547,7 @@ export default function Home() {
 
           {/* Quote */}
           <section className="max-w-2xl mx-auto px-6 pb-20 text-center">
-            <div className="glass-strong rounded-2xl p-8 border-[#a3785e]/10">
+            <div className="glass-strong rounded-2xl p-8 border-[#b0611f]/10">
               <p className="text-base italic text-foreground/70 leading-relaxed mb-3">
                 &quot;Waste no more time arguing about what a good man should be. Be one.&quot;
               </p>
@@ -564,7 +564,7 @@ export default function Home() {
     return (
       <div className="h-screen flex flex-col items-center justify-center relative gap-4">
         <div className="ambient-bg" />
-        <div className="w-8 h-8 rounded-full border-2 border-[#a3785e]/20 border-t-[#a3785e] animate-spin" />
+        <div className="w-8 h-8 rounded-full border-2 border-[#b0611f]/20 border-t-[#b0611f] animate-spin" />
         <p className="text-xs text-muted-foreground/60">Preparing your session…</p>
       </div>
     );
@@ -597,8 +597,8 @@ export default function Home() {
                 {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </Button>
             )}
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#a3785e]/12 to-[#a3785e]/4 border border-[#a3785e]/15 flex items-center justify-center">
-              <span className="text-lg font-light text-[#a3785e]">M</span>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#b0611f]/12 to-[#b0611f]/4 border border-[#b0611f]/15 flex items-center justify-center">
+              <span className="text-lg font-light text-[#b0611f]">M</span>
             </div>
             <div>
               <h1 className="text-base font-semibold text-foreground leading-tight">mrkos.ai</h1>
@@ -654,8 +654,8 @@ export default function Home() {
             <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-8">
               <div className="max-w-2xl mx-auto space-y-6 fade-in-up">
                 <div className="text-center mb-8">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#a3785e]/15 to-[#a3785e]/5 border border-[#a3785e]/20 flex items-center justify-center mx-auto mb-4">
-                    <span className="text-2xl font-light text-[#a3785e]">M</span>
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#b0611f]/15 to-[#b0611f]/5 border border-[#b0611f]/20 flex items-center justify-center mx-auto mb-4">
+                    <span className="text-2xl font-light text-[#b0611f]">M</span>
                   </div>
                   <h2 className="text-xl font-semibold text-foreground">{sessionNotes.title || 'Session Complete'}</h2>
                   {sessionNotes.mood && (
@@ -668,7 +668,7 @@ export default function Home() {
                 {/* Summary */}
                 {sessionNotes.summary && (
                   <div className="glass-strong rounded-2xl p-5">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-[#a3785e] mb-2">Summary</p>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-[#b0611f] mb-2">Summary</p>
                     <p className="text-sm leading-relaxed text-foreground/80">{sessionNotes.summary}</p>
                   </div>
                 )}
@@ -676,11 +676,11 @@ export default function Home() {
                 {/* Takeaways */}
                 {sessionNotes.takeaways && sessionNotes.takeaways.length > 0 && (
                   <div className="glass-strong rounded-2xl p-5">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-[#a3785e] mb-3">Key Takeaways</p>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-[#b0611f] mb-3">Key Takeaways</p>
                     <ul className="space-y-2">
                       {sessionNotes.takeaways.map((t, i) => (
                         <li key={i} className="flex gap-2.5 text-sm text-foreground/80">
-                          <span className="text-[#a3785e]/60 mt-0.5">→</span>
+                          <span className="text-[#b0611f]/60 mt-0.5">→</span>
                           <span>{t}</span>
                         </li>
                       ))}
@@ -690,12 +690,12 @@ export default function Home() {
 
                 {/* Pondering Topics */}
                 {sessionNotes.pondering_topics && sessionNotes.pondering_topics.length > 0 && (
-                  <div className="glass-strong rounded-2xl p-5 border border-[#a3785e]/10">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-[#a3785e] mb-3">Before Next Session — Ponder These</p>
+                  <div className="glass-strong rounded-2xl p-5 border border-[#b0611f]/10">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-[#b0611f] mb-3">Before Next Session — Ponder These</p>
                     <div className="space-y-3">
                       {sessionNotes.pondering_topics.map((t, i) => (
                         <div key={i} className="flex gap-2.5 text-sm text-muted-foreground italic">
-                          <span className="text-[#a3785e]/50 mt-0.5 not-italic">✦</span>
+                          <span className="text-[#b0611f]/50 mt-0.5 not-italic">✦</span>
                           <span>{t}</span>
                         </div>
                       ))}
@@ -816,28 +816,28 @@ export default function Home() {
               {/* Step 1: Session Type Selection */}
               {inputMode === 'session-type' && !openingMessage && !openingLoading && transcripts.length === 0 && (
                 <div className="flex-1 flex flex-col items-center justify-center py-20 text-center fade-in-up">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#a3785e]/10 to-transparent border border-[#a3785e]/10 flex items-center justify-center mb-6">
-                    <span className="text-2xl font-light text-[#a3785e]">M</span>
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#b0611f]/10 to-transparent border border-[#b0611f]/10 flex items-center justify-center mb-6">
+                    <span className="text-2xl font-light text-[#b0611f]">M</span>
                   </div>
                   <p className="text-sm font-medium text-foreground mb-1">How do you want to start?</p>
                   <p className="text-xs text-muted-foreground/50 mb-8">Pick up where you left off, or begin something new</p>
                   <div className="flex gap-4">
                     <button
                       onClick={() => handleChooseSessionType('continue')}
-                      className="flex flex-col items-center gap-3 px-8 py-6 rounded-2xl border border-border hover:border-[#a3785e]/30 hover:bg-[#a3785e]/5 transition-all group max-w-[180px]"
+                      className="flex flex-col items-center gap-3 px-8 py-6 rounded-2xl border border-border hover:border-[#b0611f]/30 hover:bg-[#b0611f]/5 transition-all group max-w-[180px]"
                     >
-                      <div className="w-12 h-12 rounded-xl bg-[#a3785e]/8 flex items-center justify-center group-hover:bg-[#a3785e]/15 transition-colors">
-                        <svg className="w-5 h-5 text-[#a3785e]/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      <div className="w-12 h-12 rounded-xl bg-[#b0611f]/8 flex items-center justify-center group-hover:bg-[#b0611f]/15 transition-colors">
+                        <svg className="w-5 h-5 text-[#b0611f]/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                       </div>
                       <span className="text-sm font-medium text-foreground">Continue</span>
                       <span className="text-[11px] text-muted-foreground/50 leading-tight">Pick up where we left off</span>
                     </button>
                     <button
                       onClick={() => handleChooseSessionType('fresh')}
-                      className="flex flex-col items-center gap-3 px-8 py-6 rounded-2xl border border-border hover:border-[#a3785e]/30 hover:bg-[#a3785e]/5 transition-all group max-w-[180px]"
+                      className="flex flex-col items-center gap-3 px-8 py-6 rounded-2xl border border-border hover:border-[#b0611f]/30 hover:bg-[#b0611f]/5 transition-all group max-w-[180px]"
                     >
-                      <div className="w-12 h-12 rounded-xl bg-[#a3785e]/8 flex items-center justify-center group-hover:bg-[#a3785e]/15 transition-colors">
-                        <svg className="w-5 h-5 text-[#a3785e]/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" /></svg>
+                      <div className="w-12 h-12 rounded-xl bg-[#b0611f]/8 flex items-center justify-center group-hover:bg-[#b0611f]/15 transition-colors">
+                        <svg className="w-5 h-5 text-[#b0611f]/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" /></svg>
                       </div>
                       <span className="text-sm font-medium text-foreground">New Topic</span>
                       <span className="text-[11px] text-muted-foreground/50 leading-tight">Start something different</span>
@@ -849,8 +849,8 @@ export default function Home() {
               {/* Step 1b: Pick which session to continue from */}
               {inputMode === 'pick-session' && (
                 <div className="flex-1 flex flex-col items-center justify-center py-12 text-center fade-in-up overflow-hidden">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#a3785e]/10 to-transparent border border-[#a3785e]/10 flex items-center justify-center mb-6">
-                    <span className="text-2xl font-light text-[#a3785e]">M</span>
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#b0611f]/10 to-transparent border border-[#b0611f]/10 flex items-center justify-center mb-6">
+                    <span className="text-2xl font-light text-[#b0611f]">M</span>
                   </div>
                   <p className="text-sm font-medium text-foreground mb-1">Continue from which conversation?</p>
                   <p className="text-xs text-muted-foreground/50 mb-6">Expand to see where we left off · Click &quot;Continue this&quot; to pick up</p>
@@ -864,15 +864,15 @@ export default function Home() {
                             key={s.id}
                             className={`flex flex-col items-start rounded-xl border transition-all text-left shrink-0 ${
                               isExpanded
-                                ? 'w-[320px] border-[#a3785e]/30 bg-[#a3785e]/5'
-                                : 'w-[260px] border-border hover:border-[#a3785e]/20'
+                                ? 'w-[320px] border-[#b0611f]/30 bg-[#b0611f]/5'
+                                : 'w-[260px] border-border hover:border-[#b0611f]/20'
                             }`}
                           >
                             {/* Card header — always visible */}
                             <div className="px-4 py-4 w-full">
                               <div className="flex items-center justify-between w-full mb-2">
-                                <div className="w-7 h-7 rounded-lg bg-[#a3785e]/8 flex items-center justify-center">
-                                  <span className="text-[11px] font-medium text-[#a3785e]/60">{s.sessionNumber}</span>
+                                <div className="w-7 h-7 rounded-lg bg-[#b0611f]/8 flex items-center justify-center">
+                                  <span className="text-[11px] font-medium text-[#b0611f]/60">{s.sessionNumber}</span>
                                 </div>
                                 <span className="text-[10px] text-muted-foreground/40">
                                   {new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -887,7 +887,7 @@ export default function Home() {
                             {/* Expand/collapse toggle */}
                             <button
                               onClick={(e) => { e.stopPropagation(); setExpandedSessionId(isExpanded ? null : s.id); }}
-                              className="w-full px-4 py-2 text-[11px] text-[#a3785e]/60 hover:text-[#a3785e]/80 transition-colors flex items-center gap-1.5 border-t border-border/30"
+                              className="w-full px-4 py-2 text-[11px] text-[#b0611f]/60 hover:text-[#b0611f]/80 transition-colors flex items-center gap-1.5 border-t border-border/30"
                             >
                               <svg className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                               {isExpanded ? 'Hide details' : 'Where we left off'}
@@ -903,7 +903,7 @@ export default function Home() {
                                     <ul className="space-y-1.5">
                                       {s.takeaways.map((t, i) => (
                                         <li key={i} className="flex gap-2 text-[11px] text-muted-foreground/60 leading-relaxed">
-                                          <span className="text-[#a3785e]/40 mt-0.5 shrink-0">→</span>
+                                          <span className="text-[#b0611f]/40 mt-0.5 shrink-0">→</span>
                                           <span>{t}</span>
                                         </li>
                                       ))}
@@ -913,10 +913,10 @@ export default function Home() {
                                 {/* Pondering topics */}
                                 {s.ponderingTopics.length > 0 && (
                                   <div>
-                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[#a3785e]/50 mb-1.5">Left to Ponder</p>
+                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[#b0611f]/50 mb-1.5">Left to Ponder</p>
                                     <ul className="space-y-1.5">
                                       {s.ponderingTopics.map((p, i) => (
-                                        <li key={i} className="flex gap-2 text-[11px] text-[#a3785e]/50 italic leading-relaxed">
+                                        <li key={i} className="flex gap-2 text-[11px] text-[#b0611f]/50 italic leading-relaxed">
                                           <span className="not-italic shrink-0">✦</span>
                                           <span>{p}</span>
                                         </li>
@@ -927,7 +927,7 @@ export default function Home() {
                                 {/* Continue button */}
                                 <button
                                   onClick={() => handlePickSession(s.id)}
-                                  className="w-full mt-2 py-2 rounded-lg bg-[#a3785e]/10 hover:bg-[#a3785e]/20 text-[#a3785e] text-xs font-medium transition-colors"
+                                  className="w-full mt-2 py-2 rounded-lg bg-[#b0611f]/10 hover:bg-[#b0611f]/20 text-[#b0611f] text-xs font-medium transition-colors"
                                 >
                                   Continue this conversation →
                                 </button>
@@ -950,28 +950,28 @@ export default function Home() {
               {/* Step 2: Voice/Text Selection */}
               {inputMode === 'choice' && !openingMessage && !openingLoading && transcripts.length === 0 && (
                 <div className="flex-1 flex flex-col items-center justify-center py-20 text-center fade-in-up">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#a3785e]/10 to-transparent border border-[#a3785e]/10 flex items-center justify-center mb-6">
-                    <span className="text-2xl font-light text-[#a3785e]">M</span>
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#b0611f]/10 to-transparent border border-[#b0611f]/10 flex items-center justify-center mb-6">
+                    <span className="text-2xl font-light text-[#b0611f]">M</span>
                   </div>
                   <p className="text-sm font-medium text-foreground mb-1">How would you like to connect?</p>
                   <p className="text-xs text-muted-foreground/50 mb-8">Choose your preferred input for this session</p>
                   <div className="flex gap-4">
                     <button
                       onClick={() => handleChooseMode('voice')}
-                      className="flex flex-col items-center gap-3 px-8 py-6 rounded-2xl border border-border hover:border-[#a3785e]/30 hover:bg-[#a3785e]/5 transition-all group"
+                      className="flex flex-col items-center gap-3 px-8 py-6 rounded-2xl border border-border hover:border-[#b0611f]/30 hover:bg-[#b0611f]/5 transition-all group"
                     >
-                      <div className="w-12 h-12 rounded-xl bg-[#a3785e]/8 flex items-center justify-center group-hover:bg-[#a3785e]/15 transition-colors">
-                        <Mic className="w-6 h-6 text-[#a3785e]/60" />
+                      <div className="w-12 h-12 rounded-xl bg-[#b0611f]/8 flex items-center justify-center group-hover:bg-[#b0611f]/15 transition-colors">
+                        <Mic className="w-6 h-6 text-[#b0611f]/60" />
                       </div>
                       <span className="text-sm font-medium text-foreground">Voice</span>
                       <span className="text-[11px] text-muted-foreground/50">Speak naturally</span>
                     </button>
                     <button
                       onClick={() => handleChooseMode('text')}
-                      className="flex flex-col items-center gap-3 px-8 py-6 rounded-2xl border border-border hover:border-[#a3785e]/30 hover:bg-[#a3785e]/5 transition-all group"
+                      className="flex flex-col items-center gap-3 px-8 py-6 rounded-2xl border border-border hover:border-[#b0611f]/30 hover:bg-[#b0611f]/5 transition-all group"
                     >
-                      <div className="w-12 h-12 rounded-xl bg-[#a3785e]/8 flex items-center justify-center group-hover:bg-[#a3785e]/15 transition-colors">
-                        <Send className="w-5 h-5 text-[#a3785e]/60" />
+                      <div className="w-12 h-12 rounded-xl bg-[#b0611f]/8 flex items-center justify-center group-hover:bg-[#b0611f]/15 transition-colors">
+                        <Send className="w-5 h-5 text-[#b0611f]/60" />
                       </div>
                       <span className="text-sm font-medium text-foreground">Text</span>
                       <span className="text-[11px] text-muted-foreground/50">Type your thoughts</span>
@@ -989,9 +989,9 @@ export default function Home() {
                       <div className="flex justify-start fade-in">
                         <div className="marcus-message message-bubble">
                           <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" />
-                            <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" style={{ animationDelay: '0.15s' }} />
-                            <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
+                            <div className="w-1.5 h-1.5 bg-[#b0611f] rounded-full animate-bounce" />
+                            <div className="w-1.5 h-1.5 bg-[#b0611f] rounded-full animate-bounce" style={{ animationDelay: '0.15s' }} />
+                            <div className="w-1.5 h-1.5 bg-[#b0611f] rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
                           </div>
                         </div>
                       </div>
@@ -1025,9 +1025,9 @@ export default function Home() {
                       <div className="flex justify-start fade-in">
                         <div className="marcus-message message-bubble">
                           <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" />
-                            <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" style={{ animationDelay: '0.15s' }} />
-                            <div className="w-1.5 h-1.5 bg-[#a3785e] rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
+                            <div className="w-1.5 h-1.5 bg-[#b0611f] rounded-full animate-bounce" />
+                            <div className="w-1.5 h-1.5 bg-[#b0611f] rounded-full animate-bounce" style={{ animationDelay: '0.15s' }} />
+                            <div className="w-1.5 h-1.5 bg-[#b0611f] rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
                           </div>
                         </div>
                       </div>

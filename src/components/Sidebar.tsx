@@ -81,8 +81,8 @@ export default function Sidebar({
       <div className="flex-1 overflow-y-auto py-2">
         {sessions.length === 0 ? (
           <div className="px-4 py-16 text-center space-y-3">
-            <div className="w-12 h-12 rounded-xl bg-[#a3785e]/5 border border-[#a3785e]/10 flex items-center justify-center mx-auto">
-              <Mic className="w-5 h-5 text-[#a3785e]/30" />
+            <div className="w-12 h-12 rounded-xl bg-[#b0611f]/5 border border-[#b0611f]/10 flex items-center justify-center mx-auto">
+              <Mic className="w-5 h-5 text-[#b0611f]/30" />
             </div>
             <p className="text-xs text-muted-foreground/60">No sessions yet</p>
             <p className="text-[11px] text-muted-foreground/30">Start speaking to begin</p>
@@ -96,7 +96,7 @@ export default function Sidebar({
                 'w-full text-left px-4 py-3 transition-all duration-200 border-l-2 border-transparent',
                 'hover:bg-accent',
                 activeSessionId === session.id
-                  ? 'bg-accent border-l-[#a3785e]'
+                  ? 'bg-accent border-l-[#b0611f]'
                   : ''
               )}
             >

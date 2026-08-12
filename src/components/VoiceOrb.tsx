@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Mic, Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
@@ -124,59 +123,60 @@ export default function VoiceOrb({
     isRecording ? stopRecording() : startRecording();
   };
 
-  const orbClass = state === 'listening' ? 'orb-listening'
-    : state === 'speaking' ? 'orb-speaking'
-    : state === 'processing' ? '' : 'orb-idle';
+  // Prototype 2B orb — pure-CSS pearlescent stone sphere with state-driven rings
+  // and terracotta rim. VoiceState -> orb state: idle=open, listening, processing=
+  // reflecting (spinning arc), speaking (rim pulse), disabled=held (desaturated).
+  const rimAlpha = state === 'speaking' ? 0.8 : state === 'listening' ? 0.62 : 0.5;
+  const rimAnim = state === 'speaking' ? 'rim-pulse 2.6s ease-in-out infinite' : 'none';
+  const orbSat = disabled ? 0.35 : 1;
+  const interactive = !(disabled || state === 'processing' || state === 'speaking');
 
   return (
-    <div className="relative flex items-center justify-center">
-      {/* Ambient rings */}
+    <div
+      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      aria-label={isRecording ? 'Stop speaking' : 'Start speaking'}
+      className={cn('relative flex items-center justify-center select-none', interactive ? 'cursor-pointer' : 'cursor-not-allowed')}
+      style={{ width: 220, height: 220 }}
+    >
+      {/* listening — two terracotta ripple rings */}
       {state === 'listening' && (
         <>
-          <div className="absolute w-32 h-32 rounded-full bg-red-500/8 pulse-ring" />
-          <div className="absolute w-28 h-28 rounded-full bg-red-500/5 pulse-ring" style={{ animationDelay: '0.6s' }} />
+          <div className="absolute rounded-full" style={{ width: 204, height: 204, border: '1px solid rgba(176,97,31,.4)', animation: 'ring-out 3.4s ease-out infinite' }} />
+          <div className="absolute rounded-full" style={{ width: 204, height: 204, border: '1px solid rgba(176,97,31,.28)', animation: 'ring-out 3.4s ease-out infinite', animationDelay: '1.2s' }} />
         </>
       )}
-      {state === 'speaking' && (
-        <>
-          <div className="absolute w-32 h-32 rounded-full bg-[#a3785e]/8 pulse-ring" style={{ animationDuration: '3s' }} />
-          <div className="absolute w-28 h-28 rounded-full bg-[#a3785e]/5 pulse-ring" style={{ animationDuration: '3s', animationDelay: '0.8s' }} />
-        </>
-      )}
+      {/* processing — single spinning terracotta-topped arc */}
       {state === 'processing' && (
-        <div className="absolute w-24 h-24 rounded-full border-2 border-transparent border-t-[#a3785e]/40 animate-spin" />
+        <div className="absolute rounded-full" style={{ width: 232, height: 232, border: '1px solid #e4dfd7', borderTopColor: '#b0611f', animation: 'arc-turn 5.5s linear infinite' }} />
+      )}
+      {/* held (disabled) — dashed grey static ring */}
+      {disabled && (
+        <div className="absolute rounded-full" style={{ width: 228, height: 228, border: '1px dashed #cdc6bc' }} />
       )}
 
-      {/* Main orb */}
-      <button
-        onClick={handleClick}
-        disabled={disabled || state === 'processing' || state === 'speaking'}
-        className={cn(
-          'relative w-20 h-20 rounded-full flex items-center justify-center',
-          'transition-all duration-500 focus:outline-none',
-          (disabled || state === 'processing' || state === 'speaking') ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
-          orbClass
-        )}
+      {/* orb body — pearlescent stone sphere */}
+      <div
+        className="relative rounded-full"
         style={{
-          background: isRecording
-            ? 'radial-gradient(circle at 35% 35%, rgba(220,38,38,0.15), rgba(220,38,38,0.05))'
-            : state === 'speaking'
-              ? 'radial-gradient(circle at 35% 35%, rgba(163,120,94,0.15), rgba(163,120,94,0.05))'
-              : 'radial-gradient(circle at 35% 35%, rgba(163,120,94,0.08), rgba(163,120,94,0.02))',
-          border: isRecording
-            ? '1px solid rgba(220,38,38,0.25)'
-            : '1px solid rgba(163,120,94,0.2)',
+          width: 204, height: 204,
+          background: 'radial-gradient(circle at 34% 30%,#ffffff 0%,#f2eee6 22%,#ded7cb 52%,#b8ada0 82%,#8e8377 100%)',
+          boxShadow: '0 26px 50px -20px rgba(60,52,44,.5), inset 0 -22px 44px rgba(90,80,68,.28), inset 0 12px 22px rgba(255,255,255,.7), 0 0 0 1px rgba(20,16,14,.08)',
+          animation: 'orb-still 8s ease-in-out infinite',
+          filter: `saturate(${orbSat})`,
         }}
-      >
-        {isRecording ? (
-          <Square className="w-5 h-5 text-red-500 fill-red-500/80" />
-        ) : (
-          <Mic className={cn(
-            'w-6 h-6 transition-colors',
-            state === 'speaking' ? 'text-[#a3785e]' : 'text-[#a3785e]/70'
-          )} />
-        )}
-      </button>
+      />
+      {/* rim glow */}
+      <div
+        className="absolute rounded-full pointer-events-none"
+        style={{
+          width: 204, height: 204,
+          background: `radial-gradient(circle at 74% 76%,rgba(176,97,31,${disabled ? 0.12 : rimAlpha}),transparent 44%)`,
+          mixBlendMode: 'multiply',
+          animation: rimAnim,
+        }}
+      />
     </div>
   );
 }

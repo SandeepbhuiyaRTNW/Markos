@@ -99,7 +99,7 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
   if (loading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3">
-        <div className="w-7 h-7 rounded-full border-2 border-[#a3785e]/20 border-t-[#a3785e] animate-spin" />
+        <div className="w-7 h-7 rounded-full border-2 border-[#b0611f]/20 border-t-[#b0611f] animate-spin" />
         <p className="text-xs text-muted-foreground/50">Loading session…</p>
       </div>
     );
@@ -116,7 +116,7 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
           <h3 className="text-sm font-semibold text-foreground truncate">{title || 'Session'}</h3>
           {meta && <p className="text-[11px] text-muted-foreground/60">{new Date(meta.started_at).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>}
         </div>
-        {mood && <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-[#a3785e]/8 text-[#a3785e]/70 font-medium uppercase tracking-wider">{mood}</span>}
+        {mood && <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-[#b0611f]/8 text-[#b0611f]/70 font-medium uppercase tracking-wider">{mood}</span>}
       </div>
 
       {/* Split-screen body */}
@@ -127,7 +127,7 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
             {/* Summary */}
             {meta?.summary && (
               <div className="glass-strong rounded-2xl p-5">
-                <span className="text-xs font-semibold uppercase tracking-widest text-[#a3785e] block mb-2">Summary</span>
+                <span className="text-xs font-semibold uppercase tracking-widest text-[#b0611f] block mb-2">Summary</span>
                 <p className="text-sm leading-relaxed text-foreground/90">{meta.summary}</p>
               </div>
             )}
@@ -136,12 +136,12 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
             {takeaways.length > 0 && (
               <div className="glass-strong rounded-2xl p-5">
                 <div className="flex items-center gap-2 mb-3">
-                  <Lightbulb className="w-4 h-4 text-[#a3785e]" />
-                  <span className="text-xs font-semibold uppercase tracking-widest text-[#a3785e]">Key Takeaways</span>
+                  <Lightbulb className="w-4 h-4 text-[#b0611f]" />
+                  <span className="text-xs font-semibold uppercase tracking-widest text-[#b0611f]">Key Takeaways</span>
                 </div>
                 <ul className="space-y-2">
                   {takeaways.map((t, i) => (
-                    <li key={i} className="flex gap-2.5 text-sm text-foreground/80"><span className="text-[#a3785e]/60 mt-0.5">→</span><span>{t}</span></li>
+                    <li key={i} className="flex gap-2.5 text-sm text-foreground/80"><span className="text-[#b0611f]/60 mt-0.5">→</span><span>{t}</span></li>
                   ))}
                 </ul>
               </div>
@@ -149,11 +149,11 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
 
             {/* Pondering Topics */}
             {ponderingTopics.length > 0 && (
-              <div className="glass-strong rounded-2xl p-5 border border-[#a3785e]/10">
-                <span className="text-xs font-semibold uppercase tracking-widest text-[#a3785e] block mb-3">Ponder Before Next Session</span>
+              <div className="glass-strong rounded-2xl p-5 border border-[#b0611f]/10">
+                <span className="text-xs font-semibold uppercase tracking-widest text-[#b0611f] block mb-3">Ponder Before Next Session</span>
                 <div className="space-y-3">
                   {ponderingTopics.map((t, i) => (
-                    <div key={i} className="flex gap-2.5 text-sm text-muted-foreground italic"><span className="text-[#a3785e]/50 mt-0.5 not-italic">✦</span><span>{t}</span></div>
+                    <div key={i} className="flex gap-2.5 text-sm text-muted-foreground italic"><span className="text-[#b0611f]/50 mt-0.5 not-italic">✦</span><span>{t}</span></div>
                   ))}
                 </div>
               </div>
@@ -225,7 +225,7 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
             {/* Stoic Principle */}
             {stoicPrinciple && (
               <div className="flex items-center gap-2 py-2">
-                <BookOpen className="w-3.5 h-3.5 text-[#a3785e]/50" />
+                <BookOpen className="w-3.5 h-3.5 text-[#b0611f]/50" />
                 <span className="text-[11px] text-muted-foreground/50">Stoic Principle: <span className="text-foreground/70 font-medium">{stoicPrinciple}</span></span>
               </div>
             )}
@@ -248,7 +248,7 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
                 <div className={cn('message-bubble', msg.role === 'marcus' ? 'marcus-message' : 'user-message')}>
                   <p className="text-sm leading-relaxed">{msg.content}</p>
                   {msg.emotion_detected && (
-                    <span className="inline-block mt-2 text-[10px] px-2 py-0.5 rounded-full bg-[#a3785e]/8 text-[#a3785e]/80">{msg.emotion_detected}</span>
+                    <span className="inline-block mt-2 text-[10px] px-2 py-0.5 rounded-full bg-[#b0611f]/8 text-[#b0611f]/80">{msg.emotion_detected}</span>
                   )}
                 </div>
               </div>
