@@ -29,7 +29,9 @@ const SUICIDE_PATTERNS = [
   // v3: added the gerund forms (kill→killing, end→ending) so explicit ideation like
   // "thinking about killing myself" / "ending it" is caught, not just "kill myself".
   /\b(suicid|kill(ing)?\s*my\s*self|end(ing)?\s*(my|it|things)|checking\s*out|better\s*off\s*(without|dead))\b/i,
-  /\b(want\s*to\s*die|don'?t\s*want\s*to\s*(be\s*here|live|exist|wake\s*up))\b/i,
+  // v3.2: "be here" moved to the context-guarded INDIRECT set below (so "...be here
+  // at work / at this party" no longer false-fires). live/exist/wake up/be alive stay.
+  /\b(want\s*to\s*die|don'?t\s*want\s*to\s*(live|exist|wake\s*up|be\s*alive))\b/i,
   /\b(self[\s-]*harm|cut\s*my\s*self|hurt\s*my\s*self)\b/i,
   /\b(no\s*(point|reason)\s*(in\s*)?(living|going\s*on|being\s*here))\b/i,
 
@@ -71,6 +73,40 @@ const SUICIDE_PATTERNS = [
   /\b(sometimes\s*i\s*(think\s*about|wonder\s*(about|if))\s*(dying|ending\s*it|not\s*(being|existing|waking)))\b/i,
   /\b(thought\s*about\s*(it|ending\s*it)\s*(a\s*lot|more\s*(than|and\s*more)|every\s*day|lately))\b/i,
   /\b(getting\s*(closer|harder)\s*to\s*(not\s*)?(doing|acting\s*on)\s*it)\b/i,
+];
+
+// v3.2 — INDIRECT suicidal ideation. Soft / oblique expressions of not wanting to
+// live, be here, or exist. These fire the SAME acute suicide response as explicit
+// intent — safety-forward, because a missed disclosure is the graver error. Context
+// guards (negative lookaheads) keep clearly non-suicidal uses out: "...be here at
+// work / at this party", "sick of living paycheck to paycheck", "can't go on
+// vacation", "no future in this company", "no reason to celebrate".
+const INDIRECT_SUICIDE_PATTERNS = [
+  // "don't want to be here" UNLESS a place/context follows (at work / at this party /
+  // in this meeting / for this). "be here anymore / at all / on this earth" still fires.
+  /\bdon'?t\s*want\s*to\s*be\s*here\b(?!\s+(?:at|in|for|during|around|with)\s+(?!all\b)\w)/i,
+  /\b(tired|sick)\s*of\s*(being\s*alive|living|breathing)\b(?!\s+(?:in|on|with|at|like|near|next|paycheck|off|through|around|among|here|this|that|my|the|a\b))/i,
+  // "can't go/carry on" fires only when terminal or followed by an SI continuation
+  // (anymore / any longer / like this / living) — never before an object ("...on
+  // this trip / vacation / a tour"). Whitelist beats blocklisting endless nouns.
+  /\bcan'?t\s*(go|carry)\s*on\b(?=[\s,.;!?]*(?:$|anymore\b|any\s*more\b|any\s*longer\b|like\s*this\b|living\b|much\s*longer\b|in\s*life\b))/i,
+  /\bcan'?t\s*keep\s*living\b/i,
+  /\b(everyone|everybody|the\s*world|they'?d\s*all|you'?d\s*all)\s*(would\s*be|'?d\s*be|'?s|is|are)?\s*better\s*off\s*(without\s*me|if\s*i\s*(was|were|wasn'?t|weren'?t)\s*(here|around|alive|gone)|when\s*i'?m\s*gone|once\s*i'?m\s*gone)\b/i,
+  /\bbetter\s*off\s*if\s*i\s*(was|were|wasn'?t|weren'?t)\s*(here|around|alive|gone|born)\b/i,
+  /\bwish\s*i\s*(was|were)\s*(dead|gone|never\s*born)\b/i,
+  /\bwish\s*i\s*(wasn'?t|weren'?t)\s*(here|alive|around|born)\b/i,
+  /\bdon'?t\s*(see|have)\s*(a|any)\s*future\b(?!\s+in\s+\w)/i,
+  /\bdon'?t\s*(see|have)\s*(a|any)\s*reason\s*to\s*(live|go\s*on|keep\s*going|be\s*here|wake\s*up|get\s*up|carry\s*on)\b/i,
+  /\b(go(ing)?\s*to\s*sleep|lie\s*down|fall\s*asleep)\s*and\s*(not|never)\s*(wake|waking)\s*up\b/i,
+  /\bsleep\s*(forever|and\s*never\s*wake(\s*up)?)\b/i,
+  /\bwant\s*(the|this|it|it\s*all)\s*(pain\s*)?to\s*(stop|end|be\s*over)\s*(forever|for\s*good|permanently)\b/i,
+  // AMBIGUOUS ESCALATION (reverses the earlier re-calibration for this family):
+  // "what's the point anymore" / "...of living / of anything" now fires crisis.
+  /\bwhat'?s\s*the\s*point\s*(of|in)\s*(living|life|going\s*on|carrying\s*on|being\s*here|getting\s*up|trying|it\s*all|any\s*of\s*(this|it)|anything)\b/i,
+  /\bwhat'?s\s*the\s*point\s*(anymore|any\s*more)\b/i,
+  /\b(no|there'?s\s*no)\s*point\s*(in|to)\s*(living|going\s*on|carrying\s*on|being\s*here|getting\s*up|anything|any\s*of\s*(this|it))\b/i,
+  /\b(ready\s*to|want\s*to)\s*(give\s*up\s*on|be\s*done\s*with)\s*(life|living|it\s*all|everything)\b/i,
+  /\b(done\s*with\s*(life|living)|through\s*with\s*(life|living))\b/i,
 ];
 
 const VIOLENCE_PATTERNS = [
@@ -162,7 +198,8 @@ const GENTLE_CHECK_IN_PATTERNS = [
 
 /** Fast classifier — stage 1 */
 export function detectCrisisType(message: string): CrisisType {
-  if (SUICIDE_PATTERNS.some(p => p.test(message))) return 'suicide';
+  // Explicit OR indirect suicidal ideation -> the same acute suicide response.
+  if (SUICIDE_PATTERNS.some(p => p.test(message)) || INDIRECT_SUICIDE_PATTERNS.some(p => p.test(message))) return 'suicide';
   if (VIOLENCE_PATTERNS.some(p => p.test(message))) return 'violence_toward_others';
   if (DV_PERPETRATING_PATTERNS.some(p => p.test(message))) return 'domestic_violence_perpetrating';
   if (DV_VICTIM_PATTERNS.some(p => p.test(message))) return 'domestic_violence_victim';
