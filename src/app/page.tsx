@@ -980,8 +980,131 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Chat-style transcript area (visible after mode is chosen) */}
-              {inputMode !== 'choice' && inputMode !== 'session-type' && inputMode !== 'pick-session' && (
+              {/* ─── VOICE SESSION — Prototype 2B "hands-free" composition ─── */}
+              {/* Matched to design-ref "Markos Voice States (hands-free)" 4A–4E: orb */}
+              {/* anchored left as the focal point + live line right, one 2px rule, the */}
+              {/* conversation flowing in a cohesive column, a 66px footer with status. */}
+              {inputMode === 'voice' && (
+                <div className="flex-1 flex flex-col min-h-0" style={{ background: '#faf9f6' }}>
+                  {/* Focal block — orb (anchor) + live line */}
+                  <div
+                    className="flex-none flex items-center gap-8 sm:gap-11 px-6 sm:px-10 lg:px-16 py-8 sm:py-9"
+                    style={{ borderBottom: '2px solid #14100e' }}
+                  >
+                    <div className="flex-none flex items-center justify-center">
+                      <VoiceOrb
+                        onStateChange={(s) => { if (s === 'listening') setVoiceError(null); setState(s); }}
+                        onTranscript={handleTranscript}
+                        onError={setVoiceError}
+                        userId={userId}
+                        conversationId={conversationId}
+                        onConversationId={setConversationId}
+                        state={state}
+                        disabled={state === 'processing' || state === 'speaking'}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span
+                        className="block"
+                        style={{ fontSize: 9, letterSpacing: '.26em', textTransform: 'uppercase',
+                          color: (state === 'listening' || state === 'processing') ? '#6b6259' : '#b0611f' }}
+                      >
+                        {(state === 'listening' || state === 'processing') ? 'You' : 'Marcus'}
+                      </span>
+
+                      {state === 'listening' ? (
+                        <>
+                          <p className="font-serif" style={{ margin: '14px 0 0', fontSize: 22, lineHeight: 1.5, color: '#3d352e' }}>
+                            I&rsquo;m listening.
+                          </p>
+                          <div className="flex items-end gap-1" style={{ height: 22, marginTop: 22 }}>
+                            {[0, 0.1, 0.22, 0.34, 0.46, 0.58, 0.7].map((d, i) => (
+                              <span key={i} style={{ width: 3, background: i < 5 ? '#b0611f' : '#c9b9a2', animation: 'level 1s ease-in-out infinite', animationDelay: `${d}s` }} />
+                            ))}
+                          </div>
+                        </>
+                      ) : state === 'processing' ? (
+                        <p className="font-serif" style={{ margin: '22px 0 0', fontSize: 19, fontStyle: 'italic', color: '#8c8378' }}>
+                          Reflecting&hellip;
+                        </p>
+                      ) : state === 'speaking' && transcripts.length > 0 ? (
+                        <>
+                          <p className="font-serif" style={{ margin: '14px 0 0', fontSize: 26, lineHeight: 1.45, color: '#14100e', textWrap: 'pretty' }}>
+                            {transcripts[transcripts.length - 1].marcus}
+                          </p>
+                          <p style={{ margin: '18px 0 0', fontSize: 12.5, lineHeight: 1.6, color: '#6b6259' }}>
+                            Start speaking any time &mdash; he will stop.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-serif" style={{ margin: '14px 0 0', fontSize: 24, lineHeight: 1.5, color: '#14100e' }}>
+                            {openingLoading ? 'One moment…' : 'The mic is open.'}
+                          </p>
+                          <p style={{ margin: '18px 0 0', fontSize: 12.5, lineHeight: 1.6, color: '#6b6259' }}>
+                            Speak whenever you are ready &mdash; no button to hold.
+                          </p>
+                        </>
+                      )}
+
+                      {voiceError && (
+                        <p style={{ margin: '14px 0 0', fontSize: 12, color: '#b0611f', maxWidth: 420 }}>{voiceError}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Conversation column — the cohesive record of the session */}
+                  <div className="flex-1 overflow-y-auto px-6 sm:px-10 lg:px-16 py-8">
+                    <div className="mx-auto flex flex-col gap-8" style={{ maxWidth: 720 }}>
+                      {openingMessage && !openingLoading && (
+                        <div className="flex flex-col gap-2 fade-in">
+                          <span className="kicker" style={{ color: '#b0611f' }}>Marcus</span>
+                          <div className="marcus-message message-bubble">{openingMessage}</div>
+                        </div>
+                      )}
+                      {(state === 'speaking' ? transcripts.slice(0, -1) : transcripts).map((t, i) => (
+                        <div key={i} className="flex flex-col gap-6 fade-in">
+                          <div className="flex justify-end">
+                            <div className="user-message message-bubble">{t.user}</div>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <span className="kicker" style={{ color: '#b0611f' }}>Marcus</span>
+                            <div className="marcus-message message-bubble">{t.marcus}</div>
+                          </div>
+                        </div>
+                      ))}
+                      <div ref={messagesEndRef} />
+                    </div>
+                  </div>
+
+                  {/* Footer — status dot + label (left), End Session (right) */}
+                  <div className="flex-none flex items-center justify-between px-6 sm:px-10 lg:px-16" style={{ height: 66, borderTop: '2px solid #14100e' }}>
+                    <div className="flex items-center gap-3">
+                      <span style={{ width: 7, height: 7,
+                        background: state === 'processing' ? '#c9b9a2' : '#b0611f',
+                        animation: state === 'processing' ? 'none' : `dot-pulse ${state === 'listening' ? '1.4s' : state === 'speaking' ? '2.6s' : '3s'} ease-in-out infinite` }} />
+                      <span style={{ fontSize: 10, letterSpacing: '.26em', textTransform: 'uppercase', color: '#5c534b' }}>
+                        {state === 'listening' ? 'Listening · pause when you pause'
+                          : state === 'processing' ? 'Reflecting · he will not cut you off'
+                          : state === 'speaking' ? 'Speaking'
+                          : 'Mic open'}
+                      </span>
+                    </div>
+                    {(transcripts.length > 0 || openingMessage) && conversationId && (
+                      <button
+                        onClick={handleEndSession}
+                        disabled={endingSession}
+                        className="flex items-center gap-2 h-[38px] px-4 text-[10.5px] font-semibold uppercase tracking-[.14em] text-[#14100e] border-2 border-[#14100e] hover:bg-[#14100e] hover:text-[#faf9f6] transition-colors disabled:opacity-50"
+                      >
+                        {endingSession ? (<><Loader2 className="w-3.5 h-3.5 animate-spin" /> Ending…</>) : (<><Shield className="w-3.5 h-3.5" /> End Session</>)}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Chat-style transcript area — TEXT session (aligned in the next pass) */}
+              {inputMode === 'text' && (
                 <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-6">
                   <div className="max-w-2xl mx-auto space-y-4">
                     {/* Opening message from Marcus */}
@@ -1038,35 +1161,12 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Bottom controls */}
-              {inputMode !== 'choice' && (
+              {/* Bottom controls — TEXT composer only (voice controls live in the */}
+              {/* voice focal block + footer above). Text screen aligned next pass. */}
+              {inputMode === 'text' && (
                 <div className="border-t border-border bg-white px-4 lg:px-8 py-4">
                   <div className="max-w-2xl mx-auto">
-                    {inputMode === 'voice' ? (
-                      <>
-                        {/* Voice Orb + Status */}
-                        <div className="flex flex-col items-center gap-3 mb-4">
-                          <VoiceOrb
-                            onStateChange={(s) => { if (s === 'listening') setVoiceError(null); setState(s); }}
-                            onTranscript={handleTranscript}
-                            onError={setVoiceError}
-                            userId={userId}
-                            conversationId={conversationId}
-                            onConversationId={setConversationId}
-                            state={state}
-                            disabled={state === 'processing' || state === 'speaking'}
-                          />
-                          <p className="text-[11px] tracking-wider uppercase text-muted-foreground/50">
-                            {statusLabel[state]}
-                          </p>
-                          {voiceError && (
-                            <p className="text-xs text-amber-600 text-center max-w-xs px-4">
-                              {voiceError}
-                            </p>
-                          )}
-                        </div>
-                      </>
-                    ) : (
+                    {(
                       <>
                         {/* Text Input */}
                         <div className="flex items-center gap-3 mb-4">
