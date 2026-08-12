@@ -86,7 +86,10 @@ const INDIRECT_SUICIDE_PATTERNS = [
   // in this meeting / for this). "be here anymore / at all / on this earth" still fires.
   /\bdon'?t\s*want\s*to\s*be\s*here\b(?!\s+(?:at|in|for|during|around|with)\s+(?!all\b)\w)/i,
   /\b(tired|sick)\s*of\s*(being\s*alive|living|breathing)\b(?!\s+(?:in|on|with|at|like|near|next|paycheck|off|through|around|among|here|this|that|my|the|a\b))/i,
-  /\bcan'?t\s*(go|carry)\s*on\b(?!\s+(?:a|an|the|to|with|without|for|in|on|vacation|holiday|trip|stage|tour|record|working|doing|here|there|about)\b)/i,
+  // "can't go/carry on" fires only when terminal or followed by an SI continuation
+  // (anymore / any longer / like this / living) — never before an object ("...on
+  // this trip / vacation / a tour"). Whitelist beats blocklisting endless nouns.
+  /\bcan'?t\s*(go|carry)\s*on\b(?=[\s,.;!?]*(?:$|anymore\b|any\s*more\b|any\s*longer\b|like\s*this\b|living\b|much\s*longer\b|in\s*life\b))/i,
   /\bcan'?t\s*keep\s*living\b/i,
   /\b(everyone|everybody|the\s*world|they'?d\s*all|you'?d\s*all)\s*(would\s*be|'?d\s*be|'?s|is|are)?\s*better\s*off\s*(without\s*me|if\s*i\s*(was|were|wasn'?t|weren'?t)\s*(here|around|alive|gone)|when\s*i'?m\s*gone|once\s*i'?m\s*gone)\b/i,
   /\bbetter\s*off\s*if\s*i\s*(was|were|wasn'?t|weren'?t)\s*(here|around|alive|gone|born)\b/i,

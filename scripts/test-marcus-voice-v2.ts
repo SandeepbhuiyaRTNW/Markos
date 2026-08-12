@@ -232,7 +232,7 @@ for (const m of ["I don't want to be here anymore", "what's the point anymore", 
   assert(`indirect SI -> suicide: "${m}"`, detectCrisisType(m) === 'suicide', String(detectCrisisType(m)));
 }
 // Context guards: benign uses of the same phrasing must NOT fire.
-for (const m of ["I don't want to be here at work", "I don't want to be here at this party", "I'm sick of living paycheck to paycheck", "I can't go on vacation without her", "I don't have a reason to celebrate", "there's no future in this company"]) {
+for (const m of ["I don't want to be here at work", "I don't want to be here at work today", "I don't want to be here at this party", "what's the point of this meeting", "I'm so tired", "I'm sick of living paycheck to paycheck", "I can't go on vacation without her", "I can't go on this trip", "I don't have a reason to celebrate", "there's no future in this company"]) {
   assert(`context guard holds -> NOT crisis: "${m}"`, detectCrisisType(m) === null, String(detectCrisisType(m)));
 }
 // Explicit + abuse/DV/third-party unchanged by the expansion.
