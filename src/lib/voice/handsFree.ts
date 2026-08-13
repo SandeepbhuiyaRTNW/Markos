@@ -52,6 +52,24 @@ export function shouldIgnoreInput(state: VoiceState, held: boolean): boolean {
 }
 
 /**
+ * After Marcus's audio fully ends, wait this long before reopening the mic for the
+ * next turn. The HTMLAudioElement 'ended' event already guarantees his audio is done;
+ * this short buffer keeps any residual room echo/tail off the VAD's first frame
+ * (belt-and-suspenders with the always-on echoCancellation). ~400ms is below
+ * perceptible lag but clears the handoff.
+ */
+export const REARM_COOLDOWN_MS = 400;
+
+/**
+ * Whether the mic should auto-reopen for the next turn after Marcus finishes. Pure so
+ * the loop condition is unit-tested: reopen only in hands-free, only while the session
+ * is still live (room mounted), and never while the user has muted.
+ */
+export function shouldRearm(opts: { handsFree: boolean; sessionEnded: boolean; muted: boolean }): boolean {
+  return opts.handsFree && !opts.sessionEnded && !opts.muted;
+}
+
+/**
  * Encode 16 kHz mono Float32 PCM (as delivered by the VAD's onSpeechEnd) into a
  * 16-bit PCM WAV buffer, so the existing /api/conversation (Whisper) accepts it
  * unchanged — the server detects `wav` from the mime type. Server stays byte-identical.

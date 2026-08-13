@@ -61,6 +61,8 @@ export default function Home() {
   const [showTranscript, setShowTranscript] = useState(false);
   // Hands-free voice (VAD, mic open, auto start/stop) vs classic tap-to-talk fallback.
   const [handsFree, setHandsFree] = useState(true);
+  // Manual mute inside a hands-free session — pauses the mic without ending the session.
+  const [muted, setMuted] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [inputMode, setInputMode] = useState<InputMode>('session-type');
   const [sessionType, setSessionType] = useState<SessionType>('continue');
@@ -617,6 +619,7 @@ export default function Home() {
                 state={state}
                 disabled={state === 'processing' || state === 'speaking'}
                 handsFree={handsFree}
+                muted={muted}
               />
             </div>
             <div className="flex-1 min-w-0">
@@ -690,6 +693,18 @@ export default function Home() {
               >
                 · {handsFree ? 'hands-free' : 'tap to talk'}
               </button>
+              {/* Manual mute — pause the mic mid-session without ending it */}
+              {handsFree && (
+                <button
+                  onClick={() => setMuted((v) => !v)}
+                  className="ml-1 text-[10px] font-medium uppercase tracking-[.14em] transition-opacity hover:opacity-70"
+                  style={{ color: muted ? '#b0611f' : '#6b6259' }}
+                  title={muted ? 'Unmute the mic' : 'Mute the mic'}
+                  aria-pressed={muted}
+                >
+                  · {muted ? 'muted' : 'mute'}
+                </button>
+              )}
             </div>
             <div className="flex items-center gap-2.5">
               {/* Transcript toggle — opens/closes the running-session side panel */}

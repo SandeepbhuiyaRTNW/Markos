@@ -2,7 +2,7 @@
 // The VAD runtime behaviour (auto-detect, no-cutoff, ignore-Marcus, no false trigger)
 // needs a real microphone — that's the live test. These lock the tunables + encoding.
 // Run: npx tsx scripts/test-handsfree.ts
-import { VAD_TUNING, HANDS_FREE_AUDIO_CONSTRAINTS, floatToWav, shouldIgnoreInput } from '../src/lib/voice/handsFree';
+import { VAD_TUNING, HANDS_FREE_AUDIO_CONSTRAINTS, floatToWav, shouldIgnoreInput, shouldRearm, REARM_COOLDOWN_MS } from '../src/lib/voice/handsFree';
 
 let passed = 0, failed = 0;
 function assert(name: string, cond: boolean, detail = '') {
@@ -47,6 +47,13 @@ assert('data size = samples * 2', view.getUint32(40, true) === samples.length * 
 assert('full-scale +1 -> 32767', view.getInt16(44 + 3 * 2, true) === 0x7fff);
 assert('full-scale -1 -> -32768', view.getInt16(44 + 4 * 2, true) === -0x8000);
 assert('silence 0 -> 0', view.getInt16(44, true) === 0);
+
+console.log('\n── E. Auto-reopen loop — mic re-arms after Marcus, cleanly, every turn ──');
+assert('reopen cooldown exists and is a clean-handoff buffer (200–1000ms)', REARM_COOLDOWN_MS >= 200 && REARM_COOLDOWN_MS <= 1000, String(REARM_COOLDOWN_MS));
+assert('reopens in hands-free, live session, not muted', shouldRearm({ handsFree: true, sessionEnded: false, muted: false }) === true);
+assert('does NOT reopen once the session ended (room closed)', shouldRearm({ handsFree: true, sessionEnded: true, muted: false }) === false);
+assert('does NOT reopen while muted', shouldRearm({ handsFree: true, sessionEnded: false, muted: true }) === false);
+assert('does NOT auto-reopen in tap-to-talk mode', shouldRearm({ handsFree: false, sessionEnded: false, muted: false }) === false);
 
 console.log('\n── SUMMARY ──');
 console.log('  passed: ' + passed + '   failed: ' + failed);
