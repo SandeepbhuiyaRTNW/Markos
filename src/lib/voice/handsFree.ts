@@ -12,8 +12,12 @@ export type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
 export const VAD_TUNING = {
   model: 'v5' as const,
   // Silence (below negativeSpeechThreshold) must persist this long before the turn
-  // ends. ~1.7s keeps a natural thinking/emotional pause inside a single turn.
-  redemptionMs: 1700,
+  // ends and auto-sends. Tuned LONG on purpose: this is an emotional-support app and
+  // people pause mid-sentence to think, breathe, or cry — better to wait an extra beat
+  // than cut a grieving man off. ~2.2s. (Tradeoff: a slightly longer beat of quiet
+  // before Marcus replies. If it still clips, raise toward 2600; if it feels laggy,
+  // ease toward 2000.)
+  redemptionMs: 2200,
   // Prepend a lead-in so the first word is never clipped.
   preSpeechPadMs: 320,
   // Ignore blips shorter than this (a cough, a click, a single "mm").

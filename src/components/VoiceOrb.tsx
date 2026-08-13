@@ -139,6 +139,11 @@ export default function VoiceOrb({
           model: VAD_TUNING.model,
           baseAssetPath: VAD_ASSET_BASE,
           onnxWASMBasePath: VAD_ASSET_BASE,
+          // Run the ONNX runtime SINGLE-THREADED so it loads on a normal page WITHOUT
+          // cross-origin isolation (no COOP/COEP / SharedArrayBuffer). Multi-threaded
+          // wasm silently fails to init on a non-isolated page — the most likely reason
+          // hands-free "did not work". Single-thread is ample for the tiny Silero model.
+          ortConfig: (ort) => { ort.env.wasm.numThreads = 1; },
           positiveSpeechThreshold: VAD_TUNING.positiveSpeechThreshold,
           negativeSpeechThreshold: VAD_TUNING.negativeSpeechThreshold,
           redemptionMs: VAD_TUNING.redemptionMs,

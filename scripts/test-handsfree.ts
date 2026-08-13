@@ -11,7 +11,7 @@ function assert(name: string, cond: boolean, detail = '') {
 }
 
 console.log('\n── A. VAD tuning — errs toward WAITING (emotional pauses do not cut off) ──');
-assert('redemptionMs is long (>= 1500ms) so a natural pause does not end the turn', VAD_TUNING.redemptionMs >= 1500, String(VAD_TUNING.redemptionMs));
+assert('redemptionMs is long (>= 2000ms) so a natural pause does not end the turn', VAD_TUNING.redemptionMs >= 2000, String(VAD_TUNING.redemptionMs));
 assert('preSpeechPadMs prepends a lead-in (>= 200ms) so the first word is not clipped', VAD_TUNING.preSpeechPadMs >= 200);
 assert('minSpeechMs filters blips (>= 250ms)', VAD_TUNING.minSpeechMs >= 250);
 assert('negative threshold below positive (Silero convention)', VAD_TUNING.negativeSpeechThreshold < VAD_TUNING.positiveSpeechThreshold);
