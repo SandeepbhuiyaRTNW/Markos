@@ -583,6 +583,115 @@ export default function Home() {
     );
   }
 
+  // ─── Voice mode — full-screen immersive room (its own view, no chat-shell chrome) ───
+  // Layout-only: when the user is in a live voice session, render the voice room INSTEAD
+  // of the header + sidebar + chat shell below. Text/chat and every other view keep the
+  // shell unchanged. No state or handler changes — same VoiceOrb mount, same handlers.
+  if (view === 'voice' && inputMode === 'voice') {
+    return (
+      <div className="h-screen w-screen flex flex-col relative" style={{ background: '#faf9f6' }}>
+        {/* minimal exit — leave voice back to sessions without ending the conversation */}
+        <button
+          onClick={handleGoToAnalytics}
+          className="absolute top-5 right-6 z-20 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[.2em] text-[#6b6259] hover:text-[#14100e] transition-colors"
+          title="Back to sessions"
+        >
+          <History className="w-3.5 h-3.5" /> Sessions
+        </button>
+
+        {/* Session row — prototype's single flex:1 align-items:center row; content centered */}
+        <div className="flex-1 flex items-center justify-center px-6 sm:px-10 lg:px-16 py-9 min-h-0" style={{ borderBottom: '2px solid #14100e' }}>
+          <div className="flex items-center gap-8 sm:gap-11 w-full" style={{ maxWidth: 860 }}>
+            <div className="relative flex-none flex items-center justify-center">
+              <VoiceOrb
+                onStateChange={(s) => { if (s === 'listening') setVoiceError(null); setState(s); }}
+                onTranscript={handleTranscript}
+                onError={setVoiceError}
+                userId={userId}
+                conversationId={conversationId}
+                onConversationId={setConversationId}
+                state={state}
+                disabled={state === 'processing' || state === 'speaking'}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <span
+                className="block"
+                style={{ fontSize: 9, letterSpacing: '.26em', textTransform: 'uppercase',
+                  color: (state === 'listening' || state === 'processing') ? '#6b6259' : '#b0611f' }}
+              >
+                {(state === 'listening' || state === 'processing') ? 'You' : 'Marcus'}
+              </span>
+              {state === 'listening' ? (
+                <>
+                  <p className="font-serif" style={{ margin: '14px 0 0', fontSize: 22, lineHeight: 1.5, color: '#3d352e' }}>
+                    I&rsquo;m listening.
+                  </p>
+                  <div className="flex items-end gap-1" style={{ height: 22, marginTop: 22 }}>
+                    {[0, 0.1, 0.22, 0.34, 0.46, 0.58, 0.7].map((d, i) => (
+                      <span key={i} style={{ width: 3, background: i < 5 ? '#b0611f' : '#c9b9a2', animation: 'level 1s ease-in-out infinite', animationDelay: `${d}s` }} />
+                    ))}
+                  </div>
+                </>
+              ) : state === 'processing' ? (
+                <p className="font-serif" style={{ margin: '22px 0 0', fontSize: 19, fontStyle: 'italic', color: '#8c8378' }}>
+                  Reflecting&hellip;
+                </p>
+              ) : state === 'speaking' && transcripts.length > 0 ? (
+                <>
+                  <p className="font-serif" style={{ margin: '14px 0 0', fontSize: 26, lineHeight: 1.45, color: '#14100e', textWrap: 'pretty' }}>
+                    {transcripts[transcripts.length - 1].marcus}
+                  </p>
+                  <p style={{ margin: '18px 0 0', fontSize: 12.5, lineHeight: 1.6, color: '#6b6259' }}>
+                    Start speaking any time &mdash; he will stop.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-serif" style={{ margin: '14px 0 0', fontSize: 24, lineHeight: 1.5, color: '#14100e' }}>
+                    {openingLoading ? 'One moment…' : 'The mic is open.'}
+                  </p>
+                  <p style={{ margin: '18px 0 0', fontSize: 12.5, lineHeight: 1.6, color: '#6b6259' }}>
+                    Speak whenever you are ready &mdash; no button to hold.
+                  </p>
+                </>
+              )}
+              {voiceError && (
+                <p style={{ margin: '14px 0 0', fontSize: 12, color: '#b0611f', maxWidth: 420 }}>{voiceError}</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer — status (left) + End Session (right), aligned to the same centered column */}
+        <div className="flex-none px-6 sm:px-10 lg:px-16" style={{ height: 66 }}>
+          <div className="mx-auto w-full h-full flex items-center justify-between" style={{ maxWidth: 860 }}>
+            <div className="flex items-center gap-3">
+              <span style={{ width: 7, height: 7,
+                background: state === 'processing' ? '#c9b9a2' : '#b0611f',
+                animation: state === 'processing' ? 'none' : `dot-pulse ${state === 'listening' ? '1.4s' : state === 'speaking' ? '2.6s' : '3s'} ease-in-out infinite` }} />
+              <span style={{ fontSize: 10, letterSpacing: '.26em', textTransform: 'uppercase', color: '#5c534b' }}>
+                {state === 'listening' ? 'Listening · pause when you pause'
+                  : state === 'processing' ? 'Reflecting · he will not cut you off'
+                  : state === 'speaking' ? 'Speaking'
+                  : 'Mic open'}
+              </span>
+            </div>
+            {(transcripts.length > 0 || openingMessage) && conversationId && (
+              <button
+                onClick={handleEndSession}
+                disabled={endingSession}
+                className="flex items-center gap-2 h-[38px] px-4 text-[10.5px] font-semibold uppercase tracking-[.14em] text-[#14100e] border-2 border-[#14100e] hover:bg-[#14100e] hover:text-[#faf9f6] transition-colors disabled:opacity-50"
+              >
+                {endingSession ? (<><Loader2 className="w-3.5 h-3.5 animate-spin" /> Ending…</>) : (<><Shield className="w-3.5 h-3.5" /> End Session</>)}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ─── Main App (logged in) ───
   return (
     <div className="h-screen flex flex-col relative">
@@ -980,106 +1089,9 @@ export default function Home() {
                 </div>
               )}
 
-              {/* ─── VOICE SESSION — design-ref "Markos Voice States (hands-free)" ─── */}
-              {/* ONE centered row: the session area is a single flex:1 align-items:center */}
-              {/* row (orb + Marcus's text together, vertically centered, ~44px gap) inside */}
-              {/* the 2px-ruled panel, then a 66px footer. No stacked column, no dead-zone. */}
-              {inputMode === 'voice' && (
-                <div className="flex-1 flex flex-col min-h-0" style={{ background: '#faf9f6' }}>
-                  {/* Session row — the prototype's single flex:1 align-items:center row: */}
-                  {/* orb + Marcus's text together, vertically centered, ~44px gap, one 2px rule. */}
-                  <div
-                    className="flex-1 flex items-center gap-8 sm:gap-11 px-6 sm:px-10 lg:px-16 py-9 min-h-0"
-                    style={{ borderBottom: '2px solid #14100e' }}
-                  >
-                    {/* Orb container (prototype: relative, flex-none, centered) */}
-                    <div className="relative flex-none flex items-center justify-center">
-                      <VoiceOrb
-                        onStateChange={(s) => { if (s === 'listening') setVoiceError(null); setState(s); }}
-                        onTranscript={handleTranscript}
-                        onError={setVoiceError}
-                        userId={userId}
-                        conversationId={conversationId}
-                        onConversationId={setConversationId}
-                        state={state}
-                        disabled={state === 'processing' || state === 'speaking'}
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span
-                        className="block"
-                        style={{ fontSize: 9, letterSpacing: '.26em', textTransform: 'uppercase',
-                          color: (state === 'listening' || state === 'processing') ? '#6b6259' : '#b0611f' }}
-                      >
-                        {(state === 'listening' || state === 'processing') ? 'You' : 'Marcus'}
-                      </span>
-
-                      {state === 'listening' ? (
-                        <>
-                          <p className="font-serif" style={{ margin: '14px 0 0', fontSize: 22, lineHeight: 1.5, color: '#3d352e' }}>
-                            I&rsquo;m listening.
-                          </p>
-                          <div className="flex items-end gap-1" style={{ height: 22, marginTop: 22 }}>
-                            {[0, 0.1, 0.22, 0.34, 0.46, 0.58, 0.7].map((d, i) => (
-                              <span key={i} style={{ width: 3, background: i < 5 ? '#b0611f' : '#c9b9a2', animation: 'level 1s ease-in-out infinite', animationDelay: `${d}s` }} />
-                            ))}
-                          </div>
-                        </>
-                      ) : state === 'processing' ? (
-                        <p className="font-serif" style={{ margin: '22px 0 0', fontSize: 19, fontStyle: 'italic', color: '#8c8378' }}>
-                          Reflecting&hellip;
-                        </p>
-                      ) : state === 'speaking' && transcripts.length > 0 ? (
-                        <>
-                          <p className="font-serif" style={{ margin: '14px 0 0', fontSize: 26, lineHeight: 1.45, color: '#14100e', textWrap: 'pretty' }}>
-                            {transcripts[transcripts.length - 1].marcus}
-                          </p>
-                          <p style={{ margin: '18px 0 0', fontSize: 12.5, lineHeight: 1.6, color: '#6b6259' }}>
-                            Start speaking any time &mdash; he will stop.
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="font-serif" style={{ margin: '14px 0 0', fontSize: 24, lineHeight: 1.5, color: '#14100e' }}>
-                            {openingLoading ? 'One moment…' : 'The mic is open.'}
-                          </p>
-                          <p style={{ margin: '18px 0 0', fontSize: 12.5, lineHeight: 1.6, color: '#6b6259' }}>
-                            Speak whenever you are ready &mdash; no button to hold.
-                          </p>
-                        </>
-                      )}
-
-                      {voiceError && (
-                        <p style={{ margin: '14px 0 0', fontSize: 12, color: '#b0611f', maxWidth: 420 }}>{voiceError}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Footer — status dot + label (left), End Session (right) */}
-                  <div className="flex-none flex items-center justify-between px-6 sm:px-10 lg:px-16" style={{ height: 66 }}>
-                    <div className="flex items-center gap-3">
-                      <span style={{ width: 7, height: 7,
-                        background: state === 'processing' ? '#c9b9a2' : '#b0611f',
-                        animation: state === 'processing' ? 'none' : `dot-pulse ${state === 'listening' ? '1.4s' : state === 'speaking' ? '2.6s' : '3s'} ease-in-out infinite` }} />
-                      <span style={{ fontSize: 10, letterSpacing: '.26em', textTransform: 'uppercase', color: '#5c534b' }}>
-                        {state === 'listening' ? 'Listening · pause when you pause'
-                          : state === 'processing' ? 'Reflecting · he will not cut you off'
-                          : state === 'speaking' ? 'Speaking'
-                          : 'Mic open'}
-                      </span>
-                    </div>
-                    {(transcripts.length > 0 || openingMessage) && conversationId && (
-                      <button
-                        onClick={handleEndSession}
-                        disabled={endingSession}
-                        className="flex items-center gap-2 h-[38px] px-4 text-[10.5px] font-semibold uppercase tracking-[.14em] text-[#14100e] border-2 border-[#14100e] hover:bg-[#14100e] hover:text-[#faf9f6] transition-colors disabled:opacity-50"
-                      >
-                        {endingSession ? (<><Loader2 className="w-3.5 h-3.5 animate-spin" /> Ending…</>) : (<><Shield className="w-3.5 h-3.5" /> End Session</>)}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
+              {/* Voice mode is a full-screen view rendered above (the `view === 'voice' &&
+                  inputMode === 'voice'` early return); it is intentionally NOT rendered
+                  inside the chat shell, so the sidebar/header don't compete with it. */}
 
               {/* Chat-style transcript area — TEXT session (aligned in the next pass) */}
               {inputMode === 'text' && (
