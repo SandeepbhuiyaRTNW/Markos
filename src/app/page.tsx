@@ -980,18 +980,20 @@ export default function Home() {
                 </div>
               )}
 
-              {/* ─── VOICE SESSION — Prototype 2B "hands-free" composition ─── */}
-              {/* Matched to design-ref "Markos Voice States (hands-free)" 4A–4E: orb */}
-              {/* anchored left as the focal point + live line right, one 2px rule, the */}
-              {/* conversation flowing in a cohesive column, a 66px footer with status. */}
+              {/* ─── VOICE SESSION — design-ref "Markos Voice States (hands-free)" ─── */}
+              {/* ONE centered row: the session area is a single flex:1 align-items:center */}
+              {/* row (orb + Marcus's text together, vertically centered, ~44px gap) inside */}
+              {/* the 2px-ruled panel, then a 66px footer. No stacked column, no dead-zone. */}
               {inputMode === 'voice' && (
                 <div className="flex-1 flex flex-col min-h-0" style={{ background: '#faf9f6' }}>
-                  {/* Focal block — orb (anchor) + live line */}
+                  {/* Session row — the prototype's single flex:1 align-items:center row: */}
+                  {/* orb + Marcus's text together, vertically centered, ~44px gap, one 2px rule. */}
                   <div
-                    className="flex-none flex items-center gap-8 sm:gap-11 px-6 sm:px-10 lg:px-16 py-8 sm:py-9"
+                    className="flex-1 flex items-center gap-8 sm:gap-11 px-6 sm:px-10 lg:px-16 py-9 min-h-0"
                     style={{ borderBottom: '2px solid #14100e' }}
                   >
-                    <div className="flex-none flex items-center justify-center">
+                    {/* Orb container (prototype: relative, flex-none, centered) */}
+                    <div className="relative flex-none flex items-center justify-center">
                       <VoiceOrb
                         onStateChange={(s) => { if (s === 'listening') setVoiceError(null); setState(s); }}
                         onTranscript={handleTranscript}
@@ -1053,32 +1055,8 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* Conversation column — the cohesive record of the session */}
-                  <div className="flex-1 overflow-y-auto px-6 sm:px-10 lg:px-16 py-8">
-                    <div className="mx-auto flex flex-col gap-8" style={{ maxWidth: 720 }}>
-                      {openingMessage && !openingLoading && (
-                        <div className="flex flex-col gap-2 fade-in">
-                          <span className="kicker" style={{ color: '#b0611f' }}>Marcus</span>
-                          <div className="marcus-message message-bubble">{openingMessage}</div>
-                        </div>
-                      )}
-                      {(state === 'speaking' ? transcripts.slice(0, -1) : transcripts).map((t, i) => (
-                        <div key={i} className="flex flex-col gap-6 fade-in">
-                          <div className="flex justify-end">
-                            <div className="user-message message-bubble">{t.user}</div>
-                          </div>
-                          <div className="flex flex-col gap-2">
-                            <span className="kicker" style={{ color: '#b0611f' }}>Marcus</span>
-                            <div className="marcus-message message-bubble">{t.marcus}</div>
-                          </div>
-                        </div>
-                      ))}
-                      <div ref={messagesEndRef} />
-                    </div>
-                  </div>
-
                   {/* Footer — status dot + label (left), End Session (right) */}
-                  <div className="flex-none flex items-center justify-between px-6 sm:px-10 lg:px-16" style={{ height: 66, borderTop: '2px solid #14100e' }}>
+                  <div className="flex-none flex items-center justify-between px-6 sm:px-10 lg:px-16" style={{ height: 66 }}>
                     <div className="flex items-center gap-3">
                       <span style={{ width: 7, height: 7,
                         background: state === 'processing' ? '#c9b9a2' : '#b0611f',
