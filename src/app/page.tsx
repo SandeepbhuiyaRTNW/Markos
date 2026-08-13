@@ -59,6 +59,8 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // UI-only: transcript side panel in the voice room. Default closed = immersive.
   const [showTranscript, setShowTranscript] = useState(false);
+  // Hands-free voice (VAD, mic open, auto start/stop) vs classic tap-to-talk fallback.
+  const [handsFree, setHandsFree] = useState(true);
   const [textInput, setTextInput] = useState('');
   const [inputMode, setInputMode] = useState<InputMode>('session-type');
   const [sessionType, setSessionType] = useState<SessionType>('continue');
@@ -614,6 +616,7 @@ export default function Home() {
                 onConversationId={setConversationId}
                 state={state}
                 disabled={state === 'processing' || state === 'speaking'}
+                handsFree={handsFree}
               />
             </div>
             <div className="flex-1 min-w-0">
@@ -678,6 +681,15 @@ export default function Home() {
                   : state === 'speaking' ? 'Speaking'
                   : 'Mic open'}
               </span>
+              {/* Input mode: hands-free (VAD) ↔ tap-to-talk fallback */}
+              <button
+                onClick={() => setHandsFree((v) => !v)}
+                className="ml-1 text-[10px] font-medium uppercase tracking-[.14em] transition-opacity hover:opacity-70"
+                style={{ color: handsFree ? '#b0611f' : '#6b6259' }}
+                title={handsFree ? 'Switch to tap-to-talk' : 'Switch to hands-free'}
+              >
+                · {handsFree ? 'hands-free' : 'tap to talk'}
+              </button>
             </div>
             <div className="flex items-center gap-2.5">
               {/* Transcript toggle — opens/closes the running-session side panel */}
