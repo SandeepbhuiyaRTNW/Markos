@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Mic, History, Plus, Menu, X, Loader2, Send, ChevronRight, LogOut, Shield, BookOpen, Brain, ArrowRight, RotateCcw } from 'lucide-react';
+import { Mic, History, Plus, Menu, X, Loader2, Send, ChevronRight, LogOut, Shield, BookOpen, Brain, ArrowRight, RotateCcw, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import VoiceOrb from '@/components/VoiceOrb';
@@ -57,6 +57,8 @@ export default function Home() {
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [refreshSidebar, setRefreshSidebar] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // UI-only: transcript side panel in the voice room. Default closed = immersive.
+  const [showTranscript, setShowTranscript] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [inputMode, setInputMode] = useState<InputMode>('session-type');
   const [sessionType, setSessionType] = useState<SessionType>('continue');
@@ -589,7 +591,7 @@ export default function Home() {
   // shell unchanged. No state or handler changes — same VoiceOrb mount, same handlers.
   if (view === 'voice' && inputMode === 'voice') {
     return (
-      <div className="h-screen w-screen flex flex-col relative" style={{ background: '#faf9f6' }}>
+      <div className="h-screen w-screen flex flex-col relative overflow-hidden" style={{ background: '#faf9f6' }}>
         {/* minimal exit — leave voice back to sessions without ending the conversation */}
         <button
           onClick={handleGoToAnalytics}
@@ -677,14 +679,75 @@ export default function Home() {
                   : 'Mic open'}
               </span>
             </div>
-            {(transcripts.length > 0 || openingMessage) && conversationId && (
+            <div className="flex items-center gap-2.5">
+              {/* Transcript toggle — opens/closes the running-session side panel */}
               <button
-                onClick={handleEndSession}
-                disabled={endingSession}
-                className="flex items-center gap-2 h-[38px] px-4 text-[10.5px] font-semibold uppercase tracking-[.14em] text-[#14100e] border-2 border-[#14100e] hover:bg-[#14100e] hover:text-[#faf9f6] transition-colors disabled:opacity-50"
+                onClick={() => setShowTranscript((v) => !v)}
+                className="flex items-center gap-2 h-[38px] px-3 text-[10.5px] font-medium uppercase tracking-[.14em] transition-colors"
+                style={{ color: showTranscript ? '#b0611f' : '#5c534b' }}
+                aria-pressed={showTranscript}
               >
-                {endingSession ? (<><Loader2 className="w-3.5 h-3.5 animate-spin" /> Ending…</>) : (<><Shield className="w-3.5 h-3.5" /> End Session</>)}
+                <MessageSquare className="w-3.5 h-3.5" /> Transcript
               </button>
+              {(transcripts.length > 0 || openingMessage) && conversationId && (
+                <button
+                  onClick={handleEndSession}
+                  disabled={endingSession}
+                  className="flex items-center gap-2 h-[38px] px-4 text-[10.5px] font-semibold uppercase tracking-[.14em] text-[#14100e] border-2 border-[#14100e] hover:bg-[#14100e] hover:text-[#faf9f6] transition-colors disabled:opacity-50"
+                >
+                  {endingSession ? (<><Loader2 className="w-3.5 h-3.5 animate-spin" /> Ending…</>) : (<><Shield className="w-3.5 h-3.5" /> End Session</>)}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Transcript side panel — slides in from the right, OVERLAYS (orb stays centered). */}
+        {/* Styling per Prototype 2B §4.7: 360px, 2px ink left rule, header + who-labelled turns. */}
+        <div
+          className="absolute top-0 right-0 h-full flex flex-col z-30 transition-transform duration-300 ease-in-out"
+          style={{
+            width: 360, maxWidth: '85vw', background: '#faf9f6', borderLeft: '2px solid #14100e',
+            transform: showTranscript ? 'translateX(0)' : 'translateX(100%)',
+            boxShadow: showTranscript ? '-24px 0 48px -24px rgba(20,16,14,.35)' : 'none',
+          }}
+          aria-hidden={!showTranscript}
+        >
+          <div className="flex-none flex items-center justify-between" style={{ padding: '18px 24px', borderBottom: '1px solid #e4dfd7' }}>
+            <span style={{ fontSize: 9, letterSpacing: '.24em', textTransform: 'uppercase', color: '#6b6259' }}>Transcript</span>
+            <button
+              onClick={() => setShowTranscript(false)}
+              className="flex items-center justify-center hover:bg-[#f2efe8] transition-colors"
+              style={{ width: 26, height: 26, border: '1px solid #ded8cf' }}
+              aria-label="Close transcript"
+            >
+              <X className="w-3.5 h-3.5" style={{ color: '#6b6259' }} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto" style={{ padding: '20px 24px' }}>
+            {(!openingMessage && transcripts.length === 0) ? (
+              <p style={{ fontSize: 12, color: '#6b6259' }}>Nothing said yet.</p>
+            ) : (
+              <div className="flex flex-col" style={{ gap: 20 }}>
+                {openingMessage && (
+                  <div className="flex flex-col" style={{ gap: 7 }}>
+                    <span style={{ fontSize: 9, letterSpacing: '.24em', textTransform: 'uppercase', color: '#b0611f' }}>Marcus</span>
+                    <p className="font-serif" style={{ margin: 0, fontSize: 19, lineHeight: 1.62, color: '#3d352e' }}>{openingMessage}</p>
+                  </div>
+                )}
+                {transcripts.map((t, i) => (
+                  <div key={i} className="flex flex-col" style={{ gap: 20 }}>
+                    <div className="flex flex-col" style={{ gap: 7 }}>
+                      <span style={{ fontSize: 9, letterSpacing: '.24em', textTransform: 'uppercase', color: '#6b6259' }}>You</span>
+                      <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.62, color: '#3d352e' }}>{t.user}</p>
+                    </div>
+                    <div className="flex flex-col" style={{ gap: 7 }}>
+                      <span style={{ fontSize: 9, letterSpacing: '.24em', textTransform: 'uppercase', color: '#b0611f' }}>Marcus</span>
+                      <p className="font-serif" style={{ margin: 0, fontSize: 19, lineHeight: 1.62, color: '#3d352e' }}>{t.marcus}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
