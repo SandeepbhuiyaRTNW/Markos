@@ -10,6 +10,16 @@ import ConversationView from '@/components/ConversationView';
 import Sidebar from '@/components/Sidebar';
 import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 
+// localStorage getters/setters throw "Access to storage is not allowed from this
+// context" when the page runs in a storage-blocked / partitioned context (an embedded
+// iframe, some privacy modes). Never let that crash a render or effect — degrade to a
+// no-op / null so the app (and the voice loop it hosts) keeps running.
+const safeLocal = {
+  get: (k: string): string | null => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* storage blocked */ } },
+  remove: (k: string) => { try { localStorage.removeItem(k); } catch { /* storage blocked */ } },
+};
+
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
 type AppView = 'analytics' | 'voice' | 'session-detail' | 'session-notes';
 type InputMode = 'session-type' | 'pick-session' | 'choice' | 'voice' | 'text';
@@ -92,8 +102,8 @@ export default function Home() {
 
   // Restore session from localStorage on mount
   useEffect(() => {
-    const savedId = localStorage.getItem('marcus_userId');
-    const savedEmail = localStorage.getItem('marcus_email');
+    const savedId = safeLocal.get('marcus_userId');
+    const savedEmail = safeLocal.get('marcus_email');
     if (savedId && savedEmail) {
       setUserId(savedId);
       setUserEmail(savedEmail);
@@ -201,8 +211,8 @@ export default function Home() {
       setUserId(data.userId);
       setUserEmail(data.email);
       setInitialized(true);
-      localStorage.setItem('marcus_userId', data.userId);
-      localStorage.setItem('marcus_email', data.email);
+      safeLocal.set('marcus_userId', data.userId);
+      safeLocal.set('marcus_email', data.email);
       setShowLogin(false);
       setAuthStep('email');
     } catch { setAuthError('Network error. Please try again.'); }
@@ -223,8 +233,8 @@ export default function Home() {
       setUserId(data.userId);
       setUserEmail(data.email);
       setInitialized(true);
-      localStorage.setItem('marcus_userId', data.userId);
-      localStorage.setItem('marcus_email', data.email);
+      safeLocal.set('marcus_userId', data.userId);
+      safeLocal.set('marcus_email', data.email);
       setShowLogin(false);
       setAuthStep('email');
       setPassword('');
@@ -233,8 +243,8 @@ export default function Home() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('marcus_userId');
-    localStorage.removeItem('marcus_email');
+    safeLocal.remove('marcus_userId');
+    safeLocal.remove('marcus_email');
     setUserId(null);
     setUserEmail(null);
     setInitialized(false);
