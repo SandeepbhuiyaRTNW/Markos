@@ -101,3 +101,136 @@ export function floatToWav(samples: Float32Array, sampleRate = 16000): ArrayBuff
   }
   return buffer;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The hands-free conversation loop, extracted from the React component so the FULL
+// turn cycle can be driven and proven without a microphone:
+//
+//   listening started → speech detected → sent → Marcus audio playing →
+//   Marcus audio ended → (400ms handoff) → auto-reopening mic → listening started …
+//
+// The component wires the real MicVAD + <audio> element into these methods.
+// scripts/test-handsfree-loop.ts drives a FAKE vad through the same methods with a
+// manual clock, so the reopen link (the piece that was failing) is verified in CI.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The subset of MicVAD the loop drives. */
+export interface HandsFreeVadHandle {
+  start(): Promise<void>;
+  pause(): Promise<void>;
+}
+
+export interface HandsFreeLoopHooks {
+  getVad: () => HandsFreeVadHandle | null;
+  isBusy: () => boolean;   // Marcus is processing or speaking
+  isMuted: () => boolean;
+  isEnded: () => boolean;  // room/session torn down
+  log: (msg: string) => void;
+  /** Schedule cb after the clean-handoff cooldown; return a canceller. Injected so a
+   *  test can drive the timing with a manual clock instead of a real timer. */
+  scheduleAfterCooldown: (cb: () => void) => () => void;
+  onReopenFailed?: () => void;
+}
+
+export class HandsFreeLoop {
+  // Every start/pause funnels through one promise chain so a fast
+  // processing→speaking→idle sequence can't leave the mic wrongly paused.
+  private queue: Promise<unknown> = Promise.resolve();
+  private cancelPending: (() => void) | null = null;
+
+  constructor(private readonly hooks: HandsFreeLoopHooks) {}
+
+  private enqueue(fn: () => Promise<void>): void {
+    this.queue = this.queue.then(fn, fn);
+  }
+
+  /** Await the serialized op chain (test helper). */
+  whenIdle(): Promise<unknown> {
+    return this.queue;
+  }
+
+  /** Mic is open and listening (after the initial start OR a reopen). */
+  listeningStarted(): void { this.hooks.log('listening started'); }
+
+  /** VAD detected the user starting to speak. */
+  speechDetected(): void { this.hooks.log('speech detected'); }
+
+  /** VAD detected end-of-speech; the clip is being sent to Marcus. */
+  speechEnded(): void { this.hooks.log('speech ended — sending to Marcus'); }
+
+  /** The conversation API returned OK. */
+  sent(): void { this.hooks.log('sent — awaiting Marcus reply'); }
+
+  /** Marcus's audio has begun playing through the speaker. */
+  marcusPlaying(): void { this.hooks.log('Marcus audio playing'); }
+
+  /** Pause the open mic for Marcus's turn so it never captures his voice. */
+  pauseForMarcus(): void {
+    this.cancelReopen();
+    this.hooks.log('mic paused (Marcus speaking)');
+    this.enqueue(async () => { try { await this.hooks.getVad()?.pause(); } catch { /* already paused */ } });
+  }
+
+  /** User muted mid-session: pause without ending the session. */
+  muteMic(): void {
+    this.cancelReopen();
+    this.hooks.log('muted — mic paused');
+    this.enqueue(async () => { try { await this.hooks.getVad()?.pause(); } catch { /* already paused */ } });
+  }
+
+  /** Marcus's audio fully finished ('ended'): schedule the clean-handoff reopen. */
+  marcusEnded(): void {
+    this.hooks.log('Marcus audio ended');
+    this.scheduleReopen();
+  }
+
+  /** A turn errored/timed out: reopen anyway so the loop never dead-ends. */
+  turnFailed(): void {
+    this.hooks.log('turn failed — reopening anyway');
+    this.scheduleReopen();
+  }
+
+  private scheduleReopen(): void {
+    this.cancelReopen();
+    if (!shouldRearm({ handsFree: true, sessionEnded: this.hooks.isEnded(), muted: this.hooks.isMuted() })) {
+      this.hooks.log('reopen skipped (session ended or muted)');
+      return;
+    }
+    this.hooks.log(`reopen scheduled (+${REARM_COOLDOWN_MS}ms handoff)`);
+    this.cancelPending = this.hooks.scheduleAfterCooldown(() => {
+      this.cancelPending = null;
+      this.reopenNow();
+    });
+  }
+
+  /** Reopen the mic now. Also the manual tap-recovery + unmute path. Retries once,
+   *  then surfaces a visible failure instead of dying silently. */
+  reopenNow(): void {
+    this.enqueue(async () => {
+      const vad = this.hooks.getVad();
+      if (!vad || this.hooks.isEnded() || this.hooks.isMuted() || this.hooks.isBusy()) {
+        this.hooks.log('auto-reopen aborted (busy / ended / muted)');
+        return;
+      }
+      this.hooks.log('auto-reopening mic');
+      try {
+        await vad.start();
+        this.hooks.log('listening started');
+      } catch {
+        await new Promise((r) => setTimeout(r, 250));
+        try {
+          await this.hooks.getVad()?.start();
+          this.hooks.log('listening started (after retry)');
+        } catch (err) {
+          this.hooks.log('REOPEN FAILED — mic did not restart');
+          console.error('VAD reopen failed:', err);
+          this.hooks.onReopenFailed?.();
+        }
+      }
+    });
+  }
+
+  cancelReopen(): void {
+    if (this.cancelPending) { this.cancelPending(); this.cancelPending = null; }
+  }
+}

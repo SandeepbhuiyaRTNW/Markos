@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import type { MicVAD } from '@ricky0123/vad-web';
-import { VAD_TUNING, HANDS_FREE_AUDIO_CONSTRAINTS, VAD_ASSET_BASE, floatToWav, shouldRearm, REARM_COOLDOWN_MS } from '@/lib/voice/handsFree';
+import { VAD_TUNING, HANDS_FREE_AUDIO_CONSTRAINTS, VAD_ASSET_BASE, floatToWav, REARM_COOLDOWN_MS, HandsFreeLoop } from '@/lib/voice/handsFree';
 
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
 
@@ -57,14 +57,11 @@ export default function VoiceOrb({
   // playback so it never captures his voice (belt-and-suspenders with echoCancellation).
   const busyRef = useRef(false);
 
-  // ─── Hands-free continuous loop: reopen the mic after Marcus, every turn ───
+  // ─── Hands-free continuous loop state ───
   const handsFreeRef = useRef(handsFree);
   const mutedRef = useRef(muted);
-  const sessionEndedRef = useRef(false);                        // true once the room unmounts / VAD destroyed
-  const vadOpRef = useRef<Promise<unknown>>(Promise.resolve()); // serialise start/pause so they can't interleave
-  const rearmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reopenMicRef = useRef<() => void>(() => {});
-  const scheduleReopenRef = useRef<() => void>(() => {});
+  const sessionEndedRef = useRef(false); // true once the room unmounts / VAD destroyed
+  const loopRef = useRef<HandsFreeLoop | null>(null);
 
   useEffect(() => { conversationIdRef.current = conversationId; }, [conversationId]);
   useEffect(() => { userIdRef.current = userId; }, [userId]);
@@ -73,6 +70,24 @@ export default function VoiceOrb({
   useEffect(() => { onStateChangeRef.current = onStateChange; }, [onStateChange]);
   useEffect(() => { onErrorRef.current = onError; }, [onError]);
   useEffect(() => { handsFreeRef.current = handsFree; }, [handsFree]);
+
+  // Create the loop controller once. It owns the serialized start/pause queue + the
+  // cooldown reopen; the VAD + <audio> below are wired into it. The logger is TEMP
+  // tracing so the full loop is observable at runtime in the browser console.
+  if (loopRef.current === null) {
+    loopRef.current = new HandsFreeLoop({
+      getVad: () => vadRef.current,
+      isBusy: () => busyRef.current,
+      isMuted: () => mutedRef.current,
+      isEnded: () => sessionEndedRef.current,
+      log: (m) => console.log('[hands-free]', m), // TEMP: remove after live verification
+      scheduleAfterCooldown: (cb) => {
+        const t = setTimeout(cb, REARM_COOLDOWN_MS);
+        return () => clearTimeout(t);
+      },
+      onReopenFailed: () => onErrorRef.current?.('The mic didn’t reopen — tap the orb to keep going.'),
+    });
+  }
 
   // ─── Cloud call + client-side handling (UNCHANGED contract: POST /api/conversation) ───
   const sendAudio = useCallback(async (blob: Blob, filename: string) => {
@@ -85,6 +100,7 @@ export default function VoiceOrb({
       if (conversationIdRef.current) formData.append('conversationId', conversationIdRef.current);
       const res = await fetch('/api/conversation', { method: 'POST', body: formData, signal: controller.signal });
       if (!res.ok) throw new Error(`API error: ${res.status}`);
+      loopRef.current?.sent();
       const convId = res.headers.get('X-Conversation-Id');
       if (convId && !conversationIdRef.current) {
         conversationIdRef.current = convId;
@@ -99,72 +115,30 @@ export default function VoiceOrb({
       const audio = new Audio(url);
       audioRef.current = audio;
       onStateChangeRef.current('speaking');
+      loopRef.current?.marcusPlaying();
       audio.onended = () => {
         onStateChangeRef.current('idle');
         URL.revokeObjectURL(url);
         // Close the loop: Marcus's audio has fully finished ('ended'), so reopen the
-        // mic for the next turn. Scheduled (not immediate) so the tail/echo of his
-        // voice never lands on the VAD's first frame.
-        scheduleReopenRef.current();
+        // mic for the next turn after the clean-handoff cooldown.
+        loopRef.current?.marcusEnded();
       };
       audio.play().catch((e) => {
         console.warn('Audio play error:', e);
         onStateChangeRef.current('idle');
         URL.revokeObjectURL(url);
-        scheduleReopenRef.current();
+        loopRef.current?.marcusEnded();
       });
     } catch (err) {
       // Timeout (abort) or non-OK response: surface a real message, not a silent idle.
       console.error('Send audio error:', err);
       onErrorRef.current?.("That one took too long — try saying a bit less and I'll keep up.");
       onStateChangeRef.current('idle');
-      scheduleReopenRef.current(); // a failed turn must not dead-end the hands-free loop
+      loopRef.current?.turnFailed(); // a failed turn must not dead-end the hands-free loop
     } finally {
       clearTimeout(timeout);
     }
   }, []);
-
-  // ─── Serialised VAD start/pause + the auto-reopen loop ───
-  // All start/pause calls funnel through one promise chain so a rapid state change
-  // (processing → speaking → idle) can't leave the mic paused when it should be open.
-  const enqueueVadOp = useCallback((fn: () => Promise<void>) => {
-    vadOpRef.current = vadOpRef.current.then(fn, fn);
-  }, []);
-
-  const pauseMic = useCallback(() => {
-    enqueueVadOp(async () => { try { await vadRef.current?.pause(); } catch { /* already paused */ } });
-  }, [enqueueVadOp]);
-
-  // Reopen the mic for the next turn. Retries once — the device can be momentarily busy
-  // in the instant after playback releases it — then surfaces a tap-to-continue fallback
-  // instead of failing silently (the old `.catch(() => {})` hid exactly this).
-  const reopenMic = useCallback(() => {
-    enqueueVadOp(async () => {
-      const vad = vadRef.current;
-      if (!vad || sessionEndedRef.current || mutedRef.current || busyRef.current) return;
-      try {
-        await vad.start();
-      } catch {
-        await new Promise((r) => setTimeout(r, 250));
-        try { await vadRef.current?.start(); }
-        catch (err) {
-          console.error('VAD reopen failed:', err);
-          onErrorRef.current?.('The mic didn’t reopen — tap the orb to keep going.');
-        }
-      }
-    });
-  }, [enqueueVadOp]);
-
-  // Schedule the reopen a short beat after Marcus's audio ends (clean handoff). Guarded
-  // by shouldRearm so it never fires once the session ended or while muted.
-  const scheduleReopen = useCallback(() => {
-    if (rearmTimerRef.current) { clearTimeout(rearmTimerRef.current); rearmTimerRef.current = null; }
-    if (!shouldRearm({ handsFree: handsFreeRef.current, sessionEnded: sessionEndedRef.current, muted: mutedRef.current })) return;
-    rearmTimerRef.current = setTimeout(() => { rearmTimerRef.current = null; reopenMicRef.current(); }, REARM_COOLDOWN_MS);
-  }, []);
-
-  useEffect(() => { reopenMicRef.current = reopenMic; }, [reopenMic]);
-  useEffect(() => { scheduleReopenRef.current = scheduleReopen; }, [scheduleReopen]);
 
   // ─── Classic tap-to-talk (fallback; used when handsFree === false) ───
   const startRecording = useCallback(async () => {
@@ -210,8 +184,7 @@ export default function VoiceOrb({
           onnxWASMBasePath: VAD_ASSET_BASE,
           // Run the ONNX runtime SINGLE-THREADED so it loads on a normal page WITHOUT
           // cross-origin isolation (no COOP/COEP / SharedArrayBuffer). Multi-threaded
-          // wasm silently fails to init on a non-isolated page — the most likely reason
-          // hands-free "did not work". Single-thread is ample for the tiny Silero model.
+          // wasm silently fails to init on a non-isolated page.
           ortConfig: (ort) => { ort.env.wasm.numThreads = 1; },
           positiveSpeechThreshold: VAD_TUNING.positiveSpeechThreshold,
           negativeSpeechThreshold: VAD_TUNING.negativeSpeechThreshold,
@@ -220,11 +193,16 @@ export default function VoiceOrb({
           minSpeechMs: VAD_TUNING.minSpeechMs,
           // Inject our echo-cancel / noise-suppress constraints via the stream hook.
           getStream: () => navigator.mediaDevices.getUserMedia({ audio: HANDS_FREE_AUDIO_CONSTRAINTS }),
-          onSpeechStart: () => { if (!busyRef.current) onStateChangeRef.current('listening'); },
+          onSpeechStart: () => {
+            if (busyRef.current) return;
+            onStateChangeRef.current('listening');
+            loopRef.current?.speechDetected();
+          },
           onVADMisfire: () => { if (!busyRef.current) onStateChangeRef.current('idle'); },
           onSpeechEnd: (audio: Float32Array) => {
             // Never send audio captured while Marcus is mid-turn (his own voice).
             if (busyRef.current) return;
+            loopRef.current?.speechEnded();
             const blob = new Blob([floatToWav(audio, 16000)], { type: 'audio/wav' });
             onStateChangeRef.current('processing');
             void sendAudio(blob, 'speech.wav');
@@ -232,7 +210,10 @@ export default function VoiceOrb({
         });
         if (cancelled) { void vad.destroy(); return; }
         vadRef.current = vad;
-        if (!busyRef.current && !mutedRef.current) await vad.start();
+        if (!busyRef.current && !mutedRef.current) {
+          await vad.start();
+          loopRef.current?.listeningStarted();
+        }
       } catch (err) {
         console.error('VAD init failed:', err);
         onErrorRef.current?.('hands-free could not start — switch to tap-to-talk below.');
@@ -241,34 +222,27 @@ export default function VoiceOrb({
     return () => {
       cancelled = true;
       sessionEndedRef.current = true; // stop any pending reopen from firing after unmount
-      if (rearmTimerRef.current) { clearTimeout(rearmTimerRef.current); rearmTimerRef.current = null; }
+      loopRef.current?.cancelReopen();
       const v = vadRef.current; vadRef.current = null; void v?.destroy();
     };
   }, [handsFree, sendAudio]);
 
-  // Pause the open mic while Marcus is processing/speaking so it never captures his
-  // response; resume listening when he's done. (Guarantees no self-capture on top of
-  // browser echoCancellation.)
+  // Pause the open mic the moment Marcus starts (processing/speaking) so it never
+  // captures his voice. RESUME is explicit — the loop's marcusEnded() fires after his
+  // audio 'ended' event, not here — so the reopen is echo-guarded and observable.
   useEffect(() => {
     busyRef.current = state === 'processing' || state === 'speaking';
     if (!handsFree) return;
-    // Pause the open mic the moment Marcus starts (processing/speaking) so it never
-    // captures his voice. RESUME is explicit — scheduleReopen() fires after his audio
-    // 'ended' event, not here — so the reopen is echo-guarded and observable.
-    if (busyRef.current) pauseMic();
-  }, [state, handsFree, pauseMic]);
+    if (busyRef.current) loopRef.current?.pauseForMarcus();
+  }, [state, handsFree]);
 
   // Manual mute (footer): pause immediately; on unmute, reopen if Marcus isn't talking.
   useEffect(() => {
     mutedRef.current = muted;
     if (!handsFree) return;
-    if (muted) {
-      if (rearmTimerRef.current) { clearTimeout(rearmTimerRef.current); rearmTimerRef.current = null; }
-      pauseMic();
-    } else if (!busyRef.current) {
-      reopenMic();
-    }
-  }, [muted, handsFree, pauseMic, reopenMic]);
+    if (muted) loopRef.current?.muteMic();
+    else if (!busyRef.current) loopRef.current?.reopenNow();
+  }, [muted, handsFree]);
 
   const startRecordingRef = useRef(startRecording);
   const stopRecordingRef = useRef(stopRecording);
@@ -280,7 +254,7 @@ export default function VoiceOrb({
       // Hands-free reopens on its own after every turn. A tap is a manual "reopen now"
       // recovery for the rare case the auto re-arm failed; harmless while already
       // listening (start() no-ops) and ignored while Marcus is mid-turn.
-      if (!busyRef.current) reopenMicRef.current();
+      if (!busyRef.current) loopRef.current?.reopenNow();
       return;
     }
     if (disabled || state === 'processing' || state === 'speaking') return;
