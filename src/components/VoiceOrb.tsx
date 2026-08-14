@@ -174,10 +174,12 @@ export default function VoiceOrb({
     if (!handsFree) return;
     let cancelled = false;
     sessionEndedRef.current = false;
+    console.log('[hands-free] VAD init: starting'); // TEMP: pinpoint where init stalls
     (async () => {
       try {
         // Browser-only; dynamic import avoids SSR execution of the wasm/worklet loader.
         const { MicVAD } = await import('@ricky0123/vad-web');
+        console.log('[hands-free] VAD init: loading model + worklet + wasm');
         const vad = await MicVAD.new({
           model: VAD_TUNING.model,
           baseAssetPath: VAD_ASSET_BASE,
@@ -210,12 +212,13 @@ export default function VoiceOrb({
         });
         if (cancelled) { void vad.destroy(); return; }
         vadRef.current = vad;
+        console.log('[hands-free] VAD init: model ready — starting mic');
         if (!busyRef.current && !mutedRef.current) {
           await vad.start();
           loopRef.current?.listeningStarted();
         }
       } catch (err) {
-        console.error('VAD init failed:', err);
+        console.error('[hands-free] VAD init FAILED — hands-free will not start:', err);
         onErrorRef.current?.('hands-free could not start — switch to tap-to-talk below.');
       }
     })();
