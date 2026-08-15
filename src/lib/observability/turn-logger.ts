@@ -7,6 +7,7 @@
  */
 
 import type { StateEnvelope } from '../agents/state-envelope';
+import type { QueryFn } from '../agents/persist-messages';
 import { query } from '../db';
 
 /** Ensure the turn_logs table exists */
@@ -89,10 +90,10 @@ export async function ensureTurnLogsTable(): Promise<void> {
 }
 
 /** Log a completed turn to the turn_logs table */
-export async function logTurn(env: StateEnvelope): Promise<void> {
+export async function logTurn(env: StateEnvelope, queryFn: QueryFn = query): Promise<void> {
   try {
     const { sql, values } = buildTurnLogInsertValues(env);
-    await query(sql, values);
+    await queryFn(sql, values);
   } catch (err) {
     console.error('[TurnLogger] Failed to log turn:', err);
   }

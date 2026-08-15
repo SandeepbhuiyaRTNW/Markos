@@ -19,6 +19,7 @@ import { retrieveWisdom, retrieveQuestion, type QuestionRetrievalContext } from 
 import { analyzeConversation, computeTrajectoryDrift } from './conversation-state';
 import type { AgentResponse } from './orchestrator-v2';
 import { MOVE_CALIBRATION, GOVERNING_BAR } from './move-calibration';
+import { persistTurnMessages, type QueryFn } from './persist-messages';
 
 export interface PreComposerResult {
   ragWisdom: string;
@@ -137,11 +138,24 @@ export async function retrievePreComposer(
   };
 }
 
+/**
+ * Test seam (optional): inject a fake model and/or query so a REAL composer turn can be
+ * exercised through its ACTUAL return path (runComposerPipeline → its own returned
+ * object) without OpenAI or Postgres. Production callers pass nothing → identical
+ * behavior. Used by scripts/test-w1-composer-return-path.ts to prove exactly ONE message
+ * write per composer turn — i.e. the composer does NOT also return through buildResponse.
+ */
+export interface ComposerTestHooks {
+  model?: { invoke(messages: (SystemMessage | HumanMessage | AIMessage)[]): Promise<{ content: unknown }> };
+  queryFn?: QueryFn;
+}
+
 export async function runComposerPipeline(
   env: StateEnvelope,
   historyStr: string,
   pre?: PreComposerResult,
   policy: ComposerPolicy = { moveDecision: null, knowledgePlan: null, enforceMovePolicy: false },
+  testHooks?: ComposerTestHooks,
 ): Promise<AgentResponse> {
   // Pre-fetch is supplied by the orchestrator (run concurrently with Whisperers);
   // fall back to computing it here when the composer is invoked standalone.
@@ -195,12 +209,12 @@ export async function runComposerPipeline(
   // ═══════════════════════════════════════════
   const composerDone = trackEnvelopeAgent(env, 'composer');
   try {
-    const model = new ChatOpenAI({
+    const model: NonNullable<ComposerTestHooks['model']> = testHooks?.model ?? (new ChatOpenAI({
       modelName: 'gpt-4o',
       temperature: 0.75,
       maxTokens: 350,
       maxRetries: 1, // kill the hidden 2x SDK retry latency multiplier on the critical path
-    });
+    }) as unknown as NonNullable<ComposerTestHooks['model']>);
 
     // Build the context injection from State Envelope
     const envelopeContext = buildEnvelopeContextSummary(env, {
@@ -457,7 +471,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
   // STORE + OBSERVABILITY (fire-and-forget)
   // ═══════════════════════════════════════════
   // Message + memory writes stay fire-and-forget (not needed downstream).
-  storeInBackground(env).catch(err => console.error('[V2] Background store error:', err));
+  storeInBackground(env, testHooks?.queryFn).catch(err => console.error('[V2] Background store error:', err));
 
   // Turn logging — AWAITED so the turn_logs row exists before processMessage
   // returns. The API route then reliably attaches route_total_ms via UPDATE,
@@ -466,7 +480,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
   // on the voice path this insert previously overlapped the awaited TTS, so
   // end-to-end grows only by that insert. total_ms is measured earlier (right
   // after final_response) and is unaffected.
-  await import('../observability/turn-logger').then(({ logTurn }) => logTurn(env)).catch(() => {});
+  await import('../observability/turn-logger').then(({ logTurn }) => logTurn(env, testHooks?.queryFn)).catch(() => {});
 
   return {
     response: env.final_response || "I hear you. Tell me more.",
@@ -479,26 +493,20 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
 }
 
 /** Fire-and-forget storage: messages + memory extraction */
-async function storeInBackground(env: StateEnvelope): Promise<void> {
-  const { query: dbQuery } = await import('../db');
+async function storeInBackground(env: StateEnvelope, queryFn?: QueryFn): Promise<void> {
   const { extractMemories } = await import('../memory/memory-manager');
   const { saveKWMLProfile } = await import('../kwml/detector');
   const { runConversationIntelligence } = await import('../intelligence');
 
   try {
-    const userMsgResult = await dbQuery(
-      `INSERT INTO messages (conversation_id, role, content, emotion_detected, understanding_layer, kwml_archetype)
-       VALUES ($1, 'user', $2, $3, $4, $5) RETURNING id`,
-      [env.conversation_id, env.utterance,
-       env.sentinels.listener_stack?.primary_emotion || null,
-       env.sentinels.listener_stack?.depth_level || null,
-       env.assessment.archetype?.active || null]
-    );
-    const userMsgId = userMsgResult.rows[0].id;
+    // W1: both conversation messages are written by the single shared writer
+    // (persistTurnMessages) — the same one the sentinel short-circuits use via
+    // buildResponse. Composer path stays fire-and-forget (storeInBackground is not
+    // awaited); the await (W4) is deliberately NOT added here, pending reconciliation.
+    const userMsgId = await persistTurnMessages(env, queryFn);
+    if (userMsgId === null) return; // messages did not land — skip dependent extraction
 
     await Promise.all([
-      dbQuery(`INSERT INTO messages (conversation_id, role, content) VALUES ($1, 'marcus', $2)`,
-        [env.conversation_id, env.final_response]),
       extractMemories(env.user_id, env.utterance, env.final_response || '', userMsgId),
       env.assessment.archetype?.reading
         ? saveKWMLProfile(env.user_id, env.assessment.archetype.reading, env.conversation_id)

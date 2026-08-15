@@ -30,6 +30,7 @@ import { enforceVocativePrinciple } from '../craft/craft-layer';
 import { WHISPERER_REGISTRY, WHISPERER_ACTIVATION_THRESHOLD } from '../whisperers';
 import { computePERMASnapshot } from '../assessment/perma-snapshot';
 import { query } from '../db';
+import { persistTurnMessages } from './persist-messages';
 import { analyzeConversation, type ConversationState } from './conversation-state';
 
 // Re-export the same public interface
@@ -307,6 +308,12 @@ export async function processWithAgents(
 }
 
 function buildResponse(env: StateEnvelope): AgentResponse {
+  // W1: persist the two messages on EVERY user-visible return, including the four
+  // sentinel short-circuits (acute crisis, post-crisis retreat, AI-honesty, frame-
+  // refusal) that return here BEFORE the composer ever runs. Fire-and-forget to match
+  // the composer path's current semantics — the await (W4) is deferred pending
+  // reconciliation. persistTurnMessages never throws (it logs loudly + returns null).
+  void persistTurnMessages(env);
   return {
     response: env.final_response || "I hear you. Tell me more.",
     emotion: env.sentinels.listener_stack?.primary_emotion || 'neutral',
