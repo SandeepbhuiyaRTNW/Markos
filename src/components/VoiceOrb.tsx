@@ -13,6 +13,130 @@ type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
 // maxDuration = 60 in the conversation route(s).
 const CLIENT_TIMEOUT_MS = 65000;
 
+/**
+ * Play the /api/conversation audio response.
+ *
+ * Where the browser supports MediaSource + mp3 (Chrome/Edge/Firefox, Safari 17.1+), we
+ * play PROGRESSIVELY: audio starts as soon as ElevenLabs' first frames arrive, instead
+ * of waiting for the whole clip. Elsewhere (older iOS Safari) we fall back to buffered
+ * playback — the previous behavior, no regression, just no early start.
+ *
+ * The reply's text / voice / content is unchanged; only WHEN audio begins differs.
+ *
+ * onEnded fires when playback finishes OR the stream breaks (so the hands-free loop
+ * always reopens the mic). onError surfaces a recoverable message on a mid-stream break
+ * so a truncated reply is never silent.
+ */
+async function playResponseAudio(
+  res: Response,
+  hooks: {
+    audioRef: { current: HTMLAudioElement | null };
+    onSpeaking: () => void;
+    onEnded: () => void;
+    onError: (message: string) => void;
+  },
+): Promise<void> {
+  const { audioRef, onSpeaking, onEnded, onError } = hooks;
+
+  if (audioRef.current) { try { audioRef.current.pause(); } catch { /* ignore */ } }
+
+  const canStream =
+    typeof MediaSource !== 'undefined' &&
+    typeof MediaSource.isTypeSupported === 'function' &&
+    MediaSource.isTypeSupported('audio/mpeg') &&
+    !!res.body;
+
+  // ── Fallback: buffered playback (previous behavior) ──
+  if (!canStream) {
+    const buf = await res.arrayBuffer();
+    const url = URL.createObjectURL(new Blob([buf], { type: 'audio/mpeg' }));
+    const audio = new Audio(url);
+    audioRef.current = audio;
+    onSpeaking();
+    let done = false;
+    const finish = () => { if (done) return; done = true; try { URL.revokeObjectURL(url); } catch { /* ignore */ } onEnded(); };
+    audio.onended = finish;
+    audio.play().catch((e) => { console.warn('[tts] audio play error (buffered):', e); finish(); });
+    return;
+  }
+
+  // ── Progressive playback via MediaSource ──
+  const mediaSource = new MediaSource();
+  const url = URL.createObjectURL(mediaSource);
+  const audio = new Audio();
+  audio.src = url;
+  audioRef.current = audio;
+  onSpeaking();
+
+  let settled = false;
+  const finish = (recover?: string) => {
+    if (settled) return;
+    settled = true;
+    if (recover) onError(recover);
+    try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+    onEnded();
+  };
+
+  audio.onended = () => finish();
+  audio.onerror = () => {
+    console.error('[tts] <audio> element error during progressive playback');
+    finish('Something cut the reply off — say that again and I’ll pick it back up.');
+  };
+
+  mediaSource.addEventListener('sourceopen', async () => {
+    let sourceBuffer: SourceBuffer;
+    try {
+      sourceBuffer = mediaSource.addSourceBuffer('audio/mpeg');
+    } catch (e) {
+      console.error('[tts] addSourceBuffer(audio/mpeg) failed:', e);
+      finish('I couldn’t play that back — say that again and I’ll retry.');
+      return;
+    }
+
+    const reader = res.body!.getReader();
+    const queue: Uint8Array[] = [];
+    let receiving = true;
+
+    const pump = () => {
+      if (sourceBuffer.updating) return;
+      if (queue.length > 0) {
+        // Cast: fetch chunks are always ArrayBuffer-backed at runtime; the strict lib
+        // type widens to ArrayBufferLike, which appendBuffer's BufferSource rejects.
+        try { sourceBuffer.appendBuffer(queue.shift()! as unknown as BufferSource); }
+        catch (e) { console.error('[tts] appendBuffer failed:', e); }
+        return;
+      }
+      if (!receiving && mediaSource.readyState === 'open') {
+        try { mediaSource.endOfStream(); } catch { /* already ended */ }
+      }
+    };
+    sourceBuffer.addEventListener('updateend', pump);
+
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value && value.byteLength) { queue.push(value); pump(); }
+      }
+      receiving = false;
+      pump();
+    } catch (err) {
+      // Mid-stream break: log loudly, mark the media errored, and surface a recoverable
+      // message. The hands-free loop still reopens the mic (via onEnded) so the user can
+      // simply say it again — no silent half-played reply.
+      receiving = false;
+      console.error('[tts] ElevenLabs stream broke mid-play:', err);
+      try { if (mediaSource.readyState === 'open') mediaSource.endOfStream('network'); } catch { /* ignore */ }
+      finish('The reply cut out partway — say that again and I’ll finish it.');
+    }
+  });
+
+  audio.play().catch((e) => {
+    console.warn('[tts] audio play() rejected (progressive):', e);
+    finish();
+  });
+}
+
 interface VoiceOrbProps {
   onStateChange: (state: VoiceState) => void;
   onTranscript: (userText: string, marcusText: string) => void;
@@ -109,25 +233,18 @@ export default function VoiceOrb({
       const userText = decodeURIComponent(res.headers.get('X-User-Text') || '');
       const marcusText = decodeURIComponent(res.headers.get('X-Marcus-Text') || '');
       onTranscriptRef.current(userText, marcusText);
-      const audioBuffer = await res.arrayBuffer();
-      const url = URL.createObjectURL(new Blob([audioBuffer], { type: 'audio/mpeg' }));
-      if (audioRef.current) audioRef.current.pause();
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      onStateChangeRef.current('speaking');
-      loopRef.current?.marcusPlaying();
-      audio.onended = () => {
-        onStateChangeRef.current('idle');
-        URL.revokeObjectURL(url);
-        // Close the loop: Marcus's audio has fully finished ('ended'), so reopen the
-        // mic for the next turn after the clean-handoff cooldown.
-        loopRef.current?.marcusEnded();
-      };
-      audio.play().catch((e) => {
-        console.warn('Audio play error:', e);
-        onStateChangeRef.current('idle');
-        URL.revokeObjectURL(url);
-        loopRef.current?.marcusEnded();
+      // Play the reply. Progressive (streamed) where supported; buffered fallback
+      // elsewhere. Same audio / voice / text — only WHEN it starts differs.
+      await playResponseAudio(res, {
+        audioRef,
+        onSpeaking: () => { onStateChangeRef.current('speaking'); loopRef.current?.marcusPlaying(); },
+        onEnded: () => {
+          // Close the loop: playback finished (or the stream ended/broke), so reopen the
+          // mic for the next turn after the clean-handoff cooldown.
+          onStateChangeRef.current('idle');
+          loopRef.current?.marcusEnded();
+        },
+        onError: (m) => onErrorRef.current?.(m),
       });
     } catch (err) {
       // Timeout (abort) or non-OK response: surface a real message, not a silent idle.

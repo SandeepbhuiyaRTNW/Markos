@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { transcribeAudio } from '@/lib/voice/stt';
-import { synthesizeSpeech } from '@/lib/voice/tts';
+import { synthesizeSpeechStream } from '@/lib/voice/tts';
 import { processMessage } from '@/lib/agent/marcus';
 import { recordRouteTotal } from '@/lib/observability/turn-logger';
+import { emitTurnTiming, emitAgentTimings, timeStage, instrumentAudioStream, type TurnTimingCtx } from '@/lib/observability/turn-timing';
 import { query } from '@/lib/db';
 
 // Cap this route's serverless execution at 60s (STT -> agent -> TTS is one long
@@ -48,9 +49,11 @@ export async function POST(req: NextRequest) {
       conversationId = convResult.rows[0].id;
     }
 
-    // 1. Transcribe audio (Whisper)
+    // 1. Transcribe audio (Whisper) — timed
     const audioBuffer = Buffer.from(await audioFile.arrayBuffer());
+    const sttStart = Date.now();
     const userText = await transcribeAudio(audioBuffer, audioFile.type);
+    const sttMs = Date.now() - sttStart;
 
     // 2. Get conversation history — most recent 60 messages, re-ordered chronologically
     const historyResult = await query(
@@ -68,28 +71,43 @@ export async function POST(req: NextRequest) {
       content: r.content,
     }));
 
-    // 3. Process through Marcus agent
-    const { response: marcusText, emotion, turnId } = await processMessage(
+    const timingCtx: TurnTimingCtx = { path: 'voice', turn: history.length <= 1 ? 'first' : 'subsequent', conversationId: conversationId! };
+    emitTurnTiming('stt', sttMs, timingCtx);
+
+    // 3. Process through Marcus agent — timed (agent = full pipeline wall-clock;
+    //    per-stage breakdown emitted from the returned agentTimings)
+    const { response: marcusText, emotion, turnId, agentTimings } = await timeStage('agent', timingCtx, () => processMessage(
       userId,
       conversationId!,
       userText,
-      history
-    );
+      history,
+    ));
+    emitAgentTimings(agentTimings, timingCtx);
 
-    // 4. Synthesize speech (ElevenLabs)
-    const audioResponse = await synthesizeSpeech(marcusText);
+    // 4. Synthesize speech (ElevenLabs) — STREAMING. Returns as soon as ElevenLabs
+    //    starts producing audio; the body is piped to the client as it arrives, so the
+    //    user hears the first words without waiting for the whole clip. The reply text
+    //    is already fully written + gate-checked above — only delivery changes here.
+    const ttsStart = Date.now();
+    const ttsStream = await synthesizeSpeechStream(marcusText);
+    // Tap the stream for time-to-first-audio / full-synthesis timing + mid-stream break
+    // handling on the way to the client.
+    const audioStream = instrumentAudioStream(ttsStream, timingCtx, ttsStart);
 
-    // Record route-level total (entry -> here, including STT + TTS) onto the
-    // turn row the Composer logged. Awaited so it completes before the
-    // serverless response returns (a post-return task could be frozen).
+    // route_total now measures entry -> streaming-response-ready (≈ time-to-first-audio
+    // handoff), NOT full synthesis — the audio body streams AFTER this returns. Full
+    // synthesis duration is the tts_complete [turn-timing] line. Awaited so the turn_logs
+    // row is updated before the serverless response returns.
     if (turnId) {
       await recordRouteTotal(turnId, Date.now() - routeStart);
     }
+    emitTurnTiming('route_total', Date.now() - routeStart, timingCtx);
 
-    // Return both text and audio
-    return new NextResponse(new Uint8Array(audioResponse), {
+    // Return streamed audio + the text headers (available immediately, before audio).
+    return new NextResponse(audioStream, {
       headers: {
         'Content-Type': 'audio/mpeg',
+        'Cache-Control': 'no-store',
         'X-User-Text': encodeURIComponent(userText),
         'X-Marcus-Text': encodeURIComponent(marcusText),
         'X-Emotion': emotion,
