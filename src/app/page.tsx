@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Mic, History, Plus, Menu, X, Loader2, Send, ChevronRight, LogOut, Shield, BookOpen, Brain, ArrowRight, RotateCcw, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import VoiceOrb from '@/components/VoiceOrb';
+import ShaderBackground, { deriveRegister } from '@/components/ShaderBackground';
 import OnboardingFlow from '@/components/OnboardingFlow';
 import ConversationView from '@/components/ConversationView';
 import Sidebar from '@/components/Sidebar';
@@ -285,6 +286,14 @@ export default function Home() {
     setTranscripts((prev) => [...prev, { user: userText, marcus: marcusText }]);
     setRefreshSidebar((p) => p + 1);
   }, []);
+
+  // Emotional register (0 = light .. 1 = heavy) for the ambient shader background,
+  // derived from Marcus's latest reply text (X-Marcus-Text, surfaced here via
+  // onTranscript). Presentation only; touches nothing in the pipeline.
+  const register = useMemo(
+    () => deriveRegister(transcripts.length ? transcripts[transcripts.length - 1].marcus : ''),
+    [transcripts],
+  );
 
   const handleNewSession = () => {
     if (fetchingOpeningRef.current) return;
@@ -606,6 +615,9 @@ export default function Home() {
   if (view === 'voice' && inputMode === 'voice') {
     return (
       <div className="h-screen w-screen flex flex-col relative overflow-hidden" style={{ background: '#faf9f6' }}>
+        {/* Ambient Paper Shaders backdrop — driven by conversation state + a slow
+            emotional register. Presentation only; sits behind all content (z-0). */}
+        <ShaderBackground state={state} register={register} />
         {/* minimal exit — leave voice back to sessions without ending the conversation */}
         <button
           onClick={handleGoToAnalytics}
@@ -616,7 +628,7 @@ export default function Home() {
         </button>
 
         {/* Session row — prototype's single flex:1 align-items:center row; content centered */}
-        <div className="flex-1 flex items-center justify-center px-6 sm:px-10 lg:px-16 py-9 min-h-0" style={{ borderBottom: '2px solid #14100e' }}>
+        <div className="relative z-10 flex-1 flex items-center justify-center px-6 sm:px-10 lg:px-16 py-9 min-h-0" style={{ borderBottom: '2px solid #14100e' }}>
           <div className="flex items-center gap-8 sm:gap-11 w-full" style={{ maxWidth: 860 }}>
             <div className="relative flex-none flex items-center justify-center">
               <VoiceOrb
@@ -682,7 +694,7 @@ export default function Home() {
         </div>
 
         {/* Footer — status (left) + End Session (right), aligned to the same centered column */}
-        <div className="flex-none px-6 sm:px-10 lg:px-16" style={{ height: 66 }}>
+        <div className="relative z-10 flex-none px-6 sm:px-10 lg:px-16" style={{ height: 66 }}>
           <div className="mx-auto w-full h-full flex items-center justify-between" style={{ maxWidth: 860 }}>
             <div className="flex items-center gap-3">
               <span style={{ width: 7, height: 7,

@@ -15,6 +15,7 @@
     "@langchain/community": "^1.1.17",
     "@langchain/core": "^1.1.27",
     "@langchain/openai": "^1.2.9",
+    "@paper-design/shaders-react": "^0.0.80",
     "@ricky0123/vad-web": "^0.0.30",
     "@types/pg": "^8.16.0",
     "@types/uuid": "^10.0.0",
