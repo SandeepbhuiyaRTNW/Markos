@@ -30,7 +30,8 @@ import { enforceVocativePrinciple } from '../craft/craft-layer';
 import { WHISPERER_REGISTRY, WHISPERER_ACTIVATION_THRESHOLD } from '../whisperers';
 import { computePERMASnapshot } from '../assessment/perma-snapshot';
 import { query } from '../db';
-import { persistTurnMessages } from './persist-messages';
+import { persistTurnMessages, type QueryFn } from './persist-messages';
+import { logTurn } from '../observability/turn-logger';
 import { analyzeConversation, type ConversationState } from './conversation-state';
 
 // Re-export the same public interface
@@ -307,13 +308,15 @@ export async function processWithAgents(
   );
 }
 
-function buildResponse(env: StateEnvelope): AgentResponse {
-  // W1: persist the two messages on EVERY user-visible return, including the four
-  // sentinel short-circuits (acute crisis, post-crisis retreat, AI-honesty, frame-
-  // refusal) that return here BEFORE the composer ever runs. Fire-and-forget to match
-  // the composer path's current semantics — the await (W4) is deferred pending
-  // reconciliation. persistTurnMessages never throws (it logs loudly + returns null).
-  void persistTurnMessages(env);
+export async function buildResponse(env: StateEnvelope, queryFn?: QueryFn): Promise<AgentResponse> {
+  // W1 + W4: on EVERY user-visible sentinel return (acute crisis, post-crisis retreat,
+  // AI-honesty, frame-refusal) persist the two messages AND write the turn log, and
+  // AWAIT both so they land before the reply goes back — the same shared writers the
+  // composer path uses. Neither throws (persistTurnMessages logs loudly + returns null;
+  // logTurn catches internally), so a DB error can never block or fail the reply. The
+  // slow memory/KWML/CI tier stays composer-only and is NOT run here.
+  await persistTurnMessages(env, queryFn, 'sentinel');
+  await logTurn(env, queryFn);
   return {
     response: env.final_response || "I hear you. Tell me more.",
     emotion: env.sentinels.listener_stack?.primary_emotion || 'neutral',

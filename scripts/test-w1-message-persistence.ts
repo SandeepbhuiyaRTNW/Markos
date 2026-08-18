@@ -154,8 +154,8 @@ async function assertBothMessagesLand(label: string, env: StateEnvelope) {
     assert('persist-messages.ts is the sole INSERT INTO messages site (user + marcus)', inserts(persist) === 2, `got ${inserts(persist)}`);
     assert('composer no longer inserts messages directly (moved to the writer)', inserts(composer) === 0, `got ${inserts(composer)}`);
     assert('orchestrator-v2 has no direct message INSERT', inserts(orch) === 0, `got ${inserts(orch)}`);
-    assert('composer storeInBackground calls persistTurnMessages exactly once', (composer.match(/persistTurnMessages\(/g) || []).length === 1, `got ${(composer.match(/persistTurnMessages\(/g) || []).length}`);
-    assert('buildResponse (the sentinel return point) calls persistTurnMessages', /buildResponse[\s\S]{0,600}persistTurnMessages\(env\)/.test(orch));
+    assert('composer path calls persistTurnMessages exactly once', (composer.match(/persistTurnMessages\(/g) || []).length === 1, `got ${(composer.match(/persistTurnMessages\(/g) || []).length}`);
+    assert('buildResponse (the sentinel return point) calls persistTurnMessages', /buildResponse[\s\S]{0,600}persistTurnMessages\(env,/.test(orch));
   }
 
   console.log('\n── SUMMARY ──');

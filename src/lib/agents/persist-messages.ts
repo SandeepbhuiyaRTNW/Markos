@@ -28,15 +28,19 @@ import type { StateEnvelope } from './state-envelope';
 
 export type QueryFn = (text: string, params?: unknown[]) => Promise<{ rows: Array<{ id?: string }> }>;
 
+export type PersistPath = 'sentinel' | 'composer';
+
 export async function persistTurnMessages(
   env: StateEnvelope,
   queryFn: QueryFn = defaultQuery,
+  path: PersistPath = 'composer',
 ): Promise<string | null> {
   const marcusText = env.final_response;
   if (!marcusText) {
     // No user-visible response was produced this turn — nothing to persist.
     return null;
   }
+  const start = Date.now();
   try {
     const userMsgResult = await queryFn(
       `INSERT INTO messages (conversation_id, role, content, emotion_detected, understanding_layer, kwml_archetype)
@@ -53,8 +57,10 @@ export async function persistTurnMessages(
       [env.conversation_id, marcusText],
     );
 
+    logPersistTiming(path, env, true, Date.now() - start);
     return userMsgId;
   } catch (err) {
+    logPersistTiming(path, env, false, Date.now() - start);
     // Never swallow silently: a dropped message write is exactly the defect we are
     // trying to eliminate. Log with the session identifiers so it is traceable.
     console.error(
@@ -63,4 +69,15 @@ export async function persistTurnMessages(
     );
     return null;
   }
+}
+
+/**
+ * Grep-able, aggregatable per-turn latency metric for the AWAITED message write (W4).
+ * One line every turn on every path. From CloudWatch, e.g.:
+ *   filter @message like /\[turn-persist\]/ | parse @message "ms=*" as ms | stats avg(ms), pct(ms,95) by path
+ */
+function logPersistTiming(path: PersistPath, env: StateEnvelope, ok: boolean, ms: number): void {
+  console.log(
+    `[turn-persist] path=${path} ok=${ok} ms=${ms} conversation_id=${env.conversation_id} user_id=${env.user_id} turn_id=${env.turn_id}`,
+  );
 }

@@ -468,10 +468,15 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
   } finally { composerDone(); }
 
   // ═══════════════════════════════════════════
-  // STORE + OBSERVABILITY (fire-and-forget)
+  // STORE + OBSERVABILITY (message write AWAITED; memory/KWML/CI fire-and-forget)
   // ═══════════════════════════════════════════
-  // Message + memory writes stay fire-and-forget (not needed downstream).
-  storeInBackground(env, testHooks?.queryFn).catch(err => console.error('[V2] Background store error:', err));
+  // W4: AWAIT the two message inserts before returning so the exchange is persisted
+  // before the reply goes back (message write moved OFF fire-and-forget). Timed +
+  // logged inside persistTurnMessages; never throws.
+  const userMsgId = await persistTurnMessages(env, testHooks?.queryFn, 'composer');
+  // Memory / KWML / Conversation-Intelligence stay FIRE-AND-FORGET — the slow
+  // gpt-4o-mini work must never sit on the awaited reply path.
+  storeInBackground(env, userMsgId).catch(err => console.error('[V2] Background store error:', err));
 
   // Turn logging — AWAITED so the turn_logs row exists before processMessage
   // returns. The API route then reliably attaches route_total_ms via UPDATE,
@@ -493,19 +498,16 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
 }
 
 /** Fire-and-forget storage: messages + memory extraction */
-async function storeInBackground(env: StateEnvelope, queryFn?: QueryFn): Promise<void> {
+async function storeInBackground(env: StateEnvelope, userMsgId: string | null): Promise<void> {
+  // W4: the message write moved onto the awaited path (persistTurnMessages in the
+  // composer). This tier is now ONLY the slow memory / KWML / Conversation-Intelligence
+  // work and stays fire-and-forget. It needs the user message id from that write.
+  if (userMsgId === null) return; // message write failed upstream — skip extraction
   const { extractMemories } = await import('../memory/memory-manager');
   const { saveKWMLProfile } = await import('../kwml/detector');
   const { runConversationIntelligence } = await import('../intelligence');
 
   try {
-    // W1: both conversation messages are written by the single shared writer
-    // (persistTurnMessages) — the same one the sentinel short-circuits use via
-    // buildResponse. Composer path stays fire-and-forget (storeInBackground is not
-    // awaited); the await (W4) is deliberately NOT added here, pending reconciliation.
-    const userMsgId = await persistTurnMessages(env, queryFn);
-    if (userMsgId === null) return; // messages did not land — skip dependent extraction
-
     await Promise.all([
       extractMemories(env.user_id, env.utterance, env.final_response || '', userMsgId),
       env.assessment.archetype?.reading
