@@ -4,6 +4,7 @@ import { query } from '@/lib/db';
 import { getMemoryContext, getSessionHistory, getStylePreferences } from '@/lib/memory/memory-manager';
 import { synthesizeSpeech } from '@/lib/voice/tts';
 import { buildSystemPrompt } from '@/lib/agent/system-prompt';
+import { emitTurnTiming, type TurnTimingCtx } from '@/lib/observability/turn-timing';
 
 function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); }
 
@@ -106,6 +107,8 @@ export async function GET(req: NextRequest) {
           [userId, conversationId]
         );
 
+    const openingCtx: TurnTimingCtx = { path: skipTts ? 'text' : 'voice', turn: 'first', conversationId };
+    const openMemStart = Date.now();
     const [memoryContext, prevResult, lastSessionResult, sessionHistory, stylePrefs] = await Promise.all([
       getMemoryContext(userId),
       continueFrom
@@ -127,6 +130,7 @@ export async function GET(req: NextRequest) {
       getSessionHistory(userId),
       getStylePreferences(userId),
     ]);
+    emitTurnTiming('opening_memory_load', Date.now() - openMemStart, openingCtx);
     // Determine if we have REAL memories (not just session count metadata)
     const hasMemory = !memoryContext.includes('No memories stored')
       && !memoryContext.includes('No structured memories stored')
@@ -205,12 +209,14 @@ Open by referencing something specific from that conversation. What did he say? 
       stylePreferences: stylePrefs || undefined,
     }) + openingInstruction;
 
+    const openLlmStart = Date.now();
     const completion = await getOpenAI().chat.completions.create({
       model: 'gpt-4o',
       temperature: 0.75,
       max_tokens: 200,
       messages: [{ role: 'system', content: systemPrompt }],
     });
+    emitTurnTiming('opening_llm', Date.now() - openLlmStart, openingCtx);
 
     const rawText = completion.choices[0].message.content?.trim() || '';
     // Strip any "Marcus: " or "Marcus Aurelius: " prefix the model may add

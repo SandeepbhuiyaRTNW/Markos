@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { processMessage } from '@/lib/agent/marcus';
 import { recordRouteTotal } from '@/lib/observability/turn-logger';
+import { emitTurnTiming, emitAgentTimings, timeStage, type TurnTimingCtx } from '@/lib/observability/turn-timing';
 import { query } from '@/lib/db';
 
 // Cap serverless execution at 60s (see the voice route note; the same Amplify
@@ -69,17 +70,22 @@ export async function POST(req: NextRequest) {
       })
     );
 
-    // Process through Marcus agent (same as voice path)
-    const { response: marcusText, emotion, turnId } = await processMessage(
+    const timingCtx: TurnTimingCtx = { path: 'text', turn: history.length <= 1 ? 'first' : 'subsequent', conversationId: conversationId! };
+
+    // Process through Marcus agent (same as voice path) — timed (agent = full pipeline
+    // wall-clock; per-stage breakdown emitted from the returned agentTimings)
+    const { response: marcusText, emotion, turnId, agentTimings } = await timeStage('agent', timingCtx, () => processMessage(
       userId,
       conversationId!,
       message,
-      history
-    );
+      history,
+    ));
+    emitAgentTimings(agentTimings, timingCtx);
 
     if (turnId) {
       await recordRouteTotal(turnId, Date.now() - routeStart);
     }
+    emitTurnTiming('route_total', Date.now() - routeStart, timingCtx);
 
     return NextResponse.json({
       marcusText,
