@@ -10,28 +10,30 @@ type ConvState = 'idle' | 'listening' | 'processing' | 'speaking';
 // @paper-design's defaults are tuned for demo appeal and are far too strong for
 // an ambient backdrop behind a conversation. Adjust these by eye.
 //
-// Register (emotional heaviness, 0..1 — from X-Emotion, lexical fallback) maps to:
-// grain density (noise, denser), drift speed (SLOWER when heavier), and temperature
-// (a SUBTLE warm blend within a NEAR-CREAM palette). Never hue, never darker, never a
-// real colour change. Emotion is the expressive driver here; conversation STATE only sets
-// a quiet base energy that stays SLOWER and quieter than the orb's own motion.
+// Register (emotional heaviness, 0..1 — from X-Emotion, lexical fallback) moves the field
+// WITHIN a muted, desaturated palette along FOUR channels: temperature (cool sage/blue ->
+// warm clay/amber), depth (intensity), density (grain), and drift speed (SLOWER when
+// heavier). It never maps an emotion to a signal colour — you should SEE the field change
+// without being able to read a diagnosis off it. Conversation STATE only sets a quiet base
+// energy that stays SLOWER and quieter than the orb's own motion.
 // ─────────────────────────────────────────────────────────────────────────────
 const TUNING = {
   // Per-state base energy (PRIMARY). speed = drift; intensity = band movement;
   // noise = base grain. 'processing' (thinking) must clearly MOVE so it reads as
   // Marcus considering, not the app hanging.
   state: {
-    idle: { speed: 0.05, intensity: 0.12, noise: 0.1 },
-    listening: { speed: 0.08, intensity: 0.15, noise: 0.12 },
-    processing: { speed: 0.12, intensity: 0.2, noise: 0.15 }, // thinking — still clearly moving, but SLOWER than the orb
-    speaking: { speed: 0.09, intensity: 0.17, noise: 0.13 },
+    idle: { speed: 0.05, intensity: 0.25, noise: 0.13 },
+    listening: { speed: 0.08, intensity: 0.28, noise: 0.15 },
+    processing: { speed: 0.12, intensity: 0.34, noise: 0.18 }, // thinking — still clearly moving, but SLOWER than the orb
+    speaking: { speed: 0.09, intensity: 0.3, noise: 0.16 },
   } as Record<ConvState, { speed: number; intensity: number; noise: number }>,
 
   // Register modulation (SECONDARY, SLOW). Heavier = denser grain + slower drift
   // + warmer — never darker. Temperature is the cool↔warm colour blend below.
   register: {
-    noiseAdd: 0.14, // heavier -> denser grain (subtle, on a near-cream field)
+    noiseAdd: 0.12, // heavier -> denser grain
     speedSlow: 0.6, // heavier -> up to 60% slower drift
+    intensityAdd: 0.1, // heavier -> deeper colour (the "depth" channel)
   },
 
   // Easing (exponential smoothing; perceived transition ≈ 3 × tau, so nothing
@@ -44,21 +46,25 @@ const TUNING = {
   // Fixed look.
   shape: 'blob' as const, // soft organic form (no snapping shape changes)
   softness: 0.92, // smooth gradient, no hard edges
-  scale: 1.3, // broad, calm blobs
+  scale: 1.1, // broad, calm blobs — a hair tighter so the distinct hues read as colour
 } as const;
 
-// NEAR-CREAM palette — LITERAL hexes, edited directly here while tuning. Deliberately kept
-// FAR lighter than the old earth tones: the moving field must sit close to the #faf9f6 page
-// cream, the emotion range spanning a SUBTLE warm deepening, not a colour change (the old
-// saturated terracotta wash made the page text unreadable). Every tone here is light enough
-// that the heaviest end keeps heading + transcript ≥7:1 and all voice-room text ≥4.5:1
-// against it. Key names are historical (parchment/cream/coolStone/warmStone).
+// MUTED palette — LITERAL hexes, edited directly here. Low-saturation, mid-to-light colour
+// that reads CLEARLY as colour (warm sage / dusty blue-grey / soft clay / muted amber /
+// warm stone) but never vivid, never alarm-coloured. Emotional weight slides the field from
+// the COOL trio (calm) toward the WARM trio (heavy) — a temperature move, not a per-emotion
+// colour. Every tone is light enough (L>=0.76) that even at the heaviest end heading +
+// transcript stay >=9:1 (well past the 7:1 floor) and the faintest muted text stays >=4.6:1.
 const PALETTE_FALLBACK = {
-  background: '#faf9f6', // colorBack   — cream page colour (the field's base)
-  parchment: '#f6f0e6',  // near-cream warm — lightest field tone
-  cream: '#f2ebde',      // soft warm cream — mid field tone
-  coolStone: '#f4eee3',  // register LIGHT endpoint (calm) — a hair warmer than cream
-  warmStone: '#efe5d3',  // register HEAVY endpoint — soft warm sand, still light
+  background: '#eeebe2', // colorBack — neutral muted base the field sits on
+  // COOL trio — dominant at LIGHT emotional weight (calm)
+  sage: '#dce9c8',       // warm sage — muted green
+  dustyBlue: '#dae5ec',  // dusty blue-grey (blue is the max channel)
+  stoneLight: '#e6e4da', // light cool stone
+  // WARM trio — the field slides TOWARD these as weight rises (heavy)
+  clay: '#f0e0d0',       // soft clay
+  amber: '#f4e7bc',      // muted amber
+  stoneDeep: '#ede2d0',  // warm "deep" stone (lightened to hold text contrast)
 };
 
 // ── colour helpers (RGB lerp so temperature stays a warm↔cool blend, not a hue) ──
@@ -225,18 +231,24 @@ export default function ShaderBackground({ state, register }: { state: ConvState
     return () => { if (rafRef.current != null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; } };
   }, [animate, kick]);
 
+  // Temperature = the emotional-weight slide from the COOL trio to the WARM trio, a per-slot
+  // RGB lerp (never a hue jump) so the field warms as ONE — no single colour "means" anything.
   const colors = useMemo(
-    () => [palette.parchment, palette.cream, lerpHex(palette.coolStone, palette.warmStone, u.warmth)],
+    () => [
+      lerpHex(palette.sage, palette.clay, u.warmth),
+      lerpHex(palette.dustyBlue, palette.amber, u.warmth),
+      lerpHex(palette.stoneLight, palette.stoneDeep, u.warmth),
+    ],
     [palette, u.warmth],
   );
 
-  // Static palette gradient — first paint + permanent fallback (reduced motion / no WebGL).
-  // The palette is now near-cream, so this is already a soft, readable ground — no quiet
-  // special-case needed.
-  const staticGradient = `radial-gradient(120% 110% at 50% 38%, ${palette.cream} 0%, ${palette.parchment} 52%, ${palette.background} 100%)`;
+  // Static gradient — first paint + permanent fallback (reduced motion / no WebGL). A soft
+  // muted-cool blend from the calm trio; light enough that text contrast holds here too.
+  const staticGradient = `radial-gradient(120% 110% at 50% 38%, ${palette.sage} 0%, ${palette.dustyBlue} 52%, ${palette.background} 100%)`;
 
   const effectiveSpeed = u.speed * (1 - u.warmth * TUNING.register.speedSlow);
   const effectiveNoise = u.noise + u.warmth * TUNING.register.noiseAdd;
+  const effectiveIntensity = Math.min(1, u.intensity + u.warmth * TUNING.register.intensityAdd);
 
   return (
     <div
@@ -259,7 +271,7 @@ export default function ShaderBackground({ state, register }: { state: ConvState
           shape={TUNING.shape}
           softness={TUNING.softness}
           scale={TUNING.scale}
-          intensity={u.intensity}
+          intensity={effectiveIntensity}
           noise={effectiveNoise}
           speed={effectiveSpeed}
           fit="cover"
