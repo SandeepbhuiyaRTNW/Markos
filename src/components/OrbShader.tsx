@@ -29,25 +29,30 @@ export const ORB = {
   // Per-state BASE look at level 0. speed/intensity are GrainGradient params; opacity is
   // the whole surface's presence over the pearlescent stone underneath.
   base: {
-    idle: { speed: 0.1, intensity: 0.1, opacity: 0.3 },
-    listening: { speed: 0.16, intensity: 0.14, opacity: 0.4 },
-    processing: { speed: 0.3, intensity: 0.24, opacity: 0.48 }, // steady, alive — considering, not hung
-    speaking: { speed: 0.18, intensity: 0.16, opacity: 0.44 },
+    idle: { speed: 0.14, intensity: 0.4, opacity: 0.82 },
+    listening: { speed: 0.22, intensity: 0.5, opacity: 0.9 },
+    processing: { speed: 0.34, intensity: 0.6, opacity: 0.92 }, // steady, alive — considering, not hung
+    speaking: { speed: 0.24, intensity: 0.52, opacity: 0.9 },
   } as Record<ConvState, { speed: number; intensity: number; opacity: number }>,
 
   // How much the audio envelope ADDS on top of the base — the "responds to voice" gain.
-  speedGain: 0.9,
-  intensityGain: 0.5,
-  opacityGain: 0.5,
+  speedGain: 0.8,
+  intensityGain: 0.35,
+  opacityGain: 0.1,
 
   // Fixed GrainGradient look. Warm surface (no hue mood-ring); louder = warmer / brighter.
   shape: 'blob' as const,
   softness: 0.9,
   scale: 1.1,
   noise: 0.12,
-  blendMode: 'soft-light' as const, // let the stone's pearlescent depth read through
-  colors: ['#f2eee6', '#d8b48c', '#b0611f'], // cream -> warm sand -> terracotta
-  colorBack: '#cbb8a3', // warm stone under the shader
+  // The shader is the orb's living FILL, not a faint tint: composite it NORMALLY at high
+  // opacity so it's clearly visible. (soft-light at ~0.3 opacity read as invisible over the
+  // pearl — that was the "orb not rendering" bug.) The outer drop-shadow + rim glow still
+  // frame the sphere; with no WebGL / reduced motion OrbShader renders nothing and the
+  // pearl stone shows through unchanged.
+  blendMode: 'normal' as const,
+  colors: ['#faf6ee', '#e2c49a', '#c07a34'], // luminous cream -> warm sand -> terracotta
+  colorBack: '#e6dccb', // light warm stone under the shader
 };
 
 function hasWebGL(): boolean {

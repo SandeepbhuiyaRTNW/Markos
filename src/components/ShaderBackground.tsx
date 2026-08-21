@@ -211,7 +211,13 @@ export default function ShaderBackground({ state, register, quiet = false }: { s
   );
 
   // Static palette gradient — first paint + permanent fallback (reduced motion / no WebGL).
-  const staticGradient = `radial-gradient(120% 110% at 50% 38%, ${palette.cream} 0%, ${palette.parchment} 52%, ${palette.background} 100%)`;
+  // On the voice room (`quiet`) the ground must sit close to the original cream: the earth
+  // tones were chosen for a MOVING field, not a flat page fill, so near-still => near-cream
+  // (a whisper of warmth), never a saturated terracotta wash. The full earth gradient stays
+  // as the non-quiet reduced-motion / no-WebGL fallback everywhere else.
+  const staticGradient = quiet
+    ? `radial-gradient(120% 110% at 50% 38%, #f3ece1 0%, #f7f2ea 55%, ${palette.background} 100%)`
+    : `radial-gradient(120% 110% at 50% 38%, ${palette.cream} 0%, ${palette.parchment} 52%, ${palette.background} 100%)`;
 
   const effectiveSpeed = u.speed * (1 - u.warmth * TUNING.register.speedSlow);
   const effectiveNoise = u.noise + u.warmth * TUNING.register.noiseAdd;
