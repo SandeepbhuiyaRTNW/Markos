@@ -151,7 +151,7 @@ async function playResponseAudio(
 
 interface VoiceOrbProps {
   onStateChange: (state: VoiceState) => void;
-  onTranscript: (userText: string, marcusText: string) => void;
+  onTranscript: (userText: string, marcusText: string, emotion?: string) => void;
   userId: string;
   conversationId: string | null;
   onConversationId: (id: string) => void;
@@ -291,7 +291,12 @@ export default function VoiceOrb({
       }
       const userText = decodeURIComponent(res.headers.get('X-User-Text') || '');
       const marcusText = decodeURIComponent(res.headers.get('X-Marcus-Text') || '');
-      onTranscriptRef.current(userText, marcusText);
+      // X-Emotion = the pipeline's one-word primary_emotion (or 'neutral'). Surface it up so
+      // page.tsx can drive the ambient background from it. This only READS a header already
+      // on the response and passes it to the existing callback — mic / VAD / fetch / playback
+      // are untouched.
+      const emotion = res.headers.get('X-Emotion') || undefined;
+      onTranscriptRef.current(userText, marcusText, emotion);
       // Play the reply. Progressive (streamed) where supported; buffered fallback
       // elsewhere. Same audio / voice / text — only WHEN it starts differs.
       await playResponseAudio(res, {

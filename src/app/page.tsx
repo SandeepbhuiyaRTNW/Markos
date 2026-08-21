@@ -5,7 +5,7 @@ import { Mic, History, Plus, Menu, X, Loader2, Send, ChevronRight, LogOut, Shiel
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import VoiceOrb from '@/components/VoiceOrb';
-import ShaderBackground, { deriveRegister } from '@/components/ShaderBackground';
+import ShaderBackground, { deriveRegister, emotionToRegister } from '@/components/ShaderBackground';
 import OnboardingFlow from '@/components/OnboardingFlow';
 import ConversationView from '@/components/ConversationView';
 import Sidebar from '@/components/Sidebar';
@@ -48,6 +48,7 @@ interface SessionNotesData {
 interface Transcript {
   user: string;
   marcus: string;
+  emotion?: string; // X-Emotion for this turn (one-word primary_emotion), when present
 }
 
 export default function Home() {
@@ -282,18 +283,20 @@ export default function Home() {
     }
   };
 
-  const handleTranscript = useCallback((userText: string, marcusText: string) => {
-    setTranscripts((prev) => [...prev, { user: userText, marcus: marcusText }]);
+  const handleTranscript = useCallback((userText: string, marcusText: string, emotion?: string) => {
+    setTranscripts((prev) => [...prev, { user: userText, marcus: marcusText, emotion }]);
     setRefreshSidebar((p) => p + 1);
   }, []);
 
-  // Emotional register (0 = light .. 1 = heavy) for the ambient shader background,
-  // derived from Marcus's latest reply text (X-Marcus-Text, surfaced here via
-  // onTranscript). Presentation only; touches nothing in the pipeline.
-  const register = useMemo(
-    () => deriveRegister(transcripts.length ? transcripts[transcripts.length - 1].marcus : ''),
-    [transcripts],
-  );
+  // Emotional register (0 = light .. 1 = heavy) for the ambient shader background. Primary
+  // source is X-Emotion (the pipeline's one-word emotion, surfaced via onTranscript); when
+  // it's absent / neutral / unrecognized we fall back to the lexical read of Marcus's reply.
+  // Presentation only; touches nothing in the pipeline.
+  const register = useMemo(() => {
+    const last = transcripts.length ? transcripts[transcripts.length - 1] : null;
+    if (!last) return 0;
+    return emotionToRegister(last.emotion) ?? deriveRegister(last.marcus);
+  }, [transcripts]);
 
   const handleNewSession = () => {
     if (fetchingOpeningRef.current) return;
@@ -362,7 +365,7 @@ export default function Home() {
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
       if (data.conversationId && !conversationId) setConversationId(data.conversationId);
-      setTranscripts((prev) => [...prev, { user: message, marcus: data.marcusText }]);
+      setTranscripts((prev) => [...prev, { user: message, marcus: data.marcusText, emotion: data.emotion }]);
       setRefreshSidebar((p) => p + 1);
     } catch (err) {
       console.error('Text send error:', err);
@@ -617,7 +620,7 @@ export default function Home() {
       <div className="h-screen w-screen flex flex-col relative overflow-hidden" style={{ background: '#faf9f6' }}>
         {/* Ambient Paper Shaders backdrop — driven by conversation state + a slow
             emotional register. Presentation only; sits behind all content (z-0). */}
-        <ShaderBackground state={state} register={register} quiet />
+        <ShaderBackground state={state} register={register} />
         {/* minimal exit — leave voice back to sessions without ending the conversation */}
         <button
           onClick={handleGoToAnalytics}
