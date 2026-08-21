@@ -617,7 +617,7 @@ export default function Home() {
       <div className="h-screen w-screen flex flex-col relative overflow-hidden" style={{ background: '#faf9f6' }}>
         {/* Ambient Paper Shaders backdrop — driven by conversation state + a slow
             emotional register. Presentation only; sits behind all content (z-0). */}
-        <ShaderBackground state={state} register={register} />
+        <ShaderBackground state={state} register={register} quiet />
         {/* minimal exit — leave voice back to sessions without ending the conversation */}
         <button
           onClick={handleGoToAnalytics}

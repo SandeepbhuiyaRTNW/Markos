@@ -121,14 +121,17 @@ interface Uniforms {
  *   when motion is allowed and WebGL is present — so the orb paints first and the
  *   view still works with no WebGL / reduced motion.
  */
-export default function ShaderBackground({ state, register }: { state: ConvState; register: number }) {
+export default function ShaderBackground({ state, register, quiet = false }: { state: ConvState; register: number; quiet?: boolean }) {
   const [palette] = useState(PALETTE_FALLBACK); // literal earth tones; NOT overridden from CSS vars
   const [ready, setReady] = useState(false); // becomes true AFTER first paint
   const [reduceMotion, setReduceMotion] = useState(false);
   const [webglOk, setWebglOk] = useState(true);
   const [u, setU] = useState<Uniforms>({ ...TUNING.state.idle, warmth: register });
 
-  const animate = ready && webglOk && !reduceMotion;
+  // `quiet` (used behind the voice orb) reduces this to NEAR-STILL: the static gradient
+  // still renders, the animated GrainGradient does not — so the orb is the only living
+  // surface on that screen. Reduced-motion / no-WebGL already fall back the same way.
+  const animate = ready && webglOk && !reduceMotion && !quiet;
 
   // Defer the WebGL canvas to the NEXT frame so it never blocks first paint. Isolated in
   // its own effect so nothing else can prevent readiness from being set.

@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import type { MicVAD } from '@ricky0123/vad-web';
 import { VAD_TUNING, HANDS_FREE_AUDIO_CONSTRAINTS, VAD_ASSET_BASE, floatToWav, REARM_COOLDOWN_MS, HandsFreeLoop } from '@/lib/voice/handsFree';
+import OrbShader, { ORB } from '@/components/OrbShader';
 
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
 
@@ -12,6 +13,13 @@ type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
 // network/transfer, so the CLIENT is the outer boundary. Keep in sync with
 // maxDuration = 60 in the conversation route(s).
 const CLIENT_TIMEOUT_MS = 65000;
+
+/** RMS amplitude of an audio frame (0..~1) — drives the orb's live surface. */
+function rms(a: Float32Array): number {
+  let s = 0;
+  for (let i = 0; i < a.length; i++) s += a[i] * a[i];
+  return a.length ? Math.sqrt(s / a.length) : 0;
+}
 
 /**
  * Play the /api/conversation audio response.
@@ -34,9 +42,11 @@ async function playResponseAudio(
     onSpeaking: () => void;
     onEnded: () => void;
     onError: (message: string) => void;
+    /** Optional non-destructive tap for the orb's output level (see VoiceOrb). */
+    attachMeter?: (audio: HTMLAudioElement) => void;
   },
 ): Promise<void> {
-  const { audioRef, onSpeaking, onEnded, onError } = hooks;
+  const { audioRef, onSpeaking, onEnded, onError, attachMeter } = hooks;
 
   if (audioRef.current) { try { audioRef.current.pause(); } catch { /* ignore */ } }
 
@@ -53,6 +63,7 @@ async function playResponseAudio(
     const audio = new Audio(url);
     audioRef.current = audio;
     onSpeaking();
+    attachMeter?.(audio);
     let done = false;
     const finish = () => { if (done) return; done = true; try { URL.revokeObjectURL(url); } catch { /* ignore */ } onEnded(); };
     audio.onended = finish;
@@ -67,6 +78,7 @@ async function playResponseAudio(
   audio.src = url;
   audioRef.current = audio;
   onSpeaking();
+  attachMeter?.(audio);
 
   let settled = false;
   const finish = (recover?: string) => {
@@ -213,6 +225,53 @@ export default function VoiceOrb({
     });
   }
 
+  // ─── Orb audio reactivity (VISUAL ONLY) — live levels the OrbShader reads ───
+  // input  = mic RMS taken from the VAD's own frames (below), reusing its stream.
+  // output = Marcus playback RMS from a NON-DESTRUCTIVE AnalyserNode (captureStream copies
+  //          the element's audio without rerouting it). Neither touches mic/VAD/fetch/
+  //          playback behavior; both fail safe to "no reactivity", never to broken audio.
+  const audioLevelsRef = useRef({ input: 0, output: 0 });
+  const outputAudioCtxRef = useRef<AudioContext | null>(null);
+  const outputMeterStopRef = useRef<(() => void) | null>(null);
+
+  const attachOutputMeter = useCallback((audio: HTMLAudioElement) => {
+    outputMeterStopRef.current?.();
+    outputMeterStopRef.current = null;
+    audioLevelsRef.current.output = 0;
+    try {
+      const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      const cap = audio as unknown as { captureStream?: () => MediaStream; mozCaptureStream?: () => MediaStream };
+      const capture = cap.captureStream?.bind(audio) || cap.mozCaptureStream?.bind(audio);
+      if (!AC || !capture) return; // e.g. Safari — skip; playback untouched, orb uses state baseline
+      const stream = capture();
+      if (!stream || stream.getAudioTracks().length === 0) return;
+      const ctx = (outputAudioCtxRef.current ??= new AC());
+      void ctx.resume?.();
+      const src = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = ORB.fftSize;
+      const sink = ctx.createGain();
+      sink.gain.value = 0; // keep the graph pulled but SILENT — the element already plays, no double audio
+      src.connect(analyser); analyser.connect(sink); sink.connect(ctx.destination);
+      const buf = new Float32Array(analyser.fftSize);
+      let raf = requestAnimationFrame(function loop() {
+        analyser.getFloatTimeDomainData(buf);
+        audioLevelsRef.current.output = rms(buf);
+        raf = requestAnimationFrame(loop);
+      });
+      const stop = () => {
+        cancelAnimationFrame(raf);
+        try { src.disconnect(); analyser.disconnect(); sink.disconnect(); } catch { /* ignore */ }
+        audioLevelsRef.current.output = 0;
+      };
+      audio.addEventListener('ended', stop, { once: true });
+      audio.addEventListener('pause', stop, { once: true });
+      outputMeterStopRef.current = stop;
+    } catch (e) {
+      console.warn('[orb] output meter unavailable (playback unaffected):', e);
+    }
+  }, []);
+
   // ─── Cloud call + client-side handling (UNCHANGED contract: POST /api/conversation) ───
   const sendAudio = useCallback(async (blob: Blob, filename: string) => {
     const controller = new AbortController();
@@ -245,6 +304,7 @@ export default function VoiceOrb({
           loopRef.current?.marcusEnded();
         },
         onError: (m) => onErrorRef.current?.(m),
+        attachMeter: attachOutputMeter,
       });
     } catch (err) {
       // Timeout (abort) or non-OK response: surface a real message, not a silent idle.
@@ -255,7 +315,7 @@ export default function VoiceOrb({
     } finally {
       clearTimeout(timeout);
     }
-  }, []);
+  }, [attachOutputMeter]);
 
   // ─── Classic tap-to-talk (fallback; used when handsFree === false) ───
   const startRecording = useCallback(async () => {
@@ -310,6 +370,10 @@ export default function VoiceOrb({
           redemptionMs: VAD_TUNING.redemptionMs,
           preSpeechPadMs: VAD_TUNING.preSpeechPadMs,
           minSpeechMs: VAD_TUNING.minSpeechMs,
+          // Passive tap: the VAD already runs every mic frame through the model — compute
+          // that frame's RMS to drive the orb while the user speaks. Reuses the VAD's own
+          // stream + AudioContext (no second mic); does NOT affect speech detection.
+          onFrameProcessed: (_probs, frame) => { audioLevelsRef.current.input = rms(frame); },
           // Inject our echo-cancel / noise-suppress constraints via the stream hook.
           getStream: () => navigator.mediaDevices.getUserMedia({ audio: HANDS_FREE_AUDIO_CONSTRAINTS }),
           onSpeechStart: () => {
@@ -408,7 +472,9 @@ export default function VoiceOrb({
         <div className="absolute rounded-full" style={{ width: 232, height: 232, border: '1px solid #e4dfd7', borderTopColor: '#b0611f', animation: 'arc-turn 5.5s linear infinite' }} />
       )}
 
-      {/* orb body — pearlescent stone sphere */}
+      {/* orb body — pearlescent stone sphere. A live shader surface fills it (masked to
+          the circle) when WebGL + motion are available; otherwise the stone shows through
+          unchanged, so the orb degrades to exactly its previous appearance. */}
       <div
         className="relative rounded-full"
         style={{
@@ -418,7 +484,9 @@ export default function VoiceOrb({
           animation: 'orb-still 8s ease-in-out infinite',
           filter: `saturate(${orbSat})`,
         }}
-      />
+      >
+        <OrbShader state={state} levelsRef={audioLevelsRef} />
+      </div>
       {/* rim glow */}
       <div
         className="absolute rounded-full pointer-events-none"
