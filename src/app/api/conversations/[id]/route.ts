@@ -83,42 +83,43 @@ export async function POST(
     let systemPrompt: string;
 
     if (isShortSession) {
-      systemPrompt = `You are summarizing a VERY SHORT conversation between a man and Marcus (his Stoic AI companion). The man only said ${userMessageCount} thing(s). Be BRUTALLY honest about how little content there is. Do NOT pad, embellish, or over-interpret.
+      systemPrompt = `You are writing the short after-note a man reads when he looks back on a VERY SHORT conversation he had with Marcus (his Stoic companion). He only said ${userMessageCount} thing(s). Write TO HIM — second person — and be honest about how little there is. Do NOT pad, embellish, or over-interpret.
+
+VOICE (the whole point): address him directly as "you", never third person ("He said…", "the man"). Use his exact words, quoted back to him.
 
 RULES FOR SHORT SESSIONS:
-- Summary: ONE sentence max. Just state what he said in his own words.
-- Takeaways: 1 item ONLY. Must quote or closely paraphrase his actual words. If he only said one sentence, the takeaway is essentially that sentence and what it might point to.
-- Pondering topics: 1 topic ONLY. Must directly use his words as the starting point.
-- Do NOT generate philosophical insights from a single sentence.
-- Do NOT add Stoic framing beyond the stoic_principle field.
+- Summary: ONE sentence, second person. Example: "You said you're 'really depressed' and don't know what to do."
+- Takeaways: 1 item ONLY, in HIS words — something HE said, never a line Marcus said back. Example: ["You came in saying 'I don't know what to do' — we didn't get to what's behind it yet."]
+- Pondering: 1 item ONLY, his words, second person.
+- Do NOT generate philosophy from a single sentence.
 
 Generate a JSON object:
-- "title": 3-5 words using HIS words. Example: if he said "I'm really depressed" -> "Feeling Really Depressed"
-- "summary": 1 sentence. What did he actually say? Example: "He said he's 'really depressed' and doesn't know what to do."
-- "takeaways": Array with exactly 1 item. Quote him and note what's unresolved. Example: ["He came in saying 'I don't know what to do' — we haven't yet explored what's behind the depression or what 'doing something' would look like for him."]
-- "pondering_topics": Array with exactly 1 item. Use his words. Example: ["You said you 'don't know what to do' — if you could change one thing about tomorrow, what would it be?"]
+- "title": 3-5 words naming the THING ITSELF in his words — not a case-note heading. He said "I'm really depressed" -> "The depression, and not knowing". NEVER "His/He".
+- "summary": 1 sentence, second person (see rules).
+- "takeaways": array with exactly 1 item, his words, second person, never Marcus's line.
+- "pondering_topics": array with exactly 1 item, his words, second person. Example: ["You said you 'don't know what to do' — if you could change one thing about tomorrow, what would it be?"]
 - "mood": One word
 - "stoic_principle": Most relevant Stoic principle
 - "topics": 1-2 topic labels from what he actually said
 Return ONLY valid JSON.`;
     } else {
-      systemPrompt = `You are summarizing a conversation between a man and Marcus (his Stoic AI companion).
+      systemPrompt = `You are writing the after-note a man reads when he looks back on a conversation he had with Marcus (his Stoic companion). You are writing TO HIM, not about him.
 
-CRITICAL RULES:
-1. Summary must use the EXACT words he used. Quote him directly.
-2. Takeaways must reference SPECIFIC things he said — not generic philosophy.
-3. Pondering topics must use HIS words and situation, not abstract questions.
-4. The depth of your summary must match the depth of the conversation. Don't create meaning that wasn't there.
-5. You MUST identify the core PATTERN (the loop he's stuck in) — not abstract concepts.
-6. You MUST provide a concrete ACTION PLAN with specific behaviors, frequency, and duration.
-7. You MUST include a FEEDBACK CHECK — how he should evaluate whether it's working.
+VOICE — THIS IS THE WHOLE POINT:
+1. Address him directly, SECOND PERSON: "You said you miss your family. Four years is a long time." NEVER third person ("He expressed…", "the burden he carries", "the man").
+2. Use the EXACT words he used — quote him back to himself.
+3. A title is the THING ITSELF, in his frame — not a case-note heading. Good: "Four years since you've seen them". Bad: "Missing His Family", "The Weight of an Unlived Life".
+4. Match the depth of the conversation. Don't create meaning that wasn't there.
+5. Identify the core PATTERN (the loop he's stuck in), addressed to him, concrete not abstract.
+6. Give a concrete ACTION PLAN with specific behaviors, frequency, and duration — addressed to him.
+7. Include a FEEDBACK CHECK — how HE should evaluate whether it's working.
 
 Generate a JSON object:
-- "title": 3-6 words using HIS language. Good: "Can't Talk to His Wife". Bad: "The Weight of an Unlived Life".
-- "summary": 2-3 sentences. What he said (quote him), what emerged, where it ended.
-- "takeaways": 2-4 insights. Each MUST quote or closely paraphrase something he said.
-- "pondering_topics": 2-3 questions using HIS words. Example: "You said 'I got nothing left' when you come home — what took it all?"
-- "pattern": The specific behavioral loop he's stuck in. Must be concrete, not abstract. Format: "X → Y → Z → back to X". Example: "He avoids slowing down → unprocessed thoughts pile up → overwhelm builds → he pushes through harder → more avoidance". Use HIS words where possible.
+- "title": 3-7 words naming the THING ITSELF, in his words — a plain noun phrase or second person, NEVER "His/He". Good: "The loan, and your brother". Bad: "Can't Talk to His Wife", "The Weight of an Unlived Life".
+- "summary": 2-3 sentences, TO HIM. What you heard him say (quote him), what surfaced, where it left off. "You said…", "you".
+- "takeaways": 2-4 short lines, each in HIS OWN words or a realization HE reached, addressed to him ("You said…", "You keep coming back to…"). CRITICAL: every takeaway is something HE said or landed on — NEVER a line Marcus said back to him. Do not quote Marcus at him.
+- "pondering_topics": 2-3 questions in HIS words, second person. Example: "You said 'I got nothing left' when you come home — what took it all?"
+- "pattern": The behavioral loop, addressed to him, second person, concrete. Format: "X → Y → Z → back to X". Example: "You avoid slowing down → the thoughts pile up → the weight builds → you push harder → more avoidance". Use HIS words where possible.
 - "action_plan": An object with these fields:
   - "actions": Array of 1-3 specific, trackable steps. Each must include WHAT, WHEN, HOW LONG. Example: ["10-15 min walk daily — no phone, focus on steps and breathing", "After each walk, ask: 'Do I feel even 1% lighter?'"]
   - "when_to_use": Array of 2-4 specific triggers/situations when he should use this plan. Must reference HIS feelings/situations from the conversation. Example: ["When you feel that 'cluttered' heaviness you described", "When you catch yourself pushing through without pausing", "Anytime you feel stuck or empty"]

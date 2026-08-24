@@ -1,52 +1,32 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Sparkles, Loader2, Lightbulb, BookOpen } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { useState, useEffect, type CSSProperties } from 'react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
+import ShaderBackground from '@/components/ShaderBackground';
+import SessionSummary from '@/components/SessionSummary';
 
-interface Message {
-  role: string;
-  content: string;
-  created_at: string;
-  emotion_detected: string | null;
-}
-
+interface Message { role: string; content: string; created_at: string; }
 interface ConversationMeta {
-  id: string;
-  started_at: string;
-  summary: string | null;
-  session_ended: boolean;
-  takeaways: string[] | null;
-  pondering_topics: string[] | null;
-  metadata: Record<string, unknown>;
+  id: string; started_at: string; summary: string | null; session_ended: boolean;
+  takeaways: string[] | null; pondering_topics: string[] | null; metadata: Record<string, unknown>;
 }
+interface ConversationViewProps { conversationId: string; onBack: () => void; }
 
-interface ConversationViewProps {
-  conversationId: string;
-  onBack: () => void;
-}
+const MUTED = '#6b6259';
+const INK_SOFT = '#3d352e';
+const TERRA = '#8a4a14';
+const EYEBROW: CSSProperties = { fontSize: 13, letterSpacing: '0.22em', textTransform: 'uppercase', color: MUTED };
 
 export default function ConversationView({ conversationId, onBack }: ConversationViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [meta, setMeta] = useState<ConversationMeta | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
   const [takeaways, setTakeaways] = useState<string[]>([]);
   const [ponderingTopics, setPonderingTopics] = useState<string[]>([]);
-  const [pattern, setPattern] = useState<string>('');
-  const [actionPlan, setActionPlan] = useState<{
-    actions?: string[]; when_to_use?: string[]; frequency?: string; fallback?: string; real_goal?: string;
-  }>({});
-  const [checkIn, setCheckIn] = useState<string>('');
   const [stoicPrinciple, setStoicPrinciple] = useState<string>('');
-  const [mood, setMood] = useState<string>('');
   const [title, setTitle] = useState('');
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
 
   useEffect(() => {
     setLoading(true);
@@ -56,21 +36,12 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
         setMessages(data.messages || []);
         const conv = data.conversation || null;
         setMeta(conv);
-        // Read from new columns first, fall back to metadata
         const md = conv?.metadata as Record<string, unknown> | null;
         setTitle((md?.title as string) || '');
+        setSummary(conv?.summary ?? null);
         setTakeaways(conv?.takeaways || (md?.takeaways as string[]) || []);
         setPonderingTopics(conv?.pondering_topics || (md?.pondering_topics as string[]) || []);
-        setPattern((md?.pattern as string) || '');
-        const rawPlan = md?.action_plan;
-        setActionPlan(
-          Array.isArray(rawPlan)
-            ? { actions: rawPlan as string[] }
-            : (rawPlan as typeof actionPlan) || {}
-        );
-        setCheckIn((md?.check_in as string) || '');
         setStoicPrinciple((md?.stoic_principle as string) || '');
-        setMood((md?.mood as string) || '');
         setLoading(false);
       })
       .catch((err) => { console.error(err); setLoading(false); });
@@ -83,181 +54,63 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
       const data = await res.json();
       if (data.takeaways) setTakeaways(data.takeaways);
       if (data.pondering_topics) setPonderingTopics(data.pondering_topics);
-      if (data.pattern) setPattern(data.pattern);
-      if (data.action_plan) {
-        setActionPlan(Array.isArray(data.action_plan) ? { actions: data.action_plan } : data.action_plan);
-      }
-      if (data.check_in) setCheckIn(data.check_in);
       if (data.stoic_principle) setStoicPrinciple(data.stoic_principle);
-      if (data.mood) setMood(data.mood);
       if (data.title) setTitle(data.title);
-      if (data.summary && meta) setMeta({ ...meta, summary: data.summary });
+      if (data.summary) setSummary(data.summary);
     } catch (err) { console.error(err); }
     setGenerating(false);
   };
 
-  if (loading) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3">
-        <div className="w-7 h-7 rounded-full border-2 border-[#b0611f]/20 border-t-[#b0611f] animate-spin" />
-        <p className="text-xs text-muted-foreground/50">Loading session…</p>
-      </div>
-    );
-  }
+  const dateLabel = meta
+    ? new Date(meta.started_at).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()
+    : '';
 
   return (
-    <div className="flex-1 flex flex-col h-full fade-in">
-      {/* Header */}
-      <div className="px-4 lg:px-6 py-3 border-b border-border bg-white flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={onBack} className="text-muted-foreground hover:text-foreground gap-1.5">
-          <ArrowLeft className="w-4 h-4" /><span className="hidden sm:inline text-xs">Back</span>
-        </Button>
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-foreground truncate">{title || 'Session'}</h3>
-          {meta && <p className="text-[11px] text-muted-foreground/60">{new Date(meta.started_at).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>}
-        </div>
-        {mood && <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-[#b0611f]/8 text-[#b0611f]/70 font-medium uppercase tracking-wider">{mood}</span>}
-      </div>
+    <div className="relative flex-1 overflow-hidden">
+      <ShaderBackground contained state="idle" register={0} />
+      <div className="relative z-10 h-full overflow-y-auto">
+        <div className="mx-auto w-full px-6 sm:px-10 lg:px-16 py-14" style={{ maxWidth: 720 }}>
+          <button onClick={onBack} className="inline-flex items-center gap-1.5 transition-opacity hover:opacity-70" style={{ color: MUTED, fontSize: 13 }}>
+            <ArrowLeft className="w-4 h-4" strokeWidth={1.75} /> Back
+          </button>
 
-      {/* Split-screen body */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-        {/* ─── LEFT PANEL: Session Notes ─── */}
-        <div className="lg:w-[40%] lg:border-r border-border lg:overflow-y-auto lg:h-full overflow-y-auto shrink-0">
-          <div className="px-5 py-6 space-y-4">
-            {/* Summary */}
-            {meta?.summary && (
-              <div className="glass-strong rounded-2xl p-5">
-                <span className="text-xs font-semibold uppercase tracking-widest text-[#b0611f] block mb-2">Summary</span>
-                <p className="text-sm leading-relaxed text-foreground/90">{meta.summary}</p>
-              </div>
-            )}
+          {loading ? (
+            <p style={{ ...EYEBROW, marginTop: 40 }}>Loading…</p>
+          ) : (
+            <div style={{ marginTop: 28 }}>
+              <SessionSummary
+                title={title || 'Session'}
+                dateLabel={dateLabel}
+                summary={summary}
+                takeaways={takeaways}
+                ponderingTopics={ponderingTopics}
+                stoicPrinciple={stoicPrinciple}
+              />
 
-            {/* Key Takeaways */}
-            {takeaways.length > 0 && (
-              <div className="glass-strong rounded-2xl p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <Lightbulb className="w-4 h-4 text-[#b0611f]" />
-                  <span className="text-xs font-semibold uppercase tracking-widest text-[#b0611f]">Key Takeaways</span>
+              {!takeaways.length && !summary && (
+                <button onClick={generateSummary} disabled={generating} className="inline-flex items-center gap-2 transition-opacity hover:opacity-70 disabled:opacity-50" style={{ color: TERRA, fontSize: 16, marginTop: 24 }}>
+                  {generating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</> : 'Generate summary'}
+                </button>
+              )}
+
+              {/* The conversation — plain, no bubbles, no emotion pills */}
+              {messages.length > 0 && (
+                <div style={{ marginTop: 56 }}>
+                  <p style={EYEBROW}>The conversation</p>
+                  <div style={{ marginTop: 20 }}>
+                    {messages.map((m, i) => (
+                      <div key={i} style={{ marginTop: i === 0 ? 0 : 24, maxWidth: 620 }}>
+                        <p style={{ fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: MUTED, marginBottom: 4 }}>{m.role === 'marcus' ? 'Marcus' : 'You'}</p>
+                        <p style={{ fontSize: 17, lineHeight: 1.6, color: INK_SOFT }}>{m.content}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <ul className="space-y-2">
-                  {takeaways.map((t, i) => (
-                    <li key={i} className="flex gap-2.5 text-sm text-foreground/80"><span className="text-[#b0611f]/60 mt-0.5">→</span><span>{t}</span></li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Pondering Topics */}
-            {ponderingTopics.length > 0 && (
-              <div className="glass-strong rounded-2xl p-5 border border-[#b0611f]/10">
-                <span className="text-xs font-semibold uppercase tracking-widest text-[#b0611f] block mb-3">Ponder Before Next Session</span>
-                <div className="space-y-3">
-                  {ponderingTopics.map((t, i) => (
-                    <div key={i} className="flex gap-2.5 text-sm text-muted-foreground italic"><span className="text-[#b0611f]/50 mt-0.5 not-italic">✦</span><span>{t}</span></div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Pattern */}
-            {pattern && (
-              <div className="glass-strong rounded-2xl p-5 border border-orange-500/10 bg-orange-50/30 dark:bg-orange-950/10">
-                <span className="text-xs font-semibold uppercase tracking-widest text-orange-600/80 block mb-2">🔁 The Pattern</span>
-                <p className="text-sm leading-relaxed text-foreground/80">{pattern}</p>
-              </div>
-            )}
-
-            {/* Action System */}
-            {(actionPlan.actions?.length || actionPlan.when_to_use?.length || actionPlan.frequency) && (
-              <div className="glass-strong rounded-2xl p-5 border border-emerald-500/10 bg-emerald-50/30 dark:bg-emerald-950/10 space-y-4">
-                <span className="text-xs font-semibold uppercase tracking-widest text-emerald-600/80 block">🎯 Your System</span>
-
-                {actionPlan.actions && actionPlan.actions.length > 0 && (
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600/60 mb-2">Steps</p>
-                    <ul className="space-y-1.5">
-                      {actionPlan.actions.map((a, i) => (
-                        <li key={i} className="flex gap-2.5 text-sm text-foreground/80"><span className="text-emerald-600/60 mt-0.5 font-medium">{i + 1}.</span><span>{a}</span></li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {actionPlan.when_to_use && actionPlan.when_to_use.length > 0 && (
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600/60 mb-2">When to Use This</p>
-                    <ul className="space-y-1">
-                      {actionPlan.when_to_use.map((w, i) => (
-                        <li key={i} className="flex gap-2 text-sm text-foreground/70"><span className="text-emerald-500/50 mt-1">•</span><span>{w}</span></li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {actionPlan.frequency && (
-                  <div><p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600/60 mb-1">Frequency</p><p className="text-sm text-foreground/70">{actionPlan.frequency}</p></div>
-                )}
-
-                {actionPlan.fallback && (
-                  <div className="border-t border-emerald-500/10 pt-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-600/60 mb-1">🔄 If It Doesn&apos;t Work</p>
-                    <p className="text-sm text-foreground/70">{actionPlan.fallback}</p>
-                  </div>
-                )}
-
-                {actionPlan.real_goal && (
-                  <div className="border-t border-emerald-500/10 pt-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600/60 mb-1">The Real Goal</p>
-                    <p className="text-sm text-foreground/80 font-medium">{actionPlan.real_goal}</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Check-in */}
-            {checkIn && (
-              <div className="glass-strong rounded-2xl p-5 border border-blue-500/10 bg-blue-50/30 dark:bg-blue-950/10">
-                <span className="text-xs font-semibold uppercase tracking-widest text-blue-600/80 block mb-2">📊 Check In (3-5 Days)</span>
-                <p className="text-sm leading-relaxed text-foreground/80 italic">{checkIn}</p>
-              </div>
-            )}
-
-            {/* Stoic Principle */}
-            {stoicPrinciple && (
-              <div className="flex items-center gap-2 py-2">
-                <BookOpen className="w-3.5 h-3.5 text-[#b0611f]/50" />
-                <span className="text-[11px] text-muted-foreground/50">Stoic Principle: <span className="text-foreground/70 font-medium">{stoicPrinciple}</span></span>
-              </div>
-            )}
-
-            {/* Generate button if no takeaways */}
-            {!takeaways.length && !meta?.summary && (
-              <Button variant="outline" size="sm" onClick={generateSummary} disabled={generating} className="w-full gap-2 text-xs">
-                {generating ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating…</> : <><Sparkles className="w-3.5 h-3.5 text-[#c2917c]" /> Generate Takeaways</>}
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* ─── RIGHT PANEL: Conversation Transcript ─── */}
-        <div className="lg:w-[60%] flex-1 overflow-y-auto lg:h-full">
-          <div className="px-5 py-6 space-y-4">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-2">Conversation</p>
-            {messages.map((msg, i) => (
-              <div key={i} className={cn('flex', msg.role === 'marcus' ? 'justify-start' : 'justify-end')}>
-                <div className={cn('message-bubble', msg.role === 'marcus' ? 'marcus-message' : 'user-message')}>
-                  <p className="text-sm leading-relaxed">{msg.content}</p>
-                  {msg.emotion_detected && (
-                    <span className="inline-block mt-2 text-[10px] px-2 py-0.5 rounded-full bg-[#b0611f]/8 text-[#b0611f]/80">{msg.emotion_detected}</span>
-                  )}
-                </div>
-              </div>
-            ))}
-            <div ref={bottomRef} />
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
-

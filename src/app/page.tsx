@@ -10,6 +10,7 @@ import OnboardingFlow from '@/components/OnboardingFlow';
 import ConversationView from '@/components/ConversationView';
 import Sidebar from '@/components/Sidebar';
 import AnalyticsDashboard from '@/components/AnalyticsDashboard';
+import SessionSummary from '@/components/SessionSummary';
 
 // localStorage getters/setters throw "Access to storage is not allowed from this
 // context" when the page runs in a storage-blocked / partitioned context (an embedded
@@ -914,160 +915,24 @@ export default function Home() {
             <AnalyticsDashboard userId={userId} onSelectSession={handleSelectSession} onContinueSession={handleContinueSession} onStartFresh={handleStartFresh} />
           ) : view === 'session-notes' && sessionNotes ? (
             /* ─── Session Notes (post end-session) ─── */
-            <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-8">
-              <div className="max-w-2xl mx-auto space-y-6 fade-in-up">
-                <div className="text-center mb-8">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#b0611f]/15 to-[#b0611f]/5 border border-[#b0611f]/20 flex items-center justify-center mx-auto mb-4">
-                    <span className="text-2xl font-light text-[#b0611f]">M</span>
-                  </div>
-                  <h2 className="text-xl font-semibold text-foreground">{sessionNotes.title || 'Session Complete'}</h2>
-                  {sessionNotes.mood && (
-                    <p className="text-xs text-muted-foreground/50 mt-1 uppercase tracking-wider">
-                      Mood: {sessionNotes.mood}
-                    </p>
-                  )}
-                </div>
-
-                {/* Summary */}
-                {sessionNotes.summary && (
-                  <div className="glass-strong rounded-2xl p-5">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-[#b0611f] mb-2">Summary</p>
-                    <p className="text-sm leading-relaxed text-foreground/80">{sessionNotes.summary}</p>
-                  </div>
-                )}
-
-                {/* Takeaways */}
-                {sessionNotes.takeaways && sessionNotes.takeaways.length > 0 && (
-                  <div className="glass-strong rounded-2xl p-5">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-[#b0611f] mb-3">Key Takeaways</p>
-                    <ul className="space-y-2">
-                      {sessionNotes.takeaways.map((t, i) => (
-                        <li key={i} className="flex gap-2.5 text-sm text-foreground/80">
-                          <span className="text-[#b0611f]/60 mt-0.5">→</span>
-                          <span>{t}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Pondering Topics */}
-                {sessionNotes.pondering_topics && sessionNotes.pondering_topics.length > 0 && (
-                  <div className="glass-strong rounded-2xl p-5 border border-[#b0611f]/10">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-[#b0611f] mb-3">Before Next Session — Ponder These</p>
-                    <div className="space-y-3">
-                      {sessionNotes.pondering_topics.map((t, i) => (
-                        <div key={i} className="flex gap-2.5 text-sm text-muted-foreground italic">
-                          <span className="text-[#b0611f]/50 mt-0.5 not-italic">✦</span>
-                          <span>{t}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Pattern */}
-                {sessionNotes.pattern && (
-                  <div className="glass-strong rounded-2xl p-5 border border-orange-500/10 bg-orange-50/30 dark:bg-orange-950/10">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-orange-600/80 mb-2">🔁 The Pattern</p>
-                    <p className="text-sm leading-relaxed text-foreground/80">{sessionNotes.pattern}</p>
-                  </div>
-                )}
-
-                {/* Action System */}
-                {sessionNotes.action_plan && (
-                  <div className="glass-strong rounded-2xl p-5 border border-emerald-500/10 bg-emerald-50/30 dark:bg-emerald-950/10 space-y-4">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-emerald-600/80">🎯 Your System</p>
-
-                    {/* Actions */}
-                    {(() => {
-                      const plan = sessionNotes.action_plan!;
-                      const actions = Array.isArray(plan) ? plan : (plan.actions || []);
-                      const whenToUse = !Array.isArray(plan) ? plan.when_to_use : undefined;
-                      const frequency = !Array.isArray(plan) ? plan.frequency : undefined;
-                      const fallback = !Array.isArray(plan) ? plan.fallback : undefined;
-                      const realGoal = !Array.isArray(plan) ? plan.real_goal : undefined;
-
-                      return (
-                        <>
-                          {actions.length > 0 && (
-                            <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600/60 mb-2">Steps</p>
-                              <ul className="space-y-1.5">
-                                {actions.map((a: string, i: number) => (
-                                  <li key={i} className="flex gap-2.5 text-sm text-foreground/80">
-                                    <span className="text-emerald-600/60 mt-0.5 font-medium">{i + 1}.</span>
-                                    <span>{a}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          {whenToUse && whenToUse.length > 0 && (
-                            <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600/60 mb-2">When to Use This</p>
-                              <ul className="space-y-1">
-                                {whenToUse.map((w: string, i: number) => (
-                                  <li key={i} className="flex gap-2 text-sm text-foreground/70">
-                                    <span className="text-emerald-500/50 mt-1">•</span>
-                                    <span>{w}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          {frequency && (
-                            <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600/60 mb-1">Frequency</p>
-                              <p className="text-sm text-foreground/70">{frequency}</p>
-                            </div>
-                          )}
-
-                          {fallback && (
-                            <div className="border-t border-emerald-500/10 pt-3">
-                              <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-600/60 mb-1">🔄 If It Doesn&apos;t Work</p>
-                              <p className="text-sm text-foreground/70">{fallback}</p>
-                            </div>
-                          )}
-
-                          {realGoal && (
-                            <div className="border-t border-emerald-500/10 pt-3">
-                              <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600/60 mb-1">The Real Goal</p>
-                              <p className="text-sm text-foreground/80 font-medium">{realGoal}</p>
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
-                )}
-
-                {/* Check-in */}
-                {sessionNotes.check_in && (
-                  <div className="glass-strong rounded-2xl p-5 border border-blue-500/10 bg-blue-50/30 dark:bg-blue-950/10">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-blue-600/80 mb-2">📊 Check In (3-5 Days)</p>
-                    <p className="text-sm leading-relaxed text-foreground/80 italic">{sessionNotes.check_in}</p>
-                  </div>
-                )}
-
-                {/* Stoic Principle */}
-                {sessionNotes.stoic_principle && (
-                  <div className="text-center py-4">
-                    <p className="text-[11px] text-muted-foreground/40 uppercase tracking-wider mb-1">Stoic Principle</p>
-                    <p className="text-sm font-medium text-foreground/70">{sessionNotes.stoic_principle}</p>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="pt-4">
+            <div className="relative flex-1 overflow-hidden">
+              <ShaderBackground contained state="idle" register={0} />
+              <div className="relative z-10 h-full overflow-y-auto">
+                <div className="mx-auto w-full px-6 sm:px-10 lg:px-16 py-16" style={{ maxWidth: 720 }}>
+                  <SessionSummary
+                    title={sessionNotes.title || 'Session complete'}
+                    dateLabel="Today"
+                    summary={sessionNotes.summary}
+                    takeaways={sessionNotes.takeaways}
+                    ponderingTopics={sessionNotes.pondering_topics}
+                    stoicPrinciple={sessionNotes.stoic_principle}
+                  />
                   <button
                     onClick={handleGoToAnalytics}
-                    className="w-full h-12 rounded-xl flex items-center justify-center gap-2 text-sm font-medium border border-border text-foreground/70 hover:bg-secondary transition-all"
+                    className="inline-flex items-center gap-2 transition-opacity hover:opacity-70"
+                    style={{ color: '#6b6259', fontSize: 15, marginTop: 52 }}
                   >
-                    <History className="w-4 h-4" />
-                    Back to Dashboard
+                    <History className="w-4 h-4" strokeWidth={1.75} /> Back to sessions
                   </button>
                 </div>
               </div>
