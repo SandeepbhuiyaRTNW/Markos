@@ -24,7 +24,8 @@ export async function GET(req: NextRequest) {
       c.pondering_topics,
       c.metadata,
       c.parent_session_id,
-      (SELECT content FROM messages WHERE conversation_id = c.id AND role = 'user' ORDER BY created_at ASC LIMIT 1) as first_user_message
+      (SELECT content FROM messages WHERE conversation_id = c.id AND role = 'user' ORDER BY created_at ASC LIMIT 1) as first_user_message,
+      (SELECT content FROM messages WHERE conversation_id = c.id AND role = 'user' ORDER BY created_at DESC LIMIT 1) as last_user_message
      FROM conversations c
      WHERE c.user_id = $1
        AND c.session_ended = true
@@ -39,6 +40,7 @@ export async function GET(req: NextRequest) {
     summary: string | null; pondering_topics: string[] | null;
     metadata: Record<string, unknown> | null; parent_session_id: string | null;
     first_user_message: string | null;
+    last_user_message: string | null;
   }
 
   const sessions = result.rows as SessionRow[];
@@ -79,6 +81,8 @@ export async function GET(req: NextRequest) {
       takeaways,       // full list for dropdown
       date: s.ended_at || s.started_at,
       sessionType: md.sessionType === 'fresh' ? 'fresh' : 'continue',
+      // What the user LAST said in that session — the Continue choice quotes it.
+      lastUserMessage: s.last_user_message || s.first_user_message || null,
     };
   });
 

@@ -23,8 +23,20 @@ const safeLocal = {
 
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
 type AppView = 'analytics' | 'voice' | 'session-detail' | 'session-notes';
-type InputMode = 'session-type' | 'pick-session' | 'choice' | 'voice' | 'text';
+type InputMode = 'session-type' | 'pick-session' | 'choice' | 'voice' | 'text' | 'listening';
 type SessionType = 'continue' | 'fresh';
+
+// Editorial helpers for the start screens (colours contrast-checked; see AnalyticsDashboard).
+function relDayUpper(dateStr: string): string {
+  const dt = new Date(dateStr);
+  if (Number.isNaN(dt.getTime())) return '';
+  const days = Math.floor((Date.now() - dt.getTime()) / 86400000);
+  const label = days <= 0 ? 'Today' : days === 1 ? 'Yesterday'
+    : days < 7 ? dt.toLocaleDateString('en-US', { weekday: 'long' })
+    : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return label.toUpperCase();
+}
+function clip(s: string, n: number): string { return s.length > n ? s.slice(0, n).trimEnd() + '…' : s; }
 
 interface SessionNotesData {
   title?: string;
@@ -77,12 +89,13 @@ export default function Home() {
   const [muted, setMuted] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [inputMode, setInputMode] = useState<InputMode>('session-type');
+  const [startLoading, setStartLoading] = useState(false); // fetching prior sessions to decide the start fork
   const [sessionType, setSessionType] = useState<SessionType>('continue');
   const [continueFromId, setContinueFromId] = useState<string | null>(null);
   const [recentSessions, setRecentSessions] = useState<Array<{
     id: string; sessionNumber: number; title: string; summary: string | null;
     ponderingPreview: string | null; ponderingTopics: string[]; takeaways: string[];
-    date: string; sessionType: string;
+    date: string; sessionType: string; lastUserMessage?: string | null;
   }>>([]);
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [loadingRecent, setLoadingRecent] = useState(false);
@@ -130,7 +143,7 @@ export default function Home() {
       .catch(() => setCheckingOnboarding(false));
   }, [userId]);
 
-  const fetchOpening = useCallback(async (mode: InputMode = 'voice') => {
+  const fetchOpening = useCallback(async (mode: InputMode = 'voice', opts?: { sessionType?: SessionType; continueFrom?: string | null }) => {
     if (!userId || !onboardingComplete) return;
     if (viewRef.current !== 'voice') return;
     if (fetchingOpeningRef.current) return;
@@ -139,8 +152,10 @@ export default function Home() {
     setOpeningMessage(null);
     try {
       const isTextMode = mode === 'text';
-      const sessionTypeParam = sessionType === 'fresh' ? '&sessionType=fresh' : '';
-      const continueParam = continueFromId ? `&continueFrom=${continueFromId}` : '';
+      const st = opts?.sessionType ?? sessionType;
+      const cf = opts?.continueFrom !== undefined ? opts.continueFrom : continueFromId;
+      const sessionTypeParam = st === 'fresh' ? '&sessionType=fresh' : '';
+      const continueParam = cf ? `&continueFrom=${cf}` : '';
       const url = `/api/conversation/opening?userId=${userId}${isTextMode ? '&skipTts=true' : ''}${sessionTypeParam}${continueParam}`;
       const r = await fetch(url);
 
@@ -181,6 +196,27 @@ export default function Home() {
       fetchingOpeningRef.current = false;
     }
   }, [userId, onboardingComplete, sessionType, continueFromId]);
+
+  // Enter the mic-open voice room. Shows the "listening" entry screen while Marcus's opening
+  // loads, then flips to the room (effect below). sessionType/continueFrom are passed through
+  // to fetchOpening so there is no stale-state race.
+  const enterVoice = useCallback((opts: { sessionType: SessionType; continueFrom: string | null }) => {
+    if (fetchingOpeningRef.current) return;
+    setConversationId(null); setTranscripts([]); setOpeningMessage(null); setSessionNotes(null);
+    setSelectedConvId(null); setSidebarOpen(false);
+    setSessionType(opts.sessionType); setContinueFromId(opts.continueFrom);
+    setExpandedSessionId(null); setRecentSessions([]); setStartLoading(false);
+    setView('voice'); viewRef.current = 'voice';
+    setInputMode('listening');
+    void fetchOpening('voice', opts);
+  }, [fetchOpening]);
+
+  const handleStartFresh = useCallback(() => enterVoice({ sessionType: 'fresh', continueFrom: null }), [enterVoice]);
+
+  // Once the opening is ready, move from the "listening" entry screen into the room.
+  useEffect(() => {
+    if (inputMode === 'listening' && openingMessage && !openingLoading) setInputMode('voice');
+  }, [inputMode, openingMessage, openingLoading]);
 
   const handleSendCode = async () => {
     if (!email || !email.includes('@')) { setAuthError('Please enter a valid email.'); return; }
@@ -298,7 +334,7 @@ export default function Home() {
     return emotionToRegister(last.emotion) ?? deriveRegister(last.marcus);
   }, [transcripts]);
 
-  const handleNewSession = () => {
+  const handleNewSession = async () => {
     if (fetchingOpeningRef.current) return;
     if (conversationId && view === 'voice' && (transcripts.length > 0 || openingMessage)) return;
     setConversationId(null);
@@ -307,13 +343,28 @@ export default function Home() {
     setSessionNotes(null);
     setSelectedConvId(null);
     setSidebarOpen(false);
-    setInputMode('session-type');
     setSessionType('continue');
     setContinueFromId(null);
     setExpandedSessionId(null);
     setRecentSessions([]);
     setView('voice');
     viewRef.current = 'voice';
+    // The start fork only makes sense when a prior session exists. Decide by fetching recent
+    // sessions FIRST: some -> show the Continue/fresh fork; none -> nothing to choose, go
+    // straight to the listening state (fixes the "Continue offered with zero sessions" bug).
+    setStartLoading(true);
+    setInputMode('session-type');
+    try {
+      const res = await fetch(`/api/conversations/recent?userId=${userId}`);
+      const data = await res.json();
+      const sessions = data.sessions || [];
+      setStartLoading(false);
+      if (sessions.length > 0) setRecentSessions(sessions);
+      else enterVoice({ sessionType: 'fresh', continueFrom: null });
+    } catch {
+      setStartLoading(false);
+      enterVoice({ sessionType: 'fresh', continueFrom: null });
+    }
   };
 
   const handleChooseSessionType = async (type: SessionType) => {
@@ -396,20 +447,8 @@ export default function Home() {
 
   // Continue a conversation directly from the dashboard — goes straight to voice/text choice
   const handleContinueSession = (sessionId: string) => {
-    if (fetchingOpeningRef.current) return;
-    setConversationId(null);
-    setTranscripts([]);
-    setOpeningMessage(null);
-    setSessionNotes(null);
-    setSelectedConvId(null);
-    setSidebarOpen(false);
-    setContinueFromId(sessionId);
-    setSessionType('continue');
-    setExpandedSessionId(null);
-    setRecentSessions([]);
-    setInputMode('choice'); // Skip session-type and pick-session — go straight to voice/text choice
-    setView('voice');
-    viewRef.current = 'voice';
+    // Straight into the mic-open room, continuing that thread (no voice/text step).
+    enterVoice({ sessionType: 'continue', continueFrom: sessionId });
   };
 
   const statusLabel: Record<VoiceState, string> = {
@@ -872,7 +911,7 @@ export default function Home() {
           {view === 'session-detail' && selectedConvId ? (
             <ConversationView conversationId={selectedConvId} onBack={handleGoToAnalytics} />
           ) : view === 'analytics' ? (
-            <AnalyticsDashboard userId={userId} onSelectSession={handleSelectSession} onContinueSession={handleContinueSession} />
+            <AnalyticsDashboard userId={userId} onSelectSession={handleSelectSession} onContinueSession={handleContinueSession} onStartFresh={handleStartFresh} />
           ) : view === 'session-notes' && sessionNotes ? (
             /* ─── Session Notes (post end-session) ─── */
             <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-8">
@@ -1037,35 +1076,48 @@ export default function Home() {
             /* ─── Session UI ─── */
             <div className="flex-1 flex flex-col h-full">
               {/* Mode Selection */}
-              {/* Step 1: Session Type Selection */}
+              {/* Session-start (a prior session exists) — editorial fork: Continue first + warmer */}
               {inputMode === 'session-type' && !openingMessage && !openingLoading && transcripts.length === 0 && (
-                <div className="flex-1 flex flex-col items-center justify-center py-20 text-center fade-in-up">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#b0611f]/10 to-transparent border border-[#b0611f]/10 flex items-center justify-center mb-6">
-                    <span className="text-2xl font-light text-[#b0611f]">M</span>
+                <div className="relative flex-1 overflow-hidden">
+                  <ShaderBackground contained state="idle" register={0} />
+                  <div className="relative z-10 h-full flex flex-col items-center justify-center px-6 fade-in-up">
+                    {startLoading || recentSessions.length === 0 ? (
+                      <p style={{ fontSize: 13, letterSpacing: '0.22em', textTransform: 'uppercase', color: '#6b6259' }}>One moment…</p>
+                    ) : (
+                      <div className="w-full" style={{ maxWidth: 520 }}>
+                        <div className="flex justify-center">
+                          <div className="rounded-full" style={{ width: 132, height: 132, background: 'radial-gradient(circle at 34% 30%,#ffffff 0%,#f2eee6 22%,#ded7cb 52%,#b8ada0 82%,#8e8377 100%)', boxShadow: '0 24px 46px -20px rgba(60,52,44,.45), inset 0 -20px 40px rgba(90,80,68,.26), inset 0 12px 20px rgba(255,255,255,.7), 0 0 0 1px rgba(20,16,14,.07)' }} />
+                        </div>
+                        <h1 className="font-serif text-center" style={{ fontSize: 'clamp(28px,4.5vw,42px)', fontWeight: 400, letterSpacing: '-0.02em', color: '#14100e', marginTop: 34 }}>Where do you want to start?</h1>
+                        <div style={{ marginTop: 40 }}>
+                          {/* Continue — first, warmer, and it NAMES what is being continued */}
+                          <button onClick={() => handleContinueSession(recentSessions[0].id)} className="block w-full text-left transition-opacity hover:opacity-80">
+                            <p style={{ fontSize: 12, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#8a4a14' }}>{`Continue · ${relDayUpper(recentSessions[0].date)}`}</p>
+                            <p style={{ fontSize: 22, color: '#14100e', marginTop: 6, lineHeight: 1.3 }}>{recentSessions[0].title}</p>
+                            {recentSessions[0].lastUserMessage && (
+                              <p style={{ fontSize: 15, color: '#5c534b', marginTop: 6, fontStyle: 'italic', lineHeight: 1.45 }}>&ldquo;{clip(recentSessions[0].lastUserMessage, 92)}&rdquo;</p>
+                            )}
+                          </button>
+                          {/* Something else — quieter */}
+                          <button onClick={handleStartFresh} className="block w-full text-left transition-opacity hover:opacity-70" style={{ marginTop: 30 }}>
+                            <p style={{ fontSize: 16, color: '#5c534b' }}>Something else — <span style={{ color: '#6b6259' }}>start fresh, Marcus still knows you.</span></p>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <p className="text-sm font-medium text-foreground mb-1">How do you want to start?</p>
-                  <p className="text-xs text-muted-foreground/50 mb-8">Pick up where you left off, or begin something new</p>
-                  <div className="flex gap-4">
-                    <button
-                      onClick={() => handleChooseSessionType('continue')}
-                      className="flex flex-col items-center gap-3 px-8 py-6 rounded-2xl border border-border hover:border-[#b0611f]/30 hover:bg-[#b0611f]/5 transition-all group max-w-[180px]"
-                    >
-                      <div className="w-12 h-12 rounded-xl bg-[#b0611f]/8 flex items-center justify-center group-hover:bg-[#b0611f]/15 transition-colors">
-                        <svg className="w-5 h-5 text-[#b0611f]/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                      </div>
-                      <span className="text-sm font-medium text-foreground">Continue</span>
-                      <span className="text-[11px] text-muted-foreground/50 leading-tight">Pick up where we left off</span>
-                    </button>
-                    <button
-                      onClick={() => handleChooseSessionType('fresh')}
-                      className="flex flex-col items-center gap-3 px-8 py-6 rounded-2xl border border-border hover:border-[#b0611f]/30 hover:bg-[#b0611f]/5 transition-all group max-w-[180px]"
-                    >
-                      <div className="w-12 h-12 rounded-xl bg-[#b0611f]/8 flex items-center justify-center group-hover:bg-[#b0611f]/15 transition-colors">
-                        <svg className="w-5 h-5 text-[#b0611f]/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" /></svg>
-                      </div>
-                      <span className="text-sm font-medium text-foreground">New Topic</span>
-                      <span className="text-[11px] text-muted-foreground/50 leading-tight">Start something different</span>
-                    </button>
+                </div>
+              )}
+
+              {/* Session-start (no prior session) — no buttons; the mic is already open */}
+              {inputMode === 'listening' && (
+                <div className="relative flex-1 overflow-hidden">
+                  <ShaderBackground contained state="idle" register={0} />
+                  <div className="relative z-10 h-full flex flex-col items-center justify-center text-center px-6 fade-in-up">
+                    <div className="rounded-full" style={{ width: 168, height: 168, background: 'radial-gradient(circle at 34% 30%,#ffffff 0%,#f2eee6 22%,#ded7cb 52%,#b8ada0 82%,#8e8377 100%)', boxShadow: '0 26px 50px -20px rgba(60,52,44,.5), inset 0 -22px 44px rgba(90,80,68,.28), inset 0 12px 22px rgba(255,255,255,.7), 0 0 0 1px rgba(20,16,14,.08)' }} />
+                    <h1 className="font-serif" style={{ fontSize: 'clamp(30px,5vw,46px)', fontWeight: 400, letterSpacing: '-0.02em', color: '#14100e', marginTop: 40 }}>I&rsquo;m here.</h1>
+                    <p style={{ fontSize: 18, color: '#5c534b', marginTop: 14 }}>Start talking whenever you&rsquo;re ready.</p>
+                    <p style={{ position: 'absolute', bottom: 36, fontSize: 12, letterSpacing: '0.26em', textTransform: 'uppercase', color: '#6b6259' }}>Listening</p>
                   </div>
                 </div>
               )}

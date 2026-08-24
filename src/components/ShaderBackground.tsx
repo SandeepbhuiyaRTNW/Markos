@@ -150,7 +150,7 @@ interface Uniforms {
  *   when motion is allowed and WebGL is present — so the orb paints first and the
  *   view still works with no WebGL / reduced motion.
  */
-export default function ShaderBackground({ state, register }: { state: ConvState; register: number }) {
+export default function ShaderBackground({ state, register, contained = false }: { state: ConvState; register: number; contained?: boolean }) {
   const [palette] = useState(PALETTE_FALLBACK); // literal earth tones; NOT overridden from CSS vars
   const [ready, setReady] = useState(false); // becomes true AFTER first paint
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -260,7 +260,7 @@ export default function ShaderBackground({ state, register }: { state: ConvState
       // the library needs (it sizes the WebGL canvas from this subtree's measured box).
       // zIndex:0 keeps it behind the room's z-10 content while the room's own background
       // paints beneath it; pointer-events:none so it never intercepts clicks.
-      style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, overflow: 'hidden' }}
+      style={{ position: contained ? 'absolute' : 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, overflow: 'hidden' }}
     >
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: staticGradient }} />
       {animate && (
