@@ -11,6 +11,8 @@ import ConversationView from '@/components/ConversationView';
 import Sidebar from '@/components/Sidebar';
 import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 import SessionSummary from '@/components/SessionSummary';
+import AppHeader from '@/components/AppHeader';
+import SettingsScreen from '@/components/SettingsScreen';
 
 // localStorage getters/setters throw "Access to storage is not allowed from this
 // context" when the page runs in a storage-blocked / partitioned context (an embedded
@@ -23,7 +25,7 @@ const safeLocal = {
 };
 
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
-type AppView = 'analytics' | 'voice' | 'session-detail' | 'session-notes';
+type AppView = 'analytics' | 'voice' | 'session-detail' | 'session-notes' | 'settings';
 type InputMode = 'session-type' | 'pick-session' | 'choice' | 'voice' | 'text' | 'listening';
 type SessionType = 'continue' | 'fresh';
 
@@ -297,27 +299,45 @@ export default function Home() {
     setEmail('');
   };
 
-  const handleCleanSlate = async () => {
+  // YOUR DATA level 3 — everything incl. memory. The typed-ERASE confirm lives in Settings.
+  const handleStartOver = async () => {
     if (!userId) return;
-    const confirmed = window.confirm('This will permanently delete all your sessions, messages, and memories. Marcus will forget everything. Are you sure?');
-    if (!confirmed) return;
     try {
       const res = await fetch('/api/auth/clean-slate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId }),
       });
       if (!res.ok) throw new Error('Failed');
-      setConversationId(null);
-      setTranscripts([]);
-      setOpeningMessage(null);
-      setSessionNotes(null);
-      setView('analytics');
-      setRefreshSidebar((p) => p + 1);
-      setSelectedConvId(null);
-    } catch (err) {
-      console.error('Clean slate error:', err);
-      alert('Failed to reset. Please try again.');
-    }
+      setConversationId(null); setTranscripts([]); setOpeningMessage(null); setSessionNotes(null);
+      setSelectedConvId(null); setRefreshSidebar((p) => p + 1); setView('analytics');
+    } catch (err) { console.error('Start over error:', err); }
+  };
+
+  // YOUR DATA level 2 — all conversations, memory kept.
+  const handleDeleteAll = async () => {
+    if (!userId) return;
+    try {
+      const res = await fetch('/api/conversations/delete-all', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      setSelectedConvId(null); setRefreshSidebar((p) => p + 1); setView('analytics');
+    } catch (err) { console.error('Delete all error:', err); }
+  };
+
+  const handleOpenSettings = () => { setSelectedConvId(null); setSessionNotes(null); setView('settings'); };
+
+  // "Write" — enter text mode directly (the restored typed conversation).
+  const handleWrite = () => {
+    if (fetchingOpeningRef.current) return;
+    setConversationId(null); setTranscripts([]); setOpeningMessage(null); setSessionNotes(null);
+    setSelectedConvId(null); setSidebarOpen(false);
+    setSessionType('fresh'); setContinueFromId(null);
+    setExpandedSessionId(null); setRecentSessions([]); setStartLoading(false);
+    setView('voice'); viewRef.current = 'voice';
+    setInputMode('text');
+    void fetchOpening('text', { sessionType: 'fresh', continueFrom: null });
   };
 
   const handleTranscript = useCallback((userText: string, marcusText: string, emotion?: string) => {
@@ -368,39 +388,9 @@ export default function Home() {
     }
   };
 
-  const handleChooseSessionType = async (type: SessionType) => {
-    setSessionType(type);
-    if (type === 'continue') {
-      // Fetch recent sessions to pick from
-      setLoadingRecent(true);
-      try {
-        const res = await fetch(`/api/conversations/recent?userId=${userId}`);
-        const data = await res.json();
-        if (data.sessions && data.sessions.length > 0) {
-          setRecentSessions(data.sessions);
-          setInputMode('pick-session');
-          return;
-        }
-      } catch (e) {
-        console.warn('Failed to fetch recent sessions:', e);
-      } finally {
-        setLoadingRecent(false);
-      }
-      // No recent sessions — go straight to mode choice (first time user)
-      setContinueFromId(null);
-    }
-    setInputMode('choice');
-  };
-
-  const handlePickSession = (sessionId: string) => {
-    setContinueFromId(sessionId);
-    setInputMode('choice');
-  };
-
-  const handleChooseMode = (mode: 'voice' | 'text') => {
-    setInputMode(mode);
-    fetchOpening(mode);
-  };
+  // (Removed: handleChooseSessionType / handlePickSession / handleChooseMode — the dead
+  //  session-type → pick-session → voice/text fork they drove is gone. "Talk" starts a voice
+  //  session, "Write" enters text directly, and Continue is chosen on the editorial fork.)
 
   const sendTextMessage = async () => {
     if (!textInput.trim() || textSending || !userId) return;
@@ -456,36 +446,8 @@ export default function Home() {
     idle: 'Tap the orb to speak', listening: 'Listening…', processing: 'Reflecting…', speaking: 'Marcus is speaking…',
   };
 
-  // ─── Global Nav Bar (always visible) ───
-  const NavBar = ({ transparent }: { transparent?: boolean }) => (
-    <header className={`relative z-30 sticky top-0 ${transparent ? 'bg-transparent' : 'bg-white border-b border-border'}`}>
-      <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3 lg:px-6">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#b0611f]/12 to-[#b0611f]/4 border border-[#b0611f]/15 flex items-center justify-center">
-            <span className="text-lg font-light text-[#b0611f]">M</span>
-          </div>
-          <div>
-            <h1 className="text-base font-semibold text-foreground leading-tight">mrkos.ai</h1>
-            <p className="text-[11px] text-muted-foreground/60">Stoic Companion</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {initialized && userId ? (
-            <>
-              <span className="text-xs text-muted-foreground hidden sm:inline">{userEmail}</span>
-              <button onClick={handleLogout} className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-muted-foreground hover:text-foreground border border-transparent hover:border-border transition-all">
-                <LogOut className="w-3.5 h-3.5" /> Log out
-              </button>
-            </>
-          ) : (
-            <button onClick={() => setShowLogin(true)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-[#44403c] hover:bg-[#57534e] text-white transition-all shadow-sm">
-              Log in
-            </button>
-          )}
-        </div>
-      </div>
-    </header>
-  );
+  // The single header component (AppHeader) is used on every screen — the old inline NavBar
+  // and the old app-shell header are both replaced by it.
 
   // ─── Auth Loading ───
   if (authLoading) {
@@ -502,7 +464,7 @@ export default function Home() {
     return (
       <div className="h-screen flex flex-col relative overflow-y-auto">
         <div className="ambient-bg" />
-        <NavBar transparent />
+        <AppHeader mode="focused" />
         <div className="relative z-10 flex-1">
           {/* Hero Section */}
           <section className="max-w-4xl mx-auto px-6 pt-16 pb-20 text-center fade-in-up">
@@ -643,7 +605,7 @@ export default function Home() {
     return (
       <div className="relative">
         <div className="ambient-bg" />
-        <NavBar />
+        <AppHeader mode="focused" />
         <div className="relative z-10">
           <OnboardingFlow userId={userId} onComplete={() => setOnboardingComplete(true)} />
         </div>
@@ -661,14 +623,7 @@ export default function Home() {
         {/* Ambient Paper Shaders backdrop — driven by conversation state + a slow
             emotional register. Presentation only; sits behind all content (z-0). */}
         <ShaderBackground state={state} register={register} />
-        {/* minimal exit — leave voice back to sessions without ending the conversation */}
-        <button
-          onClick={handleGoToAnalytics}
-          className="absolute top-5 right-6 z-20 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[.2em] text-[#6b6259] hover:text-[#14100e] transition-colors"
-          title="Back to sessions"
-        >
-          <History className="w-3.5 h-3.5" /> Sessions
-        </button>
+        <AppHeader mode="focused" onHome={handleGoToAnalytics} onClose={handleGoToAnalytics} />
 
         {/* Session row — prototype's single flex:1 align-items:center row; content centered */}
         <div className="relative z-10 flex-1 flex items-center justify-center px-6 sm:px-10 lg:px-16 py-9 min-h-0" style={{ borderBottom: '2px solid #14100e' }}>
@@ -849,54 +804,26 @@ export default function Home() {
 
   // ─── Main App (logged in) ───
   return (
-    <div className="h-screen flex flex-col relative">
-      <div className="ambient-bg" />
-
-      {/* App Header */}
-      <header className="relative z-20 border-b border-border bg-white sticky top-0">
-        <div className="flex items-center justify-between px-4 py-3 lg:px-6">
-          <div className="flex items-center gap-3">
-            {(view === 'voice' || view === 'session-notes') && (
-              <Button variant="ghost" size="icon" className="lg:hidden text-muted-foreground hover:text-foreground" onClick={() => setSidebarOpen(!sidebarOpen)}>
-                {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-              </Button>
-            )}
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#b0611f]/12 to-[#b0611f]/4 border border-[#b0611f]/15 flex items-center justify-center">
-              <span className="text-lg font-light text-[#b0611f]">M</span>
-            </div>
-            <div>
-              <h1 className="text-base font-semibold text-foreground leading-tight">mrkos.ai</h1>
-              <p className="text-[11px] text-muted-foreground/60">Stoic Companion</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button onClick={handleCleanSlate}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all border border-transparent text-muted-foreground/50 hover:text-red-500 hover:border-red-200 hover:bg-red-50"
-              title="Delete all sessions and memories — start fresh">
-              <RotateCcw className="w-3.5 h-3.5" /><span className="hidden sm:inline">Clean Slate</span>
-            </button>
-            <button onClick={handleGoToAnalytics}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all border ${
-                view === 'analytics' || view === 'session-detail' ? 'bg-white text-foreground shadow-sm border-border' : 'text-muted-foreground hover:text-foreground border-transparent hover:border-border'
-              }`}>
-              <History className="w-3.5 h-3.5" /><span className="hidden sm:inline">Sessions</span>
-            </button>
-            <button onClick={handleNewSession} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-[#44403c] hover:bg-[#57534e] text-white transition-all shadow-sm">
-              <Plus className="w-4 h-4" /> New Session
-            </button>
-            <div className="hidden sm:flex items-center gap-2 pl-3 border-l border-border ml-1">
-              <span className="text-[11px] text-muted-foreground">{userEmail}</span>
-              <button onClick={handleLogout} className="text-muted-foreground/50 hover:text-foreground transition-colors" title="Log out"><LogOut className="w-3.5 h-3.5" /></button>
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="h-screen w-screen flex flex-col relative overflow-hidden" style={{ background: '#faf9f6' }}>
+      {/* ONE ShaderBackground for the whole logged-in shell — runs to the top edge behind the
+          transparent header; every view below is transparent and sits over it. */}
+      <ShaderBackground contained state="idle" register={0} />
+      <AppHeader
+        mode={view === 'settings' || view === 'voice' ? 'focused' : 'full'}
+        active={view === 'analytics' ? 'sessions' : null}
+        email={userEmail}
+        onHome={handleGoToAnalytics}
+        onSessions={handleGoToAnalytics}
+        onTalk={handleNewSession}
+        onWrite={handleWrite}
+        onSettings={handleOpenSettings}
+        onClose={handleGoToAnalytics}
+      />
 
       {/* Body */}
       <div className="flex-1 flex relative z-10 overflow-hidden">
-        {/* Sidebar only visible during voice/session-notes views — dashboard has its own session list */}
-        {(view === 'voice' || view === 'session-notes') && (
+        {/* Session rail only while reading one past session */}
+        {view === 'session-detail' && selectedConvId && (
           <Sidebar
             userId={userId}
             onSelectSession={handleSelectSession}
@@ -911,12 +838,13 @@ export default function Home() {
         <main className="flex-1 flex flex-col overflow-hidden">
           {view === 'session-detail' && selectedConvId ? (
             <ConversationView conversationId={selectedConvId} onBack={handleGoToAnalytics} />
+          ) : view === 'settings' ? (
+            <SettingsScreen email={userEmail} handsFree={handsFree} onToggleHandsFree={setHandsFree} onSignOut={handleLogout} onDeleteAll={handleDeleteAll} onStartOver={handleStartOver} />
           ) : view === 'analytics' ? (
             <AnalyticsDashboard userId={userId} onSelectSession={handleSelectSession} onContinueSession={handleContinueSession} onStartFresh={handleStartFresh} />
           ) : view === 'session-notes' && sessionNotes ? (
             /* ─── Session Notes (post end-session) ─── */
             <div className="relative flex-1 overflow-hidden">
-              <ShaderBackground contained state="idle" register={0} />
               <div className="relative z-10 h-full overflow-y-auto">
                 <div className="mx-auto w-full px-6 sm:px-10 lg:px-16 py-16" style={{ maxWidth: 720 }}>
                   <SessionSummary
@@ -944,7 +872,6 @@ export default function Home() {
               {/* Session-start (a prior session exists) — editorial fork: Continue first + warmer */}
               {inputMode === 'session-type' && !openingMessage && !openingLoading && transcripts.length === 0 && (
                 <div className="relative flex-1 overflow-hidden">
-                  <ShaderBackground contained state="idle" register={0} />
                   <div className="relative z-10 h-full flex flex-col items-center justify-center px-6 fade-in-up">
                     {startLoading || recentSessions.length === 0 ? (
                       <p style={{ fontSize: 13, letterSpacing: '0.22em', textTransform: 'uppercase', color: '#6b6259' }}>One moment…</p>
@@ -977,7 +904,6 @@ export default function Home() {
               {/* Session-start (no prior session) — no buttons; the mic is already open */}
               {inputMode === 'listening' && (
                 <div className="relative flex-1 overflow-hidden">
-                  <ShaderBackground contained state="idle" register={0} />
                   <div className="relative z-10 h-full flex flex-col items-center justify-center text-center px-6 fade-in-up">
                     <div className="rounded-full" style={{ width: 168, height: 168, background: 'radial-gradient(circle at 34% 30%,#ffffff 0%,#f2eee6 22%,#ded7cb 52%,#b8ada0 82%,#8e8377 100%)', boxShadow: '0 26px 50px -20px rgba(60,52,44,.5), inset 0 -22px 44px rgba(90,80,68,.28), inset 0 12px 22px rgba(255,255,255,.7), 0 0 0 1px rgba(20,16,14,.08)' }} />
                     <h1 className="font-serif" style={{ fontSize: 'clamp(30px,5vw,46px)', fontWeight: 400, letterSpacing: '-0.02em', color: '#14100e', marginTop: 40 }}>I&rsquo;m here.</h1>
@@ -987,249 +913,60 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Step 1b: Pick which session to continue from */}
-              {inputMode === 'pick-session' && (
-                <div className="flex-1 flex flex-col items-center justify-center py-12 text-center fade-in-up overflow-hidden">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#b0611f]/10 to-transparent border border-[#b0611f]/10 flex items-center justify-center mb-6">
-                    <span className="text-2xl font-light text-[#b0611f]">M</span>
-                  </div>
-                  <p className="text-sm font-medium text-foreground mb-1">Continue from which conversation?</p>
-                  <p className="text-xs text-muted-foreground/50 mb-6">Expand to see where we left off · Click &quot;Continue this&quot; to pick up</p>
-                  {/* Horizontal scrollable cards */}
-                  <div className="w-full overflow-x-auto pb-4 px-4 scrollbar-thin">
-                    <div className="flex gap-3 w-max mx-auto items-start">
-                      {recentSessions.map((s) => {
-                        const isExpanded = expandedSessionId === s.id;
-                        return (
-                          <div
-                            key={s.id}
-                            className={`flex flex-col items-start rounded-xl border transition-all text-left shrink-0 ${
-                              isExpanded
-                                ? 'w-[320px] border-[#b0611f]/30 bg-[#b0611f]/5'
-                                : 'w-[260px] border-border hover:border-[#b0611f]/20'
-                            }`}
-                          >
-                            {/* Card header — always visible */}
-                            <div className="px-4 py-4 w-full">
-                              <div className="flex items-center justify-between w-full mb-2">
-                                <div className="w-7 h-7 rounded-lg bg-[#b0611f]/8 flex items-center justify-center">
-                                  <span className="text-[11px] font-medium text-[#b0611f]/60">{s.sessionNumber}</span>
-                                </div>
-                                <span className="text-[10px] text-muted-foreground/40">
-                                  {new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                </span>
-                              </div>
-                              <p className="text-sm font-medium text-foreground truncate w-full">{s.title}</p>
-                              {s.summary && (
-                                <p className="text-[11px] text-muted-foreground/50 line-clamp-2 leading-relaxed mt-1">{s.summary}</p>
-                              )}
-                            </div>
-
-                            {/* Expand/collapse toggle */}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setExpandedSessionId(isExpanded ? null : s.id); }}
-                              className="w-full px-4 py-2 text-[11px] text-[#b0611f]/60 hover:text-[#b0611f]/80 transition-colors flex items-center gap-1.5 border-t border-border/30"
-                            >
-                              <svg className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                              {isExpanded ? 'Hide details' : 'Where we left off'}
-                            </button>
-
-                            {/* Expanded dropdown */}
-                            {isExpanded && (
-                              <div className="px-4 pb-4 w-full space-y-3 border-t border-border/30 pt-3 fade-in-up">
-                                {/* Takeaways */}
-                                {s.takeaways.length > 0 && (
-                                  <div>
-                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mb-1.5">Key Takeaways</p>
-                                    <ul className="space-y-1.5">
-                                      {s.takeaways.map((t, i) => (
-                                        <li key={i} className="flex gap-2 text-[11px] text-muted-foreground/60 leading-relaxed">
-                                          <span className="text-[#b0611f]/40 mt-0.5 shrink-0">→</span>
-                                          <span>{t}</span>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                                {/* Pondering topics */}
-                                {s.ponderingTopics.length > 0 && (
-                                  <div>
-                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[#b0611f]/50 mb-1.5">Left to Ponder</p>
-                                    <ul className="space-y-1.5">
-                                      {s.ponderingTopics.map((p, i) => (
-                                        <li key={i} className="flex gap-2 text-[11px] text-[#b0611f]/50 italic leading-relaxed">
-                                          <span className="not-italic shrink-0">✦</span>
-                                          <span>{p}</span>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                                {/* Continue button */}
-                                <button
-                                  onClick={() => handlePickSession(s.id)}
-                                  className="w-full mt-2 py-2 rounded-lg bg-[#b0611f]/10 hover:bg-[#b0611f]/20 text-[#b0611f] text-xs font-medium transition-colors"
-                                >
-                                  Continue this conversation →
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => { setContinueFromId(null); setInputMode('choice'); }}
-                    className="mt-4 text-xs text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors"
-                  >
-                    or just continue from the latest
-                  </button>
-                </div>
-              )}
-
-              {/* Step 2: Voice/Text Selection */}
-              {inputMode === 'choice' && !openingMessage && !openingLoading && transcripts.length === 0 && (
-                <div className="flex-1 flex flex-col items-center justify-center py-20 text-center fade-in-up">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#b0611f]/10 to-transparent border border-[#b0611f]/10 flex items-center justify-center mb-6">
-                    <span className="text-2xl font-light text-[#b0611f]">M</span>
-                  </div>
-                  <p className="text-sm font-medium text-foreground mb-1">How would you like to connect?</p>
-                  <p className="text-xs text-muted-foreground/50 mb-8">Choose your preferred input for this session</p>
-                  <div className="flex gap-4">
-                    <button
-                      onClick={() => handleChooseMode('voice')}
-                      className="flex flex-col items-center gap-3 px-8 py-6 rounded-2xl border border-border hover:border-[#b0611f]/30 hover:bg-[#b0611f]/5 transition-all group"
-                    >
-                      <div className="w-12 h-12 rounded-xl bg-[#b0611f]/8 flex items-center justify-center group-hover:bg-[#b0611f]/15 transition-colors">
-                        <Mic className="w-6 h-6 text-[#b0611f]/60" />
-                      </div>
-                      <span className="text-sm font-medium text-foreground">Voice</span>
-                      <span className="text-[11px] text-muted-foreground/50">Speak naturally</span>
-                    </button>
-                    <button
-                      onClick={() => handleChooseMode('text')}
-                      className="flex flex-col items-center gap-3 px-8 py-6 rounded-2xl border border-border hover:border-[#b0611f]/30 hover:bg-[#b0611f]/5 transition-all group"
-                    >
-                      <div className="w-12 h-12 rounded-xl bg-[#b0611f]/8 flex items-center justify-center group-hover:bg-[#b0611f]/15 transition-colors">
-                        <Send className="w-5 h-5 text-[#b0611f]/60" />
-                      </div>
-                      <span className="text-sm font-medium text-foreground">Text</span>
-                      <span className="text-[11px] text-muted-foreground/50">Type your thoughts</span>
-                    </button>
-                  </div>
-                </div>
-              )}
+              {/* (Removed dead pick-session + voice/text choice blocks — Talk/Write/Continue
+                  now route directly; nothing sets those inputModes.) */}
 
               {/* Voice mode is a full-screen view rendered above (the `view === 'voice' &&
                   inputMode === 'voice'` early return); it is intentionally NOT rendered
                   inside the chat shell, so the sidebar/header don't compete with it. */}
 
-              {/* Chat-style transcript area — TEXT session (aligned in the next pass) */}
+              {/* Write — text mode, on the system: YOU in sans, MARCUS in serif, editorial composer */}
               {inputMode === 'text' && (
-                <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-6">
-                  <div className="max-w-2xl mx-auto space-y-4">
-                    {/* Opening message from Marcus */}
-                    {openingLoading && (
-                      <div className="flex justify-start fade-in">
-                        <div className="marcus-message message-bubble">
-                          <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 bg-[#b0611f] rounded-full animate-bounce" />
-                            <div className="w-1.5 h-1.5 bg-[#b0611f] rounded-full animate-bounce" style={{ animationDelay: '0.15s' }} />
-                            <div className="w-1.5 h-1.5 bg-[#b0611f] rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
+                <div className="relative z-10 flex-1 flex flex-col overflow-hidden">
+                  <div className="flex-1 overflow-y-auto">
+                    <div className="mx-auto w-full px-6 sm:px-10 lg:px-16 py-10 fade-in-up" style={{ maxWidth: 680 }}>
+                      {openingLoading && <p style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#6b6259', opacity: 0.6 }}>One moment…</p>}
+                      {openingMessage && !openingLoading && (
+                        <div>
+                          <p style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#6b6259' }}>Marcus</p>
+                          <p className="font-serif" style={{ fontSize: 20, lineHeight: 1.55, color: '#3d352e', marginTop: 6 }}>{openingMessage}</p>
+                        </div>
+                      )}
+                      {transcripts.map((t, i) => (
+                        <div key={i} style={{ marginTop: i === 0 && !openingMessage ? 0 : 30 }}>
+                          <p style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#6b6259' }}>You</p>
+                          <p style={{ fontSize: 18, lineHeight: 1.55, color: '#14100e', marginTop: 6 }}>{t.user}</p>
+                          <div style={{ marginTop: 22 }}>
+                            <p style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#6b6259' }}>Marcus</p>
+                            <p className="font-serif" style={{ fontSize: 20, lineHeight: 1.55, color: '#3d352e', marginTop: 6 }}>{t.marcus}</p>
                           </div>
                         </div>
-                      </div>
-                    )}
-                    {openingMessage && !openingLoading && (
-                      <div className="flex justify-start fade-in">
-                        <div className="marcus-message message-bubble">
-                          <p className="text-sm leading-relaxed">{openingMessage}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Conversation transcript */}
-                    {transcripts.map((t, i) => (
-                      <div key={i} className="space-y-3 fade-in">
-                        <div className="flex justify-end">
-                          <div className="user-message message-bubble">
-                            <p className="text-sm leading-relaxed">{t.user}</p>
-                          </div>
-                        </div>
-                        <div className="flex justify-start">
-                          <div className="marcus-message message-bubble">
-                            <p className="text-sm leading-relaxed">{t.marcus}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-
-                    {/* Processing indicator */}
-                    {state === 'processing' && (
-                      <div className="flex justify-start fade-in">
-                        <div className="marcus-message message-bubble">
-                          <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 bg-[#b0611f] rounded-full animate-bounce" />
-                            <div className="w-1.5 h-1.5 bg-[#b0611f] rounded-full animate-bounce" style={{ animationDelay: '0.15s' }} />
-                            <div className="w-1.5 h-1.5 bg-[#b0611f] rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div ref={messagesEndRef} />
+                      ))}
+                      {state === 'processing' && <p style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#6b6259', opacity: 0.6, marginTop: 26 }}>Reflecting…</p>}
+                      <div ref={messagesEndRef} />
+                    </div>
                   </div>
-                </div>
-              )}
-
-              {/* Bottom controls — TEXT composer only (voice controls live in the */}
-              {/* voice focal block + footer above). Text screen aligned next pass. */}
-              {inputMode === 'text' && (
-                <div className="border-t border-border bg-white px-4 lg:px-8 py-4">
-                  <div className="max-w-2xl mx-auto">
-                    {(
-                      <>
-                        {/* Text Input */}
-                        <div className="flex items-center gap-3 mb-4">
-                          <Input
-                            value={textInput}
-                            onChange={(e) => setTextInput(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendTextMessage()}
-                            placeholder={state === 'processing' ? 'Marcus is thinking...' : state === 'speaking' ? 'Marcus is speaking...' : 'Type your message to Marcus...'}
-                            disabled={textSending || state === 'processing' || state === 'speaking'}
-                            className="flex-1 h-12 bg-white border-border text-foreground placeholder:text-muted-foreground/50 rounded-xl px-5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                          />
-                          <button
-                            onClick={sendTextMessage}
-                            disabled={textSending || !textInput.trim() || state === 'processing' || state === 'speaking'}
-                            className="h-12 w-12 rounded-xl flex items-center justify-center bg-[#44403c] hover:bg-[#57534e] text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            {textSending ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Send className="w-4 h-4" />
-                            )}
-                          </button>
-                        </div>
-                      </>
-                    )}
-                    {/* End Session button */}
-                    {(transcripts.length > 0 || openingMessage) && conversationId && (
-                      <div className="flex justify-center mt-2">
-                        <button
-                          onClick={handleEndSession}
-                          disabled={endingSession}
-                          className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-secondary transition-all disabled:opacity-50"
-                        >
-                          {endingSession ? (
-                            <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Ending session…</>
-                          ) : (
-                            <><Shield className="w-3.5 h-3.5" /> End Session</>
-                          )}
+                  <div className="flex-none">
+                    <div className="mx-auto w-full px-6 sm:px-10 lg:px-16 py-5" style={{ maxWidth: 680 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <input
+                          value={textInput}
+                          onChange={(e) => setTextInput(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendTextMessage()}
+                          placeholder={state === 'processing' ? 'Marcus is thinking…' : 'Write to Marcus…'}
+                          disabled={textSending || state === 'processing' || state === 'speaking'}
+                          style={{ flex: 1, height: 46, padding: '0 16px', background: '#faf9f6', border: '1px solid #ded8cf', color: '#14100e', fontSize: 16 }}
+                        />
+                        <button onClick={sendTextMessage} disabled={textSending || !textInput.trim() || state === 'processing' || state === 'speaking'} className="disabled:opacity-40" style={{ height: 46, width: 46, background: '#14100e', color: '#faf9f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {textSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                         </button>
                       </div>
-                    )}
+                      {(transcripts.length > 0 || openingMessage) && conversationId && (
+                        <button onClick={handleEndSession} disabled={endingSession} className="disabled:opacity-50" style={{ fontSize: 13, color: '#5c534b', marginTop: 12 }}>
+                          {endingSession ? 'Ending…' : 'End session'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

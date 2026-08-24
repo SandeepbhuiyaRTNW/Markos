@@ -1,21 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { MessageSquare, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getSessionTitle, formatSessionDate } from '@/lib/sessionMeta';
 
 interface Session {
-  id: string;
-  started_at: string;
-  ended_at: string | null;
-  session_ended: boolean;
-  summary: string | null;
-  first_message: string | null;
-  message_count: number;
-  session_number: number;
-  metadata: Record<string, unknown>;
+  id: string; started_at: string; ended_at: string | null; session_ended: boolean;
+  summary: string | null; first_message: string | null; message_count: number;
+  session_number: number; metadata: Record<string, unknown>;
 }
-
 interface SidebarProps {
   userId: string;
   onSelectSession: (id: string) => void;
@@ -26,14 +19,13 @@ interface SidebarProps {
   onToggle?: () => void;
 }
 
-export default function Sidebar({
-  userId,
-  onSelectSession,
-  activeSessionId,
-  onNewSession,
-  refreshTrigger,
-  isOpen = false,
-}: SidebarProps) {
+const INK = '#14100e';
+const INK_SOFT = '#3d352e';
+const MUTED = '#6b6259';
+
+// Session rail, on the system: no card boxes, no borders, no icons/counts — titles in sans,
+// dates in muted grey, active in ink. Titles/dates come from the shared helpers (DO #7).
+export default function Sidebar({ userId, onSelectSession, activeSessionId, refreshTrigger, isOpen = false }: SidebarProps) {
   const [sessions, setSessions] = useState<Session[]>([]);
 
   useEffect(() => {
@@ -44,93 +36,36 @@ export default function Sidebar({
       .catch(console.error);
   }, [userId, refreshTrigger]);
 
-  const formatDate = (session: { started_at: string; ended_at?: string | null; session_ended?: boolean }) => {
-    // Use ended_at for completed sessions, started_at for active ones
-    const dateStr = (session.session_ended && session.ended_at) ? session.ended_at : session.started_at;
-    const d = new Date(dateStr);
-    // Always show the actual date — "Today" is confusing for past sessions
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
-
-  const getTitle = (session: Session) => {
-    if (session.metadata && typeof session.metadata === 'object' && 'title' in session.metadata) {
-      return session.metadata.title as string;
-    }
-    if (session.first_message) {
-      return session.first_message.length > 32
-        ? session.first_message.slice(0, 32) + '…'
-        : session.first_message;
-    }
-    return `Session ${session.session_number}`;
-  };
-
   return (
     <aside
       className={cn(
-        'fixed lg:relative top-0 left-0 h-full z-30 w-72 flex flex-col',
-        'bg-white border-r border-border transition-transform duration-300 ease-in-out',
+        'fixed lg:relative top-0 left-0 h-full z-30 w-64 flex flex-col transition-transform duration-300 ease-in-out',
         isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       )}
+      style={{ background: 'rgba(250,249,246,0.55)', backdropFilter: 'blur(3px)' }}
     >
-      {/* Header */}
-      <div className="px-4 py-4 border-b border-sidebar-border">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60">Sessions</h2>
+      <div className="px-6 pt-6 pb-2">
+        <p style={{ fontSize: 13, letterSpacing: '0.22em', textTransform: 'uppercase', color: MUTED }}>Sessions</p>
       </div>
-
-      {/* Session List */}
-      <div className="flex-1 overflow-y-auto py-2">
+      <div className="flex-1 overflow-y-auto px-6 pb-8">
         {sessions.length === 0 ? (
-          <div className="px-4 py-16 text-center space-y-3">
-            <div className="w-12 h-12 rounded-xl bg-[#b0611f]/5 border border-[#b0611f]/10 flex items-center justify-center mx-auto">
-              <Mic className="w-5 h-5 text-[#b0611f]/30" />
-            </div>
-            <p className="text-xs text-muted-foreground/60">No sessions yet</p>
-            <p className="text-[11px] text-muted-foreground/30">Start speaking to begin</p>
-          </div>
+          <p style={{ fontSize: 14, color: MUTED, marginTop: 10 }}>No sessions yet</p>
         ) : (
-          sessions.map((session) => (
+          sessions.map((s) => (
             <button
-              key={session.id}
-              onClick={() => onSelectSession(session.id)}
-              className={cn(
-                'w-full text-left px-4 py-3 transition-all duration-200 border-l-2 border-transparent',
-                'hover:bg-accent',
-                activeSessionId === session.id
-                  ? 'bg-accent border-l-[#b0611f]'
-                  : ''
-              )}
+              key={s.id}
+              onClick={() => onSelectSession(s.id)}
+              className="block w-full text-left transition-opacity hover:opacity-70"
+              style={{ marginTop: 18 }}
             >
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary/80 text-muted-foreground/50 font-mono">
-                  {session.session_number}
-                </span>
-                <span className="text-[13px] font-medium text-sidebar-foreground truncate flex-1">
-                  {getTitle(session)}
-                </span>
+              <div style={{ fontSize: 16, lineHeight: 1.3, color: activeSessionId === s.id ? INK : INK_SOFT, fontWeight: activeSessionId === s.id ? 500 : 400 }}>
+                {getSessionTitle(s)}
               </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/50 mt-1">
-                <span>{formatDate(session)}</span>
-                <span className="text-muted-foreground/20">·</span>
-                <MessageSquare className="w-3 h-3" />
-                <span>{session.message_count}</span>
-              </div>
-              {session.summary && (
-                <p className="text-[11px] text-muted-foreground/40 mt-1.5 line-clamp-2 leading-relaxed">
-                  {session.summary}
-                </p>
-              )}
+              <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>{formatSessionDate(s)}</div>
             </button>
           ))
         )}
       </div>
-
-      {/* Footer */}
-      <div className="px-4 py-3 border-t border-sidebar-border">
-        <p className="text-[10px] text-center text-muted-foreground/25 tracking-wider">
-          mrkos.ai
-        </p>
-      </div>
     </aside>
   );
 }
-

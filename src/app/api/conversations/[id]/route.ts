@@ -41,6 +41,36 @@ export async function GET(
 }
 
 /**
+ * DELETE /api/conversations/[id]?userId=xxx
+ * DELETE ONE CONVERSATION, MEMORY KEPT (YOUR DATA level 1).
+ * Removes this conversation + everything scoped to it (messages, session_notes,
+ * kwml_profiles, reflections; conversation_intelligence via CASCADE). KEEPS memory_layers,
+ * open_loops, follow_ups. memory_layers.source_message_id is NULL'd first to keep the row.
+ */
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const userId = req.nextUrl.searchParams.get('userId');
+  if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 });
+  try {
+    const owned = await query(`SELECT 1 FROM conversations WHERE id = $1 AND user_id = $2`, [id, userId]);
+    if (owned.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    await query(`UPDATE memory_layers SET source_message_id = NULL WHERE source_message_id IN (SELECT id FROM messages WHERE conversation_id = $1)`, [id]);
+    await query(`DELETE FROM session_notes WHERE conversation_id = $1`, [id]);
+    await query(`DELETE FROM kwml_profiles WHERE conversation_id = $1`, [id]);
+    await query(`DELETE FROM reflections WHERE conversation_id = $1`, [id]);
+    await query(`DELETE FROM messages WHERE conversation_id = $1`, [id]);
+    await query(`DELETE FROM conversations WHERE id = $1 AND user_id = $2`, [id, userId]);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('delete conversation error:', error);
+    return NextResponse.json({ error: 'Failed to delete conversation' }, { status: 500 });
+  }
+}
+
+/**
  * POST /api/conversations/[id]
  * End session: Generate summary, takeaways, pondering topics, and emotion arc
  */

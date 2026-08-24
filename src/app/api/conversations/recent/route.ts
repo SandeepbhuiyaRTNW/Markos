@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import { getSessionTitle } from '@/lib/sessionMeta';
 
 /**
  * GET /api/conversations/recent?userId=xxx
@@ -49,13 +50,9 @@ export async function GET(req: NextRequest) {
   // continue from ANY past conversation, not just the latest in a chain.
   const formatted = sessions.map(s => {
     const md = (s.metadata || {}) as Record<string, unknown>;
-    const metaTitle = md.title as string | undefined;
 
-    // Title: use metadata.title (short), fallback to first user message
-    const title = metaTitle
-      || (s.first_user_message
-        ? s.first_user_message.substring(0, 50) + (s.first_user_message.length > 50 ? '…' : '')
-        : `Session ${s.session_number}`);
+    // ONE shared title fn (DO #7) so the same session reads identically on every screen.
+    const title = getSessionTitle({ metadata: s.metadata, first_message: s.first_user_message, session_number: s.session_number });
 
     // Summary: 1-line preview of what was discussed
     const summary = s.summary

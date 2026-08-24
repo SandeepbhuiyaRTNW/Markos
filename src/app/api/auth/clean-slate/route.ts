@@ -44,6 +44,13 @@ export async function POST(req: NextRequest) {
       [userId]
     );
 
+    // Cross-conversation memory + intelligence — clean-slate must wipe these too, or
+    // "start over" leaves open loops / follow-ups / reflections / CI behind.
+    await query(`DELETE FROM conversation_intelligence WHERE user_id = $1`, [userId]);
+    await query(`DELETE FROM follow_ups WHERE user_id = $1`, [userId]);
+    await query(`DELETE FROM open_loops WHERE user_id = $1`, [userId]);
+    await query(`DELETE FROM reflections WHERE user_id = $1`, [userId]);
+
     // 5. conversations
     await query(
       `DELETE FROM conversations WHERE user_id = $1`,

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, type CSSProperties } from 'react';
 import { ArrowLeft, Loader2 } from 'lucide-react';
-import ShaderBackground from '@/components/ShaderBackground';
 import SessionSummary from '@/components/SessionSummary';
 
 interface Message { role: string; content: string; created_at: string; }
@@ -67,7 +66,6 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
 
   return (
     <div className="relative flex-1 overflow-hidden">
-      <ShaderBackground contained state="idle" register={0} />
       <div className="relative z-10 h-full overflow-y-auto">
         <div className="mx-auto w-full px-6 sm:px-10 lg:px-16 py-14" style={{ maxWidth: 720 }}>
           <button onClick={onBack} className="inline-flex items-center gap-1.5 transition-opacity hover:opacity-70" style={{ color: MUTED, fontSize: 13 }}>

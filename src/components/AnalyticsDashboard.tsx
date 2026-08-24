@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
-import ShaderBackground from '@/components/ShaderBackground';
+import { getSessionTitle, relativeDate, numberWord } from '@/lib/sessionMeta';
 
 interface Topic { label: string; count: number; }
 interface WeeklyUsage { week: string; sessions: number; }
@@ -38,25 +38,6 @@ const INK_SOFT = '#3d352e';   // session titles / body   — 9.3:1
 const MUTED = '#6b6259';      // eyebrows, dates, count   — 4.6:1
 const TERRA = '#8a4a14';      // warm action (darkened from #b0611f, which fails at 3.6:1)
 
-const NUM = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
-  'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
-function numberWord(n: number): string {
-  const s = n >= 0 && n <= 20 ? NUM[n] : String(n);
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-function relativeDate(dateStr: string): string {
-  const d = new Date(dateStr).getTime();
-  if (Number.isNaN(d)) return '';
-  const days = Math.floor((Date.now() - d) / 86400000);
-  if (days <= 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days} days ago`;
-  if (days < 14) return 'last week';
-  if (days < 31) return `${Math.floor(days / 7)} weeks ago`;
-  if (days < 60) return 'last month';
-  if (days < 365) return `${Math.floor(days / 30)} months ago`;
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-}
 function dayTimeEyebrow(dateStr: string): string {
   const dt = new Date(dateStr);
   if (Number.isNaN(dt.getTime())) return '';
@@ -71,12 +52,8 @@ function truncate(s: string, n: number): string { return s.length > n ? s.slice(
 
 // Human title for a session: the LLM-generated metadata.title (about what it was actually
 // about), else the first user utterance truncated, else the session number.
-function sessionTitle(s: SessionRow): string {
-  const t = s.metadata?.title;
-  if (typeof t === 'string' && t.trim()) return t;
-  if (s.first_message?.trim()) return truncate(s.first_message.trim(), 52);
-  return `Session ${s.session_number}`;
-}
+// Delegates to the ONE shared title fn so the same session reads the same everywhere (DO #7).
+function sessionTitle(s: SessionRow): string { return getSessionTitle(s); }
 // The large-type sentence naming the unfinished thread, from real data.
 function threadSentence(data: AnalyticsData): string {
   const title = data.lastSessionNotes?.title
@@ -109,7 +86,6 @@ export default function AnalyticsDashboard({ userId, onSelectSession, onContinue
   if (!loading && total === 0) {
     return (
       <div className="relative flex-1 overflow-hidden">
-        <ShaderBackground contained state="idle" register={0} />
         <div className="relative z-10 h-full flex items-center justify-center px-6 text-center">
           <div style={{ maxWidth: 460 }}>
             <p style={EYEBROW}>Nothing here yet</p>
@@ -133,7 +109,6 @@ export default function AnalyticsDashboard({ userId, onSelectSession, onContinue
 
   return (
     <div className="relative flex-1 overflow-hidden">
-      <ShaderBackground contained state="idle" register={0} />
       <div className="relative z-10 h-full overflow-y-auto">
         <div className="mx-auto w-full px-6 sm:px-10 lg:px-16 py-16 fade-in-up" style={{ maxWidth: 720 }}>
           {loading || !data ? (
