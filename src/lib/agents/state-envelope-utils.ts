@@ -109,12 +109,16 @@ export function listenerStackFromAnalysis(analysis: import('../understanding/sta
     emotion: analysis.layer2_emotion,
     pattern: analysis.layer3_pattern,
     the_man: analysis.layer4_the_man,
-    the_silence: analysis.layer5_the_silence,
+    // Silence fields are nullable on the analysis; coerce to '' at this boundary so the
+    // empty-is-none contract holds and the composer's truthy guards suppress the injection.
+    the_silence: analysis.layer5_the_silence ?? '',
     depth_level: analysis.depth_level,
-    depth_opportunity: analysis.depth_opportunity,
-    silence_question: analysis.silence_question,
+    depth_opportunity: analysis.depth_opportunity ?? '',
+    silence_question: analysis.silence_question ?? '',
     emotional_trajectory: analysis.emotional_trajectory,
     primary_emotion: analysis.primary_emotion,
+    turn_kind: analysis.turn_kind,
+    unfinished: analysis.unfinished,
   };
 }
 

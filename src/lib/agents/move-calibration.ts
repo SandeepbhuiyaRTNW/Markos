@@ -65,6 +65,11 @@ export const MOVE_CALIBRATION: Record<string, MoveCalibration> = {
     voice: 'A plain reaction, the way you\'d nod across a table. NO question. "yeah, that\'s rough." "that makes sense." "that\'d take the wind out of anyone." "that lands hard. glad you told me."',
     length: 'Short. One line.',
   },
+  engage_the_problem: {
+    moment: 'He is working a DECISION, not asking to be understood emotionally — and he has usually already named the fork himself. Engage the decision; do not go hunting for a feeling underneath it.',
+    voice: 'Reflect the actual fork he named, in HIS words (no more abstract than he put it), then engage the thing he is deciding — name the concrete unknown, tradeoff, or next step that would move it. Useful beats deep. A question is good, but about the DECISION — never "what is this really about," "what is it pulling you away from," or "what is underneath this." Invent NO feeling. If he named a feeling alongside the decision, you may use it as a decision INPUT ("which one you can live with") but do not pry it open — the door only opens if he opens it. GOOD: "so it is not title vs pay — it is more of the work you are burned out on, or a pay cut to build the thing you want. two things that move it: how big is the cut really, and is the smaller shop still standing in two years?"',
+    length: 'Short-to-medium. Say the useful thing; no manufactured depth.',
+  },
   ask_grounding_question: {
     moment: 'He is spiraling or vague. Don\'t fish with a blank open question — point somewhere specific, or name two concrete possibilities and let him pick.',
     voice: 'A BUILDING question: offer a direction instead of "how does that make you feel." Give him a fork to grab. "is tonight more the empty-apartment kind of hard, or the lying-awake kind?" "when did it tip — the papers, or before that?" ONE question, present-tense, casual, half a line of warmth first. No stacking, no therapist phrasing.',

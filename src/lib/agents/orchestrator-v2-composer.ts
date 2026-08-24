@@ -9,6 +9,7 @@ import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages
 import { buildSystemPrompt } from '../agent/system-prompt';
 import type { StateEnvelope } from './state-envelope';
 import type { MoveDecision } from '../assessment/move-selector';
+import { turnKindForkActive } from '../assessment/move-selector';
 import type { KnowledgePlan } from '../assessment/knowledge-selector';
 import { trackEnvelopeAgent, recordEnvelopeError, buildEnvelopeContextSummary } from './state-envelope-utils';
 import { checkBoundary, getBoundaryOverridePrompt, runBoundarySentinel } from '../sentinels/boundary';
@@ -527,7 +528,7 @@ async function storeInBackground(env: StateEnvelope, userMsgId: string | null): 
  * Build a priority hierarchy that tells the Composer exactly what to focus on.
  * Placed LAST in the system prompt so it has maximum attention weight.
  */
-function buildPriorityHierarchy(env: StateEnvelope, policy: PriorityPolicy = { allowQuestion: true }): string {
+export function buildPriorityHierarchy(env: StateEnvelope, policy: PriorityPolicy = { allowQuestion: true }): string {
   const ls = env.sentinels.listener_stack;
   const whisperers = env.domain_whisperers;
   const depth = ls?.depth_level || 1;
@@ -538,6 +539,47 @@ function buildPriorityHierarchy(env: StateEnvelope, policy: PriorityPolicy = { a
     '',
   ];
 
+  // ── Turn-kind fork (feature/marcus-turn-kind; inert unless turnKindForkActive) ──
+  const forkActive = turnKindForkActive();
+  const kind = ls?.turn_kind;
+
+  // Unfinished thought — fires on ANY kind: he was cut off, so do not push deep or answer a
+  // half-thought. Reflect what he DID say and hand the cut-off piece back to finish (#6).
+  if (forkActive && ls?.unfinished === true) {
+    lines.push('PRIORITY 0 — UNFINISHED THOUGHT:');
+    lines.push('His message ends mid-sentence — he was cut off before finishing. Notice that out loud and invite him to finish it. Do NOT pivot to a new question or a new topic, and do NOT answer a thought he has not completed. Reflect what he DID say, point at the piece that got cut off, and hand it back so he can complete it.');
+    if (kind === 'problem_work' || kind === 'mixed') {
+      lines.push('This is problem-work: reflect the fork he already named, in his words — but do NOT solve past the point he got cut off. Name the unfinished piece and let him finish it.');
+    } else {
+      lines.push('Reflect what he said and hold the space; let him complete the thought before anything deeper.');
+    }
+    return lines.join('\n');
+  }
+
+  // Problem-work / mixed — engage the DECISION, never emotionalize it. Suppresses the
+  // silence-question + depth-move injection (PRIORITY 1/2) and the go-deeper depth check.
+  if (forkActive && (kind === 'problem_work' || kind === 'mixed')) {
+    lines.push('THIS IS PROBLEM-WORK — HE IS THINKING THROUGH A DECISION, NOT ASKING TO BE UNDERSTOOD EMOTIONALLY.');
+    lines.push('ENGAGE THE DECISION:');
+    lines.push('- Reflect the actual fork he has ALREADY named, in HIS OWN words — no more abstract than he put it.');
+    lines.push('- Then engage the thing he is deciding: name the concrete unknown, tradeoff, or next step that would move it forward. Useful beats deep here.');
+    lines.push('- Do NOT invent a hidden feeling. Do NOT ask what this is "really about," what it is "pulling him away from," or what is "underneath" it. There is no underneath unless HE puts one there.');
+    lines.push('- A question is good — about the DECISION. No feelings question this turn unless he opened that door.');
+    if (kind === 'mixed') {
+      lines.push('- He named a real feeling alongside the decision. You may use it as a decision INPUT (which option he can live with) — but do not pry it open with a feelings question. The door only opens if he opens it.');
+    }
+    if (whisperers.context_notes.length > 0 || whisperers.landmines.length > 0) {
+      lines.push('');
+      lines.push('DOMAIN INTELLIGENCE:');
+      if (whisperers.context_notes.length > 0) lines.push(`Clinical context: ${whisperers.context_notes.join(' | ')}`);
+      if (whisperers.landmines.length > 0) lines.push(`AVOID: ${whisperers.landmines.join('; ')}`);
+    }
+    lines.push('');
+    lines.push('YOUR RESPONSE MUST: (1) Reflect the fork he named, in his words. (2) Engage the actual decision — the unknown or tradeoff that moves it. (3) Short and plain. No manufactured depth.');
+    return lines.join('\n');
+  }
+
+  // ── Below: emotional_disclosure / casual / fork-off — UNCHANGED existing behavior ──
   // Priority 1: If we are allowed to ask, the silence question is still highest.
   if (policy.allowQuestion && ls?.silence_question) {
     lines.push(`PRIORITY 1 — SILENCE QUESTION (from Listener Stack):`);

@@ -24,6 +24,10 @@ export interface ListenerStackOutput {
   silence_question: string;
   emotional_trajectory: string;
   primary_emotion: string;
+  // turn_kind / unfinished carried through from the analysis (optional so legacy stubs and
+  // other builders that predate the fork still type-check; undefined => fork stays inert).
+  turn_kind?: import('../understanding/stack').TurnKind;
+  unfinished?: boolean;
 }
 
 export type CrisisLevel = 'none' | 'elevated' | 'acute';

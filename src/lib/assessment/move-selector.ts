@@ -71,6 +71,7 @@ export type ConversationMove =
   | 'reflect_only'
   | 'make_observation'
   | 'make_inference'         // v3: offer a read that goes one layer past what he said (adds insight, not a mirror)
+  | 'engage_the_problem'     // turn-kind fork: reflect the decision fork in his words + engage the actual decision
   | 'ask_grounding_question'
   | 'ask_loss_naming_question'
   | 'give_practical_advice'
@@ -103,6 +104,7 @@ export const MOVE_TO_FORM: Record<ConversationMove, CraftForm> = {
   reflect_only: 'reflection',
   make_observation: 'statement',
   make_inference: 'statement',
+  engage_the_problem: 'question',
   ask_grounding_question: 'question',
   ask_loss_naming_question: 'question',
   give_practical_advice: 'statement',
@@ -117,7 +119,7 @@ export const MOVE_TO_FORM: Record<ConversationMove, CraftForm> = {
 // anti-repeat is a directive (GOVERNING_BAR) the composer injects; this taxonomy
 // is the shared contract those variety checks/tests read.
 export type MoveShape =
-  | 'reflect' | 'observe' | 'infer' | 'ask' | 'advise' | 'present' | 'protocol' | 'communicate' | 'refer';
+  | 'reflect' | 'observe' | 'infer' | 'engage' | 'ask' | 'advise' | 'present' | 'protocol' | 'communicate' | 'refer';
 
 export const MOVE_SHAPE: Record<ConversationMove, MoveShape> = {
   crisis_protocol: 'protocol',
@@ -125,6 +127,7 @@ export const MOVE_SHAPE: Record<ConversationMove, MoveShape> = {
   reflect_only: 'reflect',
   make_observation: 'observe',
   make_inference: 'infer',
+  engage_the_problem: 'engage',
   ask_grounding_question: 'ask',
   ask_loss_naming_question: 'ask',
   give_practical_advice: 'advise',
@@ -137,7 +140,7 @@ export function sameMoveShape(a: ConversationMove, b: ConversationMove): boolean
   return MOVE_SHAPE[a] === MOVE_SHAPE[b];
 }
 
-const ASK_MOVES = new Set<ConversationMove>(['ask_grounding_question', 'ask_loss_naming_question']);
+const ASK_MOVES = new Set<ConversationMove>(['ask_grounding_question', 'ask_loss_naming_question', 'engage_the_problem']);
 
 export const DIVORCE_SHOCK_TOO_EARLY = ['identity_rebuild', 'financial_strategy', 'dating', 'reconciliation'];
 
@@ -174,6 +177,10 @@ function depthOf(env: StateEnvelope): number { return env.sentinels.listener_sta
 function historyTurns(env: StateEnvelope): number { return (env.conversation_history || []).length; }
 function sessionOf(env: StateEnvelope): number { return env.sentinels.memory.session_count || 0; }
 function arenaWeight(env: StateEnvelope, key: string): number { return env.assessment.arena?.weights?.[key] || 0; }
+// Turn kind carried from the listener stack (undefined on legacy stubs => fork inert).
+function turnKindOf(env: StateEnvelope): import('../understanding/stack').TurnKind | undefined {
+  return env.sentinels.listener_stack?.turn_kind;
+}
 
 const ADVICE_ASK_RE = /\b(what should i do|what do i do|how do i|how should i|should i\b|what would you do|give me advice|help me (figure|decide|with)|tell me what to do)\b/i;
 function isDirectAdviceAsk(env: StateEnvelope, cs: ConversationState | null): boolean {
@@ -224,6 +231,24 @@ export function moveSelectorEnforced(): boolean {
   const v = process.env.MOVE_SELECTOR_ENFORCE;
   if (v === 'false' || v === '0') return false;
   return true;
+}
+
+// ─── Turn-kind fork (feature/marcus-turn-kind) ───
+// A/B BY DEPLOY: flip TURN_KIND_FORK_DEFAULT below and redeploy (you can't reach the Amplify
+// console to set an env var). Env override TURN_KIND_FORK=false|0 / true|1 wins when present.
+// The fork rides ON TOP of the move selector — it is only ever active when the selector is
+// enforced too, so MOVE_SELECTOR_ENFORCE remains the master switch. Flipping just this flag
+// isolates the fork (selector stays on) so the A/B compares fixed-vs-current, not vs no-selector.
+const TURN_KIND_FORK_DEFAULT = true;
+export function turnKindForkEnabled(): boolean {
+  const v = process.env.TURN_KIND_FORK;
+  if (v === 'false' || v === '0') return false;
+  if (v === 'true' || v === '1') return true;
+  return TURN_KIND_FORK_DEFAULT;
+}
+/** The fork is live only when the move selector is enforced AND the fork is enabled. */
+export function turnKindForkActive(): boolean {
+  return moveSelectorEnforced() && turnKindForkEnabled();
 }
 
 // BROAD phrasing coverage (spec Step 2) — deliberately wider than frame-refusal's
@@ -308,6 +333,14 @@ const RULES: Rule[] = [
     predicate: (e, c) => isDirectAdviceAsk(e, c),
     move: 'give_practical_advice' },
 
+  // Turn-kind fork — problem_work: he is thinking through a DECISION. Engage it; do not
+  // emotionalize it. Sits above the emotional gates because the classifier only labels a
+  // turn problem_work when emotion is NOT what he brought (it biases to emotion otherwise).
+  // Inert unless turnKindForkActive().
+  { name: 'engage_problem_work',
+    predicate: (e) => turnKindForkActive() && turnKindOf(e) === 'problem_work',
+    move: 'engage_the_problem' },
+
   { name: 'ask_loss_naming',
     // Intimate probe: requires grief-silence, real depth, past the opening
     // phase, AND genuine affective trust. The trust gate is the real guard —
@@ -317,6 +350,13 @@ const RULES: Rule[] = [
       && e.assessment.phase.label !== 'unsilenced'
       && e.assessment.trust.affective >= RAPPORT_MIN_AFFECTIVE_TRUST,
     move: 'ask_loss_naming_question' },
+
+  // Turn-kind fork — mixed: a decision carrying real feeling, framed as a decision. Engage
+  // the decision with the emotional door ajar. BELOW ask_loss_naming on purpose, so a
+  // grief-dominant 'mixed' turn is still MET (grief gate wins), not solved.
+  { name: 'engage_problem_mixed',
+    predicate: (e) => turnKindForkActive() && turnKindOf(e) === 'mixed',
+    move: 'engage_the_problem' },
 
   { name: 'ask_grounding',
     predicate: (e) => e.assessment.silence_type?.label === 'avoidance' && depthOf(e) <= 3,
@@ -347,7 +387,9 @@ const RULE_RATIONALE: Record<string, string> = {
   children_child_centered: 'Children in a divorce — protect the child-centered frame.',
   pushback_no_question: 'He has pushed back repeatedly — stop asking and advising; reflect.',
   explicit_practical_advice: 'He asked a direct practical question — answer it, do not force reflection.',
+  engage_problem_work: 'He is working a decision — reflect the actual fork in his words and engage it, do not emotionalize it.',
   ask_loss_naming: 'Grief with trust and depth — gently invite him to name the loss.',
+  engage_problem_mixed: 'Decision carrying real feeling — engage the decision with the emotional door left ajar.',
   ask_grounding: 'Avoidance — a better, grounding question through the side door.',
   default_make_inference: 'Real depth and cross-turn material — offer a read that adds insight, not another mirror.',
   default_reflect_deep: 'Real depth present, little history yet — reflect rather than probe.',

@@ -12,6 +12,7 @@
 
 import type { UnderstandingAnalysis } from '../understanding/stack';
 import type { KWMLReading } from '../kwml/detector';
+import { turnKindForkActive } from '../assessment/move-selector';
 
 /** Shared context bus that all agents read from and write to */
 export interface MCPContext {
@@ -124,13 +125,17 @@ Pattern: ${u.layer3_pattern}
 The Man: ${u.layer4_the_man}
 
 ### THE SILENCE (Layer 5 — what he is NOT saying):
-${u.layer5_the_silence}
+${u.layer5_the_silence || 'Nothing hidden this turn — do NOT invent one.'}
 ${u.silence_question ? `\n### THE QUESTION HE CANNOT ASK HIMSELF:\n"${u.silence_question}"\nThis is the question that would crack him open. You do NOT have to ask it verbatim — but move TOWARD it.` : ''}
 ${u.depth_opportunity ? `\n### YOUR DEPTH MOVE:\n${u.depth_opportunity}\nThis is your specific opportunity to take this conversation deeper. USE IT.` : ''}`);
 
     // ─── DEPTH-RESPONSIVE INSTRUCTIONS ───
+    // Fork fix (#4): the depth ≤1 directive pushes HARDEST to emotionalize the LEAST
+    // emotional turns. On problem_work it must not fire at all — a man working a decision
+    // is not "being intellectual to avoid a feeling."
     let depthDirective = '';
-    if (depthLevel <= 1) {
+    const forkSuppressesDepth = turnKindForkActive() && u.turn_kind === 'problem_work';
+    if (depthLevel <= 1 && !forkSuppressesDepth) {
       depthDirective = `## ⚠️ DEPTH LEVEL: SURFACE (${depthLevel}/5)
 The conversation is still at the surface. He is giving you facts, events, logistics — not feelings, meanings, or identity.
 YOUR JOB: Go UNDERNEATH what he said. Do NOT stay at the surface with him. Reflect what he said, then pivot to what it MEANS to him.
