@@ -15,6 +15,8 @@ import AppHeader from '@/components/AppHeader';
 import SettingsScreen from '@/components/SettingsScreen';
 import Orb3D from '@/components/Orb3D';
 import IntroSequence from '@/components/IntroSequence';
+import StoicField from '@/components/StoicField';
+import type { CSSProperties } from 'react';
 
 // localStorage getters/setters throw "Access to storage is not allowed from this
 // context" when the page runs in a storage-blocked / partitioned context (an embedded
@@ -478,14 +480,24 @@ export default function Home() {
     // Cinematic intro plays once (persisted flag); reduced-motion / return visits skip it.
     if (!introDone) return <IntroSequence onDone={() => setIntroDone(true)} />;
     const enterCode = () => { setPendingEntry(true); handleVerifyCode(); };
+    const enterPassword = () => { setPendingEntry(true); handlePasswordLogin(); };
+    // Field-safe colours (all cleared against the darkest field tone, oxblood #c48f7f):
+    // ink #100d0a 7:1, muted #332c26 4.96:1, error #5a1a10 4.9:1; inputs get a marble backing.
+    const INPUT: CSSProperties = { flex: 1, height: 48, padding: '0 16px', background: '#e7e1d2', border: '1px solid #a89a80', borderRadius: 0, color: '#100d0a', fontSize: 16 };
+    const BTN: CSSProperties = { height: 48, padding: '0 22px', background: '#100d0a', color: '#f4ecdd', borderRadius: 0, fontSize: 15, fontWeight: 500, whiteSpace: 'nowrap' };
+    const NOTE: CSSProperties = { fontSize: 13, color: '#332c26', marginTop: 12 };
+    const LABEL: CSSProperties = { fontSize: 14, color: '#332c26' };
+    const LINK: CSSProperties = { fontSize: 13, color: '#332c26' };
+    const ERR: CSSProperties = { fontSize: 13, color: '#5a1a10', marginTop: 10 };
+    const DOT = <span style={{ color: '#332c26', margin: '0 10px' }}>·</span>;
     return (
-      <div className="h-screen w-screen flex flex-col relative overflow-hidden" style={{ background: '#faf9f6' }}>
-        <ShaderBackground contained state="idle" register={0} />
+      <div className="h-screen w-screen flex flex-col relative overflow-hidden" style={{ background: '#cec5b2' }}>
+        <StoicField />
         {/* Header — wordmark + Sign in, nothing else */}
         <header className="relative z-20 flex-none">
           <div className="flex items-center justify-between px-6 sm:px-10 lg:px-16" style={{ height: 60 }}>
-            <span style={{ fontSize: 13, letterSpacing: '0.3em', textTransform: 'uppercase', color: '#14100e', fontWeight: 500 }}>Markos</span>
-            <button onClick={() => { setAuthStep('email'); document.getElementById('hero-email')?.focus(); }} className="transition-opacity hover:opacity-70" style={{ fontSize: 13, letterSpacing: '0.04em', color: '#5c534b' }}>Sign in</button>
+            <span style={{ fontSize: 13, letterSpacing: '0.3em', textTransform: 'uppercase', color: '#100d0a', fontWeight: 500 }}>Markos</span>
+            <button onClick={() => { setAuthStep('email'); document.getElementById('hero-email')?.focus(); }} className="transition-opacity hover:opacity-70 underline" style={{ fontSize: 13, letterSpacing: '0.04em', color: '#332c26' }}>Sign in</button>
           </div>
         </header>
         <div className="relative z-10 flex-1 overflow-y-auto">
@@ -494,37 +506,53 @@ export default function Home() {
             <div className="flex justify-center" style={{ marginTop: 24 }}>
               <Orb3D size={168} />
             </div>
-            <p className="text-center" style={{ fontSize: 13, letterSpacing: '0.22em', textTransform: 'uppercase', color: '#6b6259', marginTop: 32 }}>A voice for what you don’t say</p>
-            <h1 className="font-serif text-center" style={{ fontSize: 'clamp(30px,5.5vw,50px)', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.12, color: '#14100e', marginTop: 14, maxWidth: 560, marginLeft: 'auto', marginRight: 'auto' }}>Most men don’t have anyone to say it to.</h1>
-            <p className="text-center" style={{ fontSize: 18, lineHeight: 1.6, color: '#3d352e', marginTop: 20, maxWidth: 480, marginLeft: 'auto', marginRight: 'auto' }}>Not therapy. Not a chatbot. A voice you can think out loud with — at 2am, when there’s no one else to call.</p>
+            <p className="text-center" style={{ fontSize: 13, letterSpacing: '0.22em', textTransform: 'uppercase', color: '#332c26', marginTop: 32 }}>A voice for what you don’t say</p>
+            <h1 className="font-serif text-center" style={{ fontSize: 'clamp(30px,5.5vw,50px)', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.12, color: '#100d0a', marginTop: 14, maxWidth: 560, marginLeft: 'auto', marginRight: 'auto' }}>Most men don’t have anyone to say it to.</h1>
+            <p className="text-center" style={{ fontSize: 18, lineHeight: 1.6, color: '#100d0a', marginTop: 20, maxWidth: 480, marginLeft: 'auto', marginRight: 'auto' }}>Not therapy. Not a chatbot. A voice you can think out loud with — at 2am, when there’s no one else to call.</p>
 
-            {/* Email field IN THE HERO (no separate signup page) */}
+            {/* Sign in / sign up IN THE HERO — password (primary) OR emailed code; both reachable */}
             <div className="mx-auto" style={{ maxWidth: 420, marginTop: 30 }}>
-              {authStep !== 'otp' ? (
+              {authStep === 'email' ? (
                 <>
                   <div style={{ display: 'flex', gap: 10 }}>
-                    <input id="hero-email" type="email" value={email} onChange={(e) => { setEmail(e.target.value); setAuthError(''); }} onKeyDown={(e) => e.key === 'Enter' && handleSendCode()} placeholder="you@email.com" disabled={sendingCode}
-                      style={{ flex: 1, height: 48, padding: '0 16px', background: '#faf9f6', border: '1px solid #ded8cf', borderRadius: 0, color: '#14100e', fontSize: 16 }} />
-                    <button onClick={handleSendCode} disabled={sendingCode} className="disabled:opacity-50" style={{ height: 48, padding: '0 22px', background: '#14100e', color: '#faf9f6', borderRadius: 0, fontSize: 15, fontWeight: 500, whiteSpace: 'nowrap' }}>{sendingCode ? 'Sending…' : 'Continue'}</button>
+                    <input id="hero-email" type="email" value={email} onChange={(e) => { setEmail(e.target.value); setAuthError(''); }}
+                      onKeyDown={(e) => e.key === 'Enter' && email.includes('@') && (setAuthStep('password'), setAuthError(''))} placeholder="you@email.com"
+                      className="placeholder:text-[#6b6259]" style={INPUT} />
+                    <button onClick={() => { if (!email || !email.includes('@')) { setAuthError('Please enter a valid email.'); return; } setAuthStep('password'); setAuthError(''); }} style={BTN}>Continue</button>
                   </div>
-                  <p className="text-center" style={{ fontSize: 13, color: '#6b6259', marginTop: 12 }}>We’ll send a code. No password, no card.</p>
+                  <p className="text-center" style={NOTE}>Sign in with your password, or we’ll email a code. No card.</p>
+                </>
+              ) : authStep === 'password' ? (
+                <>
+                  <p className="text-center" style={{ ...LABEL, marginBottom: 10 }}>Signing in as {email}</p>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <input type="password" value={password} onChange={(e) => { setPassword(e.target.value); setAuthError(''); }}
+                      onKeyDown={(e) => e.key === 'Enter' && password && enterPassword()} placeholder="Your password" autoFocus
+                      className="placeholder:text-[#6b6259]" style={INPUT} />
+                    <button onClick={enterPassword} disabled={loggingIn || !password} className="disabled:opacity-50" style={BTN}>{loggingIn ? 'Signing in…' : 'Sign in'}</button>
+                  </div>
+                  {authError && <p className="text-center" style={ERR}>{authError}</p>}
+                  <div className="text-center" style={{ marginTop: 12 }}>
+                    <button onClick={handleSendCode} disabled={sendingCode} className="transition-opacity hover:opacity-70 underline" style={LINK}>{sendingCode ? 'Sending…' : 'Email me a code instead'}</button>{DOT}
+                    <button onClick={() => { setAuthStep('email'); setPassword(''); setAuthError(''); }} className="transition-opacity hover:opacity-70 underline" style={LINK}>Change email</button>
+                  </div>
                 </>
               ) : (
                 <>
-                  <p className="text-center" style={{ fontSize: 14, color: '#5c534b', marginBottom: 10 }}>Code sent to {email}</p>
+                  <p className="text-center" style={{ ...LABEL, marginBottom: 10 }}>Code sent to {email}</p>
                   <div style={{ display: 'flex', gap: 10 }}>
-                    <input type="text" inputMode="numeric" maxLength={6} value={otpCode} onChange={(e) => { setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setAuthError(''); }} onKeyDown={(e) => e.key === 'Enter' && otpCode.length === 6 && enterCode()} placeholder="6-digit code" className="font-mono"
-                      style={{ flex: 1, height: 48, padding: '0 16px', background: '#faf9f6', border: '1px solid #ded8cf', borderRadius: 0, color: '#14100e', fontSize: 18, letterSpacing: '0.3em', textAlign: 'center' }} />
-                    <button onClick={enterCode} disabled={verifyingCode || otpCode.length !== 6} className="disabled:opacity-50" style={{ height: 48, padding: '0 22px', background: '#14100e', color: '#faf9f6', borderRadius: 0, fontSize: 15, fontWeight: 500, whiteSpace: 'nowrap' }}>{verifyingCode ? 'Verifying…' : 'Enter'}</button>
+                    <input type="text" inputMode="numeric" maxLength={6} value={otpCode} onChange={(e) => { setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setAuthError(''); }} onKeyDown={(e) => e.key === 'Enter' && otpCode.length === 6 && enterCode()} placeholder="6-digit code" autoFocus
+                      className="font-mono placeholder:text-[#6b6259]" style={{ ...INPUT, fontSize: 18, letterSpacing: '0.3em', textAlign: 'center' }} />
+                    <button onClick={enterCode} disabled={verifyingCode || otpCode.length !== 6} className="disabled:opacity-50" style={BTN}>{verifyingCode ? 'Verifying…' : 'Enter'}</button>
                   </div>
+                  {authError && <p className="text-center" style={ERR}>{authError}</p>}
                   <div className="text-center" style={{ marginTop: 12 }}>
-                    <button onClick={handleSendCode} disabled={sendingCode} className="transition-opacity hover:opacity-70" style={{ fontSize: 13, color: '#8a4a14' }}>{sendingCode ? 'Sending…' : 'Resend code'}</button>
-                    <span style={{ color: '#6b6259', margin: '0 10px' }}>·</span>
-                    <button onClick={() => { setAuthStep('email'); setOtpCode(''); setAuthError(''); }} className="transition-opacity hover:opacity-70" style={{ fontSize: 13, color: '#6b6259' }}>Change email</button>
+                    <button onClick={handleSendCode} disabled={sendingCode} className="transition-opacity hover:opacity-70 underline" style={LINK}>{sendingCode ? 'Sending…' : 'Resend code'}</button>{DOT}
+                    <button onClick={() => { setAuthStep('password'); setOtpCode(''); setAuthError(''); }} className="transition-opacity hover:opacity-70 underline" style={LINK}>Use password</button>{DOT}
+                    <button onClick={() => { setAuthStep('email'); setOtpCode(''); setAuthError(''); }} className="transition-opacity hover:opacity-70 underline" style={LINK}>Change email</button>
                   </div>
                 </>
               )}
-              {authError && <p className="text-center" style={{ fontSize: 13, color: '#8a4a14', marginTop: 10 }}>{authError}</p>}
             </div>
 
             {/* A four-line sample exchange — instead of feature cards */}
@@ -536,8 +564,8 @@ export default function Home() {
                 { who: 'Marcus', serif: true, text: 'You don’t have to have it handled with me. What’s the part you haven’t put down?' },
               ].map((m, i) => (
                 <div key={i} style={{ marginTop: i === 0 ? 0 : 22 }}>
-                  <p style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#6b6259' }}>{m.who}</p>
-                  <p className={m.serif ? 'font-serif' : ''} style={{ fontSize: m.serif ? 19 : 17, lineHeight: 1.55, color: m.serif ? '#3d352e' : '#14100e', marginTop: 5 }}>{m.text}</p>
+                  <p style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#332c26' }}>{m.who}</p>
+                  <p className={m.serif ? 'font-serif' : ''} style={{ fontSize: m.serif ? 19 : 17, lineHeight: 1.55, color: '#100d0a', marginTop: 5 }}>{m.text}</p>
                 </div>
               ))}
             </div>
@@ -549,13 +577,13 @@ export default function Home() {
                 'He remembers what you told him, so you’re never starting over.',
                 'He’s read what lasts — Marcus Aurelius, Seneca — and speaks plainly from it.',
               ].map((s, i) => (
-                <p key={i} style={{ fontSize: 18, lineHeight: 1.55, color: '#3d352e', marginTop: i === 0 ? 0 : 16 }}>{s}</p>
+                <p key={i} style={{ fontSize: 18, lineHeight: 1.55, color: '#100d0a', marginTop: i === 0 ? 0 : 16 }}>{s}</p>
               ))}
             </div>
           </div>
           {/* Footer */}
           <footer className="text-center" style={{ padding: '52px 24px 34px' }}>
-            <p style={{ fontSize: 13, color: '#6b6259' }}>Not a crisis service. If you’re in danger, call 988.</p>
+            <p style={{ fontSize: 13, color: '#332c26' }}>Not a crisis service. If you’re in danger, call 988.</p>
           </footer>
         </div>
       </div>
@@ -876,11 +904,13 @@ export default function Home() {
               {/* Session-start (no prior session) — no buttons; the mic is already open */}
               {inputMode === 'listening' && (
                 <div className="relative flex-1 overflow-hidden">
+                  {/* Post-signup entry sits on the SAME Stoic field as the intro/landing */}
+                  <StoicField />
                   <div className="relative z-10 h-full flex flex-col items-center justify-center text-center px-6 fade-in-up">
                     <Orb3D size={168} />
-                    <h1 className="font-serif" style={{ fontSize: 'clamp(30px,5vw,46px)', fontWeight: 400, letterSpacing: '-0.02em', color: '#14100e', marginTop: 40 }}>I&rsquo;m here.</h1>
-                    <p style={{ fontSize: 18, color: '#5c534b', marginTop: 14 }}>Start talking whenever you&rsquo;re ready.</p>
-                    <p style={{ position: 'absolute', bottom: 36, fontSize: 12, letterSpacing: '0.26em', textTransform: 'uppercase', color: '#6b6259' }}>Listening</p>
+                    <h1 className="font-serif" style={{ fontSize: 'clamp(30px,5vw,46px)', fontWeight: 400, letterSpacing: '-0.02em', color: '#100d0a', marginTop: 40 }}>I&rsquo;m here.</h1>
+                    <p style={{ fontSize: 18, color: '#100d0a', marginTop: 14 }}>Start talking whenever you&rsquo;re ready.</p>
+                    <p style={{ position: 'absolute', bottom: 36, fontSize: 12, letterSpacing: '0.26em', textTransform: 'uppercase', color: '#332c26' }}>Listening</p>
                   </div>
                 </div>
               )}

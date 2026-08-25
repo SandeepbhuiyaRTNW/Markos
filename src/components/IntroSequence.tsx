@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { GrainGradient } from '@paper-design/shaders-react';
+import StoicField from '@/components/StoicField';
 import Orb3D from '@/components/Orb3D';
 
 // The intro: ~100 unspoken lines pack the screen solid one at a time (accelerating), then
@@ -39,11 +39,8 @@ const LINES = [
   'I don’t have the words.', 'I’ve never had the words.', 'I’d tell someone if they asked right.', 'Nobody asks right.',
 ];
 
-// Stoic field — every tone clears the bar for #2b2721 (darkest, oxblood, = 5.36:1).
+// Words are dark on the shared Stoic field — #2b2721 vs its darkest tone (oxblood) = 5.36:1.
 const WORD = '#2b2721';
-const FIELD_A = ['#a4b195', '#bda074', '#c48f7f']; // deep sage / weathered bronze / oxblood
-const FIELD_B = ['#95a9ae', '#a9a373', '#d8d0be']; // aegean blue / olive / marble
-const BASE = '#cec5b2';
 
 // Arrival: exponential gap collapse. Collapse: nearest-first, ease-IN (gravity).
 const gap = (i: number) => 28 + 820 * Math.exp(-i / 9);
@@ -148,14 +145,8 @@ export default function IntroSequence({ onDone }: { onDone: () => void }) {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden" style={{ background: BASE }} data-total={total}>
-      {/* Static Stoic base (also the no-WebGL fallback) */}
-      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(120% 120% at 50% 40%, #d8d0be 0%, #bda074 58%, #a9a373 100%)' }} />
-      {/* Paper Shaders — two drifting layers */}
-      <GrainGradient style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} colors={FIELD_A} colorBack={BASE} shape="blob" softness={0.9} intensity={0.36} noise={0.16} speed={0.12} scale={1.4} fit="cover" />
-      <GrainGradient style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.5, mixBlendMode: 'soft-light' }} colors={FIELD_B} colorBack="#c9c0ad" shape="blob" softness={0.95} intensity={0.3} noise={0.12} speed={0.08} scale={1.9} fit="cover" />
-      {/* Vignette — gentle, pulls the edges down (text is inset so it never sits on the darkest ring) */}
-      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(125% 125% at 50% 45%, transparent 62%, rgba(58,54,38,0.30) 100%)' }} />
+    <div className="fixed inset-0 z-50 overflow-hidden" style={{ background: '#cec5b2' }} data-total={total}>
+      <StoicField />
 
       <div className="relative z-10 h-full w-full">
         {frags.map((f) => (
