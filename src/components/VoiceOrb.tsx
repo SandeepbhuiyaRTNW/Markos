@@ -4,7 +4,8 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import type { MicVAD } from '@ricky0123/vad-web';
 import { VAD_TUNING, HANDS_FREE_AUDIO_CONSTRAINTS, VAD_ASSET_BASE, floatToWav, REARM_COOLDOWN_MS, HandsFreeLoop } from '@/lib/voice/handsFree';
-import OrbShader, { ORB } from '@/components/OrbShader';
+import { ORB } from '@/components/OrbShader';
+import Orb3D from '@/components/Orb3D';
 
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
 
@@ -477,21 +478,20 @@ export default function VoiceOrb({
         <div className="absolute rounded-full" style={{ width: 232, height: 232, border: '1px solid #e4dfd7', borderTopColor: '#b0611f', animation: 'arc-turn 5.5s linear infinite' }} />
       )}
 
-      {/* orb body — pearlescent stone sphere. A live shader surface fills it (masked to
-          the circle) when WebGL + motion are available; otherwise the stone shows through
-          unchanged, so the orb degrades to exactly its previous appearance. */}
-      <div
-        className="relative rounded-full"
-        style={{
-          width: 204, height: 204,
-          background: 'radial-gradient(circle at 34% 30%,#ffffff 0%,#f2eee6 22%,#ded7cb 52%,#b8ada0 82%,#8e8377 100%)',
-          boxShadow: '0 26px 50px -20px rgba(60,52,44,.5), inset 0 -22px 44px rgba(90,80,68,.28), inset 0 12px 22px rgba(255,255,255,.7), 0 0 0 1px rgba(20,16,14,.08)',
-          animation: 'orb-still 8s ease-in-out infinite',
-          filter: `saturate(${orbSat})`,
+      {/* orb body — the Three.js orb, driven by the LIVE audio envelope (audioLevelsRef,
+          already tapped below). Same component + shader as the landing page. Its own static
+          gradient covers no-WebGL / reduced-motion, so it degrades cleanly. */}
+      <Orb3D
+        size={204}
+        style={{ filter: `saturate(${orbSat})` }}
+        getLevel={() => {
+          const lv = audioLevelsRef.current;
+          const raw = state === 'listening' ? lv.input * 6
+            : state === 'speaking' ? lv.output * 3
+            : state === 'processing' ? 0.5 : 0.22;
+          return Math.min(1, raw);
         }}
-      >
-        <OrbShader state={state} levelsRef={audioLevelsRef} />
-      </div>
+      />
       {/* rim glow */}
       <div
         className="absolute rounded-full pointer-events-none"

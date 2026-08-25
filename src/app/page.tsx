@@ -13,6 +13,8 @@ import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 import SessionSummary from '@/components/SessionSummary';
 import AppHeader from '@/components/AppHeader';
 import SettingsScreen from '@/components/SettingsScreen';
+import Orb3D from '@/components/Orb3D';
+import IntroSequence from '@/components/IntroSequence';
 
 // localStorage getters/setters throw "Access to storage is not allowed from this
 // context" when the page runs in a storage-blocked / partitioned context (an embedded
@@ -93,6 +95,8 @@ export default function Home() {
   const [textInput, setTextInput] = useState('');
   const [inputMode, setInputMode] = useState<InputMode>('session-type');
   const [startLoading, setStartLoading] = useState(false); // fetching prior sessions to decide the start fork
+  const [introDone, setIntroDone] = useState(false);   // cinematic intro finished/skipped -> show landing
+  const [pendingEntry, setPendingEntry] = useState(false); // just authed -> drop into the mic once ready
   const [sessionType, setSessionType] = useState<SessionType>('continue');
   const [continueFromId, setContinueFromId] = useState<string | null>(null);
   const [recentSessions, setRecentSessions] = useState<Array<{
@@ -220,6 +224,16 @@ export default function Home() {
   useEffect(() => {
     if (inputMode === 'listening' && openingMessage && !openingLoading) setInputMode('voice');
   }, [inputMode, openingMessage, openingLoading]);
+
+  // The sign-up ends inside the conversation: once logged in AND past onboarding, a
+  // just-authed user is dropped straight into the mic-open listening screen. It waits for
+  // onboardingComplete, so it never fights the onboarding gate (new users still onboard first).
+  useEffect(() => {
+    if (userId && onboardingComplete && pendingEntry && viewRef.current !== 'voice') {
+      setPendingEntry(false);
+      enterVoice({ sessionType: 'fresh', continueFrom: null });
+    }
+  }, [userId, onboardingComplete, pendingEntry, enterVoice]);
 
   const handleSendCode = async () => {
     if (!email || !email.includes('@')) { setAuthError('Please enter a valid email.'); return; }
@@ -461,134 +475,92 @@ export default function Home() {
 
   // ─── Landing Page (not logged in) ───
   if (!initialized || !userId) {
+    // Cinematic intro plays once (persisted flag); reduced-motion / return visits skip it.
+    if (!introDone) return <IntroSequence onDone={() => setIntroDone(true)} />;
+    const enterCode = () => { setPendingEntry(true); handleVerifyCode(); };
     return (
-      <div className="h-screen flex flex-col relative overflow-y-auto">
-        <div className="ambient-bg" />
-        <AppHeader mode="focused" />
-        <div className="relative z-10 flex-1">
-          {/* Hero Section */}
-          <section className="max-w-4xl mx-auto px-6 pt-16 pb-20 text-center fade-in-up">
-            <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#b0611f]/15 to-[#b0611f]/5 border border-[#b0611f]/20 flex items-center justify-center mx-auto mb-8">
-              <span className="text-5xl font-light text-[#b0611f]">M</span>
+      <div className="h-screen w-screen flex flex-col relative overflow-hidden" style={{ background: '#faf9f6' }}>
+        <ShaderBackground contained state="idle" register={0} />
+        {/* Header — wordmark + Sign in, nothing else */}
+        <header className="relative z-20 flex-none">
+          <div className="flex items-center justify-between px-6 sm:px-10 lg:px-16" style={{ height: 60 }}>
+            <span style={{ fontSize: 13, letterSpacing: '0.3em', textTransform: 'uppercase', color: '#14100e', fontWeight: 500 }}>Markos</span>
+            <button onClick={() => { setAuthStep('email'); document.getElementById('hero-email')?.focus(); }} className="transition-opacity hover:opacity-70" style={{ fontSize: 13, letterSpacing: '0.04em', color: '#5c534b' }}>Sign in</button>
+          </div>
+        </header>
+        <div className="relative z-10 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full px-6 sm:px-10 lg:px-16" style={{ maxWidth: 640 }}>
+            {/* Hero */}
+            <div className="flex justify-center" style={{ marginTop: 24 }}>
+              <Orb3D size={168} />
             </div>
-            <h2 className="text-5xl sm:text-6xl font-semibold tracking-tight text-foreground mb-4 leading-tight">
-              Your Stoic<br />Companion
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-xl mx-auto mb-10 leading-relaxed">
-              Marcus is an AI embodiment of Marcus Aurelius — a voice-first companion for men navigating
-              work, relationships, identity, and purpose through Stoic wisdom.
-            </p>
+            <p className="text-center" style={{ fontSize: 13, letterSpacing: '0.22em', textTransform: 'uppercase', color: '#6b6259', marginTop: 32 }}>A voice for what you don’t say</p>
+            <h1 className="font-serif text-center" style={{ fontSize: 'clamp(30px,5.5vw,50px)', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.12, color: '#14100e', marginTop: 14, maxWidth: 560, marginLeft: 'auto', marginRight: 'auto' }}>Most men don’t have anyone to say it to.</h1>
+            <p className="text-center" style={{ fontSize: 18, lineHeight: 1.6, color: '#3d352e', marginTop: 20, maxWidth: 480, marginLeft: 'auto', marginRight: 'auto' }}>Not therapy. Not a chatbot. A voice you can think out loud with — at 2am, when there’s no one else to call.</p>
 
-            {showLogin ? (
-              <div className="max-w-sm mx-auto space-y-4 fade-in-scale">
-                {authStep === 'email' ? (
-                  <>
-                    <Input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setAuthError(''); }}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSendCode()}
-                      placeholder="Enter your email"
-                      className="h-13 bg-white border-border text-foreground placeholder:text-muted-foreground/60 rounded-xl px-5 text-sm" />
-                    <Button onClick={() => { if (!email || !email.includes('@')) { setAuthError('Please enter a valid email.'); return; } setAuthStep('password'); setAuthError(''); }}
-                      className="w-full h-13 text-sm font-medium rounded-xl bg-[#44403c] hover:bg-[#57534e] text-white transition-all disabled:opacity-50">
-                      Continue <ChevronRight className="w-4 h-4 ml-2" />
-                    </Button>
-                  </>
-                ) : authStep === 'password' ? (
-                  <>
-                    <p className="text-sm text-muted-foreground">Signing in as <span className="font-medium text-foreground">{email}</span></p>
-                    <Input type="password" value={password} onChange={(e) => { setPassword(e.target.value); setAuthError(''); }}
-                      onKeyDown={(e) => e.key === 'Enter' && handlePasswordLogin()}
-                      placeholder="Enter your password"
-                      className="h-13 bg-white border-border text-foreground placeholder:text-muted-foreground/60 rounded-xl px-5 text-sm" />
-                    <Button onClick={handlePasswordLogin} disabled={loggingIn || !password}
-                      className="w-full h-13 text-sm font-medium rounded-xl bg-[#44403c] hover:bg-[#57534e] text-white transition-all disabled:opacity-50">
-                      {loggingIn ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Signing in…</> : <>Sign In <ChevronRight className="w-4 h-4 ml-2" /></>}
-                    </Button>
-                    <div className="flex items-center justify-center gap-4">
-                      <button onClick={() => { setAuthStep('email'); setPassword(''); setAuthError(''); }} className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
-                        Change email
-                      </button>
-                      <span className="text-muted-foreground/30">·</span>
-                      <button onClick={handleSendCode} disabled={sendingCode} className="text-xs text-[#b0611f] hover:text-[#8a6550] transition-colors disabled:opacity-50">
-                        {sendingCode ? 'Sending…' : 'Use verification code instead'}
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm text-muted-foreground">Code sent to <span className="font-medium text-foreground">{email}</span></p>
-                    <Input type="text" inputMode="numeric" maxLength={6} value={otpCode}
-                      onChange={(e) => { setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setAuthError(''); }}
-                      onKeyDown={(e) => e.key === 'Enter' && otpCode.length === 6 && handleVerifyCode()}
-                      placeholder="Enter 6-digit code"
-                      className="h-13 bg-white border-border text-foreground placeholder:text-muted-foreground/60 rounded-xl px-5 text-sm text-center tracking-[0.3em] text-lg font-mono" />
-                    <Button onClick={handleVerifyCode} disabled={verifyingCode || otpCode.length !== 6}
-                      className="w-full h-13 text-sm font-medium rounded-xl bg-[#44403c] hover:bg-[#57534e] text-white transition-all disabled:opacity-50">
-                      {verifyingCode ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Verifying…</> : <>Verify & Sign In <ChevronRight className="w-4 h-4 ml-2" /></>}
-                    </Button>
-                    <div className="flex items-center justify-center gap-4">
-                      <button onClick={handleSendCode} disabled={sendingCode} className="text-xs text-[#b0611f] hover:text-[#8a6550] transition-colors disabled:opacity-50">
-                        {sendingCode ? 'Sending…' : 'Resend code'}
-                      </button>
-                      <span className="text-muted-foreground/30">·</span>
-                      <button onClick={() => { setAuthStep('email'); setOtpCode(''); setAuthError(''); }} className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
-                        Change email
-                      </button>
-                    </div>
-                  </>
-                )}
-                {authError && <p className="text-xs text-red-500 text-center">{authError}</p>}
-                <button onClick={() => { setShowLogin(false); setAuthStep('email'); setOtpCode(''); setPassword(''); setAuthError(''); }}
-                  className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">Cancel</button>
-              </div>
-            ) : (
-              <button onClick={() => setShowLogin(true)}
-                className="inline-flex items-center gap-3 px-8 py-4 rounded-2xl text-base font-bold bg-[#44403c] hover:bg-[#57534e] text-white transition-all shadow-lg hover:shadow-xl">
-                Start Your Journey <ArrowRight className="w-5 h-5" />
-              </button>
-            )}
-          </section>
-
-          {/* Features */}
-          <section className="max-w-4xl mx-auto px-6 pb-20">
-            <div className="grid sm:grid-cols-3 gap-6">
-              <div className="glass-strong rounded-2xl p-6 text-center">
-                <div className="w-12 h-12 rounded-xl bg-[#b0611f]/8 flex items-center justify-center mx-auto mb-4">
-                  <Mic className="w-6 h-6 text-[#b0611f]/60" />
-                </div>
-                <h3 className="text-sm font-semibold text-foreground mb-2">Voice-First</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed">Speak naturally. Marcus listens deeply and responds with the weight of 2,000 years of Stoic wisdom.</p>
-              </div>
-              <div className="glass-strong rounded-2xl p-6 text-center">
-                <div className="w-12 h-12 rounded-xl bg-[#b0611f]/8 flex items-center justify-center mx-auto mb-4">
-                  <BookOpen className="w-6 h-6 text-[#b0611f]/60" />
-                </div>
-                <h3 className="text-sm font-semibold text-foreground mb-2">Stoic Library</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed">Draws from Meditations, Seneca, Epictetus, Frankl, and more — woven into every conversation.</p>
-              </div>
-              <div className="glass-strong rounded-2xl p-6 text-center">
-                <div className="w-12 h-12 rounded-xl bg-[#b0611f]/8 flex items-center justify-center mx-auto mb-4">
-                  <Brain className="w-6 h-6 text-[#b0611f]/60" />
-                </div>
-                <h3 className="text-sm font-semibold text-foreground mb-2">Remembers You</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed">Marcus remembers your struggles, patterns, and growth — each session builds on the last.</p>
-              </div>
+            {/* Email field IN THE HERO (no separate signup page) */}
+            <div className="mx-auto" style={{ maxWidth: 420, marginTop: 30 }}>
+              {authStep !== 'otp' ? (
+                <>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <input id="hero-email" type="email" value={email} onChange={(e) => { setEmail(e.target.value); setAuthError(''); }} onKeyDown={(e) => e.key === 'Enter' && handleSendCode()} placeholder="you@email.com" disabled={sendingCode}
+                      style={{ flex: 1, height: 48, padding: '0 16px', background: '#faf9f6', border: '1px solid #ded8cf', borderRadius: 0, color: '#14100e', fontSize: 16 }} />
+                    <button onClick={handleSendCode} disabled={sendingCode} className="disabled:opacity-50" style={{ height: 48, padding: '0 22px', background: '#14100e', color: '#faf9f6', borderRadius: 0, fontSize: 15, fontWeight: 500, whiteSpace: 'nowrap' }}>{sendingCode ? 'Sending…' : 'Continue'}</button>
+                  </div>
+                  <p className="text-center" style={{ fontSize: 13, color: '#6b6259', marginTop: 12 }}>We’ll send a code. No password, no card.</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-center" style={{ fontSize: 14, color: '#5c534b', marginBottom: 10 }}>Code sent to {email}</p>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <input type="text" inputMode="numeric" maxLength={6} value={otpCode} onChange={(e) => { setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setAuthError(''); }} onKeyDown={(e) => e.key === 'Enter' && otpCode.length === 6 && enterCode()} placeholder="6-digit code" className="font-mono"
+                      style={{ flex: 1, height: 48, padding: '0 16px', background: '#faf9f6', border: '1px solid #ded8cf', borderRadius: 0, color: '#14100e', fontSize: 18, letterSpacing: '0.3em', textAlign: 'center' }} />
+                    <button onClick={enterCode} disabled={verifyingCode || otpCode.length !== 6} className="disabled:opacity-50" style={{ height: 48, padding: '0 22px', background: '#14100e', color: '#faf9f6', borderRadius: 0, fontSize: 15, fontWeight: 500, whiteSpace: 'nowrap' }}>{verifyingCode ? 'Verifying…' : 'Enter'}</button>
+                  </div>
+                  <div className="text-center" style={{ marginTop: 12 }}>
+                    <button onClick={handleSendCode} disabled={sendingCode} className="transition-opacity hover:opacity-70" style={{ fontSize: 13, color: '#8a4a14' }}>{sendingCode ? 'Sending…' : 'Resend code'}</button>
+                    <span style={{ color: '#6b6259', margin: '0 10px' }}>·</span>
+                    <button onClick={() => { setAuthStep('email'); setOtpCode(''); setAuthError(''); }} className="transition-opacity hover:opacity-70" style={{ fontSize: 13, color: '#6b6259' }}>Change email</button>
+                  </div>
+                </>
+              )}
+              {authError && <p className="text-center" style={{ fontSize: 13, color: '#8a4a14', marginTop: 10 }}>{authError}</p>}
             </div>
-          </section>
 
-          {/* Quote */}
-          <section className="max-w-2xl mx-auto px-6 pb-20 text-center">
-            <div className="glass-strong rounded-2xl p-8 border-[#b0611f]/10">
-              <p className="text-base italic text-foreground/70 leading-relaxed mb-3">
-                &quot;Waste no more time arguing about what a good man should be. Be one.&quot;
-              </p>
-              <p className="text-xs text-muted-foreground/50">— Marcus Aurelius, Meditations</p>
+            {/* A four-line sample exchange — instead of feature cards */}
+            <div style={{ marginTop: 72, maxWidth: 520, marginLeft: 'auto', marginRight: 'auto' }}>
+              {[
+                { who: 'You', serif: false, text: 'I don’t even know why I’m saying this out loud.' },
+                { who: 'Marcus', serif: true, text: 'Say it anyway. Out loud it’s smaller than it is in your head.' },
+                { who: 'You', serif: false, text: 'Everyone thinks I’ve got it handled.' },
+                { who: 'Marcus', serif: true, text: 'You don’t have to have it handled with me. What’s the part you haven’t put down?' },
+              ].map((m, i) => (
+                <div key={i} style={{ marginTop: i === 0 ? 0 : 22 }}>
+                  <p style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#6b6259' }}>{m.who}</p>
+                  <p className={m.serif ? 'font-serif' : ''} style={{ fontSize: m.serif ? 19 : 17, lineHeight: 1.55, color: m.serif ? '#3d352e' : '#14100e', marginTop: 5 }}>{m.text}</p>
+                </div>
+              ))}
             </div>
-          </section>
+
+            {/* Three sentences — instead of a feature grid */}
+            <div style={{ marginTop: 60, maxWidth: 520, marginLeft: 'auto', marginRight: 'auto' }}>
+              {[
+                'You talk, and he listens — no advice you didn’t ask for.',
+                'He remembers what you told him, so you’re never starting over.',
+                'He’s read what lasts — Marcus Aurelius, Seneca — and speaks plainly from it.',
+              ].map((s, i) => (
+                <p key={i} style={{ fontSize: 18, lineHeight: 1.55, color: '#3d352e', marginTop: i === 0 ? 0 : 16 }}>{s}</p>
+              ))}
+            </div>
+          </div>
+          {/* Footer */}
+          <footer className="text-center" style={{ padding: '52px 24px 34px' }}>
+            <p style={{ fontSize: 13, color: '#6b6259' }}>Not a crisis service. If you’re in danger, call 988.</p>
+          </footer>
         </div>
       </div>
     );
   }
-
   // ─── Checking Onboarding ───
   if (checkingOnboarding) {
     return (
@@ -878,7 +850,7 @@ export default function Home() {
                     ) : (
                       <div className="w-full" style={{ maxWidth: 520 }}>
                         <div className="flex justify-center">
-                          <div className="rounded-full" style={{ width: 132, height: 132, background: 'radial-gradient(circle at 34% 30%,#ffffff 0%,#f2eee6 22%,#ded7cb 52%,#b8ada0 82%,#8e8377 100%)', boxShadow: '0 24px 46px -20px rgba(60,52,44,.45), inset 0 -20px 40px rgba(90,80,68,.26), inset 0 12px 20px rgba(255,255,255,.7), 0 0 0 1px rgba(20,16,14,.07)' }} />
+                          <Orb3D size={132} />
                         </div>
                         <h1 className="font-serif text-center" style={{ fontSize: 'clamp(28px,4.5vw,42px)', fontWeight: 400, letterSpacing: '-0.02em', color: '#14100e', marginTop: 34 }}>Where do you want to start?</h1>
                         <div style={{ marginTop: 40 }}>
@@ -905,7 +877,7 @@ export default function Home() {
               {inputMode === 'listening' && (
                 <div className="relative flex-1 overflow-hidden">
                   <div className="relative z-10 h-full flex flex-col items-center justify-center text-center px-6 fade-in-up">
-                    <div className="rounded-full" style={{ width: 168, height: 168, background: 'radial-gradient(circle at 34% 30%,#ffffff 0%,#f2eee6 22%,#ded7cb 52%,#b8ada0 82%,#8e8377 100%)', boxShadow: '0 26px 50px -20px rgba(60,52,44,.5), inset 0 -22px 44px rgba(90,80,68,.28), inset 0 12px 22px rgba(255,255,255,.7), 0 0 0 1px rgba(20,16,14,.08)' }} />
+                    <Orb3D size={168} />
                     <h1 className="font-serif" style={{ fontSize: 'clamp(30px,5vw,46px)', fontWeight: 400, letterSpacing: '-0.02em', color: '#14100e', marginTop: 40 }}>I&rsquo;m here.</h1>
                     <p style={{ fontSize: 18, color: '#5c534b', marginTop: 14 }}>Start talking whenever you&rsquo;re ready.</p>
                     <p style={{ position: 'absolute', bottom: 36, fontSize: 12, letterSpacing: '0.26em', textTransform: 'uppercase', color: '#6b6259' }}>Listening</p>
