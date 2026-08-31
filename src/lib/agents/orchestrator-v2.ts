@@ -22,7 +22,8 @@ import { runCulturalContext } from '../sentinels/cultural';
 import { classifyArena } from '../assessment/arena-classifier';
 import { classifySilence } from '../assessment/silence-typer';
 import { computeTrust } from '../assessment/trust-gauge';
-import { mapPhase } from '../assessment/phase-mapper';
+import { mapPhase, monotonicPhase } from '../assessment/phase-mapper';
+import { loadSessionState, saveSessionState, type SessionState } from './session-state';
 import { selectMove, moveSelectorEnforced } from '../assessment/move-selector';
 import { selectKnowledgePlan } from '../assessment/knowledge-selector';
 import { selectWisdomVoices } from '../wisdom/council';
@@ -114,18 +115,35 @@ export async function processWithAgents(
   // 1d. Parallel sentinel fetch: Memory + Understanding + KWML + Cultural
   const historyStr = conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n');
 
+  // W2: persisted trust/phase from earlier turns of THIS conversation (nulls on
+  // first turn or load failure — the gauge then falls back to its session-count
+  // seed, exactly the old behavior).
+  let persistedState: SessionState = { trust: null, phase: null };
+
   // Phase 1: Fast DB fetches
   const memDone = trackEnvelopeAgent(env, 'memory-sentinel');
   try {
-    const [memCtx, kwmlCtx, sessionResult, sessHistory, stylePrefs] = await Promise.all([
+    const [memCtx, kwmlCtx, sessionResult, sessHistory, stylePrefs, loadedState, lastSessionResult] = await Promise.all([
       getMemoryContext(userId), getKWMLContext(userId),
       query(`SELECT COUNT(*) as cnt FROM conversations WHERE user_id = $1`, [userId]),
       getSessionHistory(userId), getStylePreferences(userId),
+      loadSessionState(query, conversationId),
+      // W13: the same last-ended-session anchors the opening message speaks from
+      // (title + takeaways + pondering topics). Never throws — a missing/drifted
+      // column must not break the turn.
+      query(
+        `SELECT takeaways, pondering_topics, metadata FROM conversations
+         WHERE user_id = $1 AND session_ended = true AND id != $2
+         ORDER BY ended_at DESC LIMIT 1`,
+        [userId, conversationId],
+      ).catch(() => null),
     ]);
+    persistedState = loadedState;
     env.sentinels.memory = {
       prior_threads: [], session_history: sessHistory, memory_context: memCtx,
       session_count: parseInt(sessionResult.rows[0]?.cnt || '0', 10),
       style_preferences: stylePrefs, returning_patterns: [],
+      last_session_continuity: buildLastSessionContinuity(lastSessionResult?.rows?.[0] || null),
     };
   } catch (err) { recordEnvelopeError(env, 'memory-sentinel', err); }
   finally { memDone(); }
@@ -189,13 +207,18 @@ export async function processWithAgents(
     env.assessment.silence_type = env.sentinels.listener_stack
       ? await classifySilence(userMessage, env.sentinels.listener_stack.the_silence, historyStr, env.sentinels.memory.memory_context || '', '')
       : null;
-    env.assessment.trust = computeTrust(userMessage, conversationHistory, env.sentinels.memory.session_count);
-    env.assessment.phase = mapPhase(
+    // W2: carry forward the trust this man has already earned in this
+    // conversation instead of re-seeding from scratch every turn.
+    env.assessment.trust = computeTrust(userMessage, conversationHistory, env.sentinels.memory.session_count, persistedState.trust);
+    const computedPhase = mapPhase(
       env.sentinels.memory.session_count,
       env.sentinels.listener_stack?.depth_level || 2,
       env.sentinels.listener_stack?.emotional_trajectory || 'neutral',
       env.assessment.trust.cognitive, env.assessment.trust.affective,
     );
+    // W2: phases advance monotonically within a conversation — a shallow turn
+    // must not strip a phase he already reached.
+    env.assessment.phase = monotonicPhase(computedPhase, persistedState.phase);
   } catch (err) { recordEnvelopeError(env, 'assessment-ring', err); }
   finally { assessDone(); }
 
@@ -295,7 +318,11 @@ export async function processWithAgents(
       enforceMovePolicy: policyEnforced,
     },
   );
-  const [, pre] = await Promise.all([whispererPromise, preComposerPromise]);
+  // W2: persist this turn's trust + phase so the NEXT turn resumes instead of
+  // restarting. Overlapped with the whisperer/composer work — zero added latency.
+  // saveSessionState never throws.
+  const statePersistPromise = saveSessionState(query, conversationId, env.assessment.trust, env.assessment.phase.label);
+  const [, pre] = await Promise.all([whispererPromise, preComposerPromise, statePersistPromise]);
   return runComposerPipeline(
     env,
     historyStr,
@@ -325,4 +352,27 @@ export async function buildResponse(env: StateEnvelope, queryFn?: QueryFn): Prom
     errors: env.errors,
     envelope: env,
   };
+}
+
+/**
+ * W13: build the LAST SESSION CONTINUITY block from the most recent ended
+ * session — the exact anchors the opening message was generated from — so the
+ * first live reply after a warm, memory-aware opener does not sound like a
+ * stranger. Returns null when there is nothing real to say (never fabricates).
+ */
+function buildLastSessionContinuity(lastSession: {
+  takeaways?: unknown;
+  pondering_topics?: unknown;
+  metadata?: unknown;
+} | null): string | null {
+  if (!lastSession) return null;
+  const title = (lastSession.metadata as Record<string, unknown> | null)?.title;
+  const takeaways = Array.isArray(lastSession.takeaways) ? lastSession.takeaways.filter(t => typeof t === 'string') : [];
+  const pondering = Array.isArray(lastSession.pondering_topics) ? lastSession.pondering_topics.filter(t => typeof t === 'string') : [];
+  const parts: string[] = [];
+  if (typeof title === 'string' && title) parts.push(`Last session topic: "${title}"`);
+  if (takeaways.length > 0) parts.push(`Key takeaways from last time:\n${takeaways.map(t => `- ${t}`).join('\n')}`);
+  if (pondering.length > 0) parts.push(`Pondering topics given to him:\n${pondering.map(t => `- ${t}`).join('\n')}`);
+  if (parts.length === 0) return null;
+  return `LAST SESSION CONTINUITY (the session opener already spoke from this — treat it as something you both know):\n${parts.join('\n')}`;
 }
