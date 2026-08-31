@@ -81,3 +81,28 @@ export function getPhaseConstraints(phase: Phase): {
   }
 }
 
+
+/**
+ * Phase ordering for monotonic advancement (W2 fix).
+ * Trust is earned and not un-earned within a conversation: once a man has reached
+ * a phase, later turns must not silently regress him because one message scored
+ * shallower. The computed phase may ADVANCE him; the persisted phase is the floor.
+ */
+export const PHASE_ORDER: Record<Phase, number> = {
+  unsilenced: 0,
+  unleashed: 1,
+  brothered: 2,
+};
+
+/**
+ * Combine a freshly computed phase with the persisted phase from earlier turns.
+ * Returns the FURTHER of the two (never regresses). Confidence comes from the
+ * winning side.
+ */
+export function monotonicPhase(computed: PhaseOutput, persisted: Phase | null): PhaseOutput {
+  if (!persisted || !(persisted in PHASE_ORDER)) return computed;
+  if (PHASE_ORDER[persisted] > PHASE_ORDER[computed.label]) {
+    return { label: persisted, confidence: computed.confidence };
+  }
+  return computed;
+}
