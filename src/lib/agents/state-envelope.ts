@@ -66,6 +66,10 @@ export interface MemoryOutput {
   memory_context: string | null;
   style_preferences: string | null;
   returning_patterns: string[];
+  // W13 fix: the same last-session continuity block the session opener speaks
+  // from (title + takeaways + pondering topics), so the FIRST live reply after a
+  // continuity-rich opener does not sound like a stranger.
+  last_session_continuity: string | null;
 }
 
 export interface CulturalOutput {
