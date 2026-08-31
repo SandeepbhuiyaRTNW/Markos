@@ -230,10 +230,16 @@ export async function runComposerPipeline(
     // even in early sessions. Challenge stays trust-gated; presence is content-gated.
     const presentedDepth = env.sentinels.listener_stack?.depth_level || 1;
     const effectiveMaxDepth = Math.max(phaseConstraints.max_depth, presentedDepth);
+    // W3: push depth is capped at ONE step past what he brought this turn (and
+    // never past the phase ceiling). A phase may ALLOW challenge up to 4-5, but
+    // a man who brought small talk gets presence, not a probe.
+    const challengeCeiling = phaseConstraints.can_challenge
+      ? computeChallengeCeiling(phaseConstraints.max_depth, presentedDepth)
+      : 0;
 
     // Phase constraints — inject into prompt so Composer knows depth/challenge permissions
     const phaseAddendum = `\n\n## PHASE CONSTRAINTS (${env.assessment.phase.label.toUpperCase()})
-Meet-him depth (match this — he brought it): ${effectiveMaxDepth}/5 | Challenge ceiling (push only this hard): ${phaseConstraints.max_depth}/5
+Meet-him depth (match this — he brought it): ${effectiveMaxDepth}/5 | Push ceiling this turn: ${challengeCeiling === 0 ? 'none — presence and reflection only' : `${challengeCeiling}/5 (at most one step past what he offered, capped by phase)`}
 Can challenge: ${phaseConstraints.can_challenge ? 'YES' : 'NO'} | Can suggest: ${phaseConstraints.can_suggest ? 'YES' : 'NO'}
 Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseConstraints.max_depth ? `\nNOTE: He brought depth ${presentedDepth}. MATCH it — reflect the real thing he said and ask the one question that lives at his level. Do NOT retreat to a careful, surface response just because trust is still early. What you hold back is adversarial confrontation, not presence.` : ''}`;
 
@@ -259,7 +265,10 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
         : ''),
       kwmlContext: kwmlStr,
       understandingContext: understandingStr,
-      sessionHistory: env.sentinels.memory.session_history || undefined,
+      // W13: live turns get the SAME continuity anchors the opener spoke from,
+      // so the first reply after a memory-aware opener is not a stranger.
+      sessionHistory: [env.sentinels.memory.session_history, env.sentinels.memory.last_session_continuity]
+        .filter(Boolean).join('\n\n') || undefined,
       userName: env.user_name || undefined,
       stylePreferences: env.sentinels.memory.style_preferences || undefined,
     });
@@ -584,7 +593,7 @@ export function buildPriorityHierarchy(env: StateEnvelope, policy: PriorityPolic
   if (policy.allowQuestion && ls?.silence_question) {
     lines.push(`PRIORITY 1 — SILENCE QUESTION (from Listener Stack):`);
     lines.push(`"${ls.silence_question}"`);
-    lines.push(`This is the DEEPEST question available for this moment. Use it as-is or adapt it to your voice. Do NOT replace it with a safer question unless the man explicitly needs gentleness right now.`);
+    lines.push(`This is the deepest question AVAILABLE for this moment — a candidate, not a command. Use it if it follows naturally from what he actually said this turn and the trust you have built together. If he brought something lighter, or it would land as a non-sequitur, a smaller question in his own words is the better move. Answering what he said always beats chasing depth.`);
     lines.push('');
   }
 
@@ -610,7 +619,7 @@ export function buildPriorityHierarchy(env: StateEnvelope, policy: PriorityPolic
 
   // Depth accountability
   if (depth <= 2) {
-    lines.push(`DEPTH CHECK: You are at depth ${depth}/5. If you have been at this depth for 3+ exchanges, YOU are failing. Use the Silence Question or Depth Move above to go deeper. Do not stay at the surface with him.`);
+    lines.push(`DEPTH CHECK: You are at depth ${depth}/5. Go deeper ONLY if he opened a door this turn — he lingered on something, named a stake, got quieter, or asked something back. If he brought small talk or logistics, stay with him there: reflect it, be useful, be warm. A shallow turn he enjoys beats a deep probe he never asked for.`);
   } else if (depth >= 4) {
     lines.push(`DEPTH CHECK: You are at depth ${depth}/5. This is sacred ground. Honor it. Mirror his truth. Do not retreat to safety.`);
   }
@@ -622,8 +631,8 @@ export function buildPriorityHierarchy(env: StateEnvelope, policy: PriorityPolic
 
   lines.push('');
   lines.push(policy.allowQuestion
-    ? 'YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then ask ONE question or make ONE statement that pushes toward the depth target above. (3) Keep it 2-4 sentences. End with weight.'
-    : 'YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then make ONE statement that pushes toward the depth target above. (3) Keep it 2-4 sentences. End with weight.');
+    ? 'YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then ask ONE question or make ONE statement that meets him where he is — deeper only if he opened the door this turn. (3) Keep it 2-4 sentences. End with weight.'
+    : 'YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then make ONE statement that meets him where he is — deeper only if he opened the door this turn. (3) Keep it 2-4 sentences. End with weight.');
 
   return lines.join('\n');
 }
@@ -648,6 +657,16 @@ export function renderMoveDirective(policy: MovePolicyContext): string {
   // enforced turn — the depth mandate (add insight, don't just mirror; vary the
   // shape; read the mode; hold space when that's truer). Crisis returned '' above.
   return `\n\n## MOVE POLICY (talk like Marcus — a real guy, not a therapist; short, plain, human)\n${GOVERNING_BAR}\n\nDecision: ${move.move}\nQuestion policy: ${allowQuestionText}\nRequired craft form: ${move.craft_form}\n${tooEarly}.${calBlock}${noAskBlock}`;
+}
+
+/**
+ * W3: push/challenge depth for this turn — at most ONE level past the depth he
+ * presented, and never past the phase ceiling. Presence depth is NOT clamped by
+ * this (meeting him where he is stays content-gated); only the adversarial push
+ * is. Exported for unit tests.
+ */
+export function computeChallengeCeiling(phaseMaxDepth: number, presentedDepth: number): number {
+  return Math.max(1, Math.min(phaseMaxDepth, presentedDepth + 1));
 }
 
 function countQuestionSentences(text: string): number {
