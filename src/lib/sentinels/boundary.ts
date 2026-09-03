@@ -48,6 +48,39 @@ const ADVICE_PATTERNS = [
   /\bminute[ -]\d/i, /\bstep outside\b/i, /\bdo this:/i,
 ];
 
+/**
+ * Legal-advice patterns — the OUTPUT-side divorce guardrail (spec §6).
+ * These catch Markos CROSSING from orientation into advice: telling a man to take
+ * a legal action, predicting what he will get, making a jurisdiction-specific
+ * claim, or handing down a "should I divorce/file" verdict. Scoped tightly to legal
+ * OBJECTS (custody, the house, support, assets) so ordinary language and the
+ * once-per-topic disclaimer ("what you should do — that is a lawyer conversation")
+ * do NOT trip it. A hit forces a recompose via the composer's boundary gate.
+ *
+ * HONEST LIMITS: this is pattern-matching, so it enforces only the phrasings
+ * enumerated here — a legal-advice slip worded outside these patterns passes, and
+ * the composer's recompose budget is capped (MAX_REGENS), so a model that keeps
+ * re-emitting advice after the cap keeps its best draft. It reduces, it does not
+ * guarantee.
+ */
+const LEGAL_ADVICE_PATTERNS = [
+  // Directing a legal action
+  /\byou should (file|divorce|leave (her|him)|settle|counter|counter-?sue|sue|separate|demand|fight for|ask for|take (her|him|the house|the kids|full|sole|primary|half))\b/i,
+  /\b(just |definitely |absolutely |honestly,? )?file (first|before (she|he)|for (full |sole |primary )?custody)\b/i,
+  /\bget a (good )?lawyer and (file|take|go after|demand|fight)\b/i,
+  // Predicting an outcome / what he'll get
+  /\byou'?ll (probably |likely |definitely )?(get|win|keep|lose|end up with) (full |sole |primary |joint )?(custody|the (house|home|kids?|car|pension)|everything|half|spousal|alimony|child support)\b/i,
+  /\byou (will|would|can|could) (probably |likely )?(get|win|keep|be awarded) (full |sole |primary )?(custody|the (house|home|kids?)|half|spousal|alimony)\b/i,
+  /\b(how to |to )?win (full |sole |primary )?custody\b/i,
+  /\b(get|getting|secure|going for) (full|sole|primary) custody\b/i,
+  // "Deserve / entitled" estimates — scoped to legal objects (so "you deserve better" is fine)
+  /\byou (deserve|are entitled to|have a (legal )?right to) (the |a |half|full|primary|sole|joint |your share)?(custody|house|home|assets?|estate|pension|retirement|spousal|alimony|child support|the kids?)\b/i,
+  // Jurisdiction-specific claims ("in Texas you get…")
+  /\bin (texas|california|new york|florida|georgia|ohio|illinois|pennsylvania|arizona|washington|colorado|nevada|new jersey|virginia|michigan|north carolina|massachusetts|oregon) ,?[^.?!]{0,40}\byou (get|will get|can get|are entitled|keep|lose|are awarded|would get)\b/i,
+  // "Should I divorce" verdict handed down
+  /\b(yes,?|honestly,?|i think) (you should|it'?s time to) (divorce|file|leave (her|him)|end (it|the marriage))\b/i,
+];
+
 /** Therapy/self-help vocabulary that should never be mirrored */
 const THERAPY_VOCAB = [
   /\bboundaries\b/i, /\btrigger(s|ing|ed)?\b/i, /\bvalidat(e|ing)\b/i,
@@ -64,6 +97,8 @@ export interface BoundaryCheckResult {
   passed: boolean;
   violations: string[];
   advice_after_pushback: boolean;
+  /** true when at least one violation is a divorce legal-advice cross (drives a targeted rewrite). */
+  legal_advice: boolean;
 }
 
 /** Check a Composer output for boundary violations */
@@ -83,6 +118,14 @@ export function checkBoundary(
     if (match) violations.push(`therapy-vocab: "${match[0]}"`);
   }
 
+  // Legal-advice cross — always checked (not gated on pushback): Markos orients,
+  // professionals advise. A hit here forces a recompose.
+  let legalAdvice = false;
+  for (const pattern of LEGAL_ADVICE_PATTERNS) {
+    const match = content.match(pattern);
+    if (match) { violations.push(`legal-advice: "${match[0]}"`); legalAdvice = true; }
+  }
+
   const adviceAfterPushback = pushbackCount >= 2 && ADVICE_PATTERNS.some(p => p.test(content));
   if (adviceAfterPushback) violations.push('advice-after-pushback');
 
@@ -90,6 +133,7 @@ export function checkBoundary(
     passed: violations.length === 0,
     violations,
     advice_after_pushback: adviceAfterPushback,
+    legal_advice: legalAdvice,
   };
 }
 
@@ -108,6 +152,9 @@ export function runBoundarySentinel(
 
 /** Get the override prompt for regeneration after boundary violation */
 export function getBoundaryOverridePrompt(result: BoundaryCheckResult): string {
+  if (result.legal_advice) {
+    return `[SYSTEM OVERRIDE] Your previous response crossed from ORIENTING into legal advice — you told him what to do legally, predicted what he'll get, made a state-specific claim, or handed down a divorce verdict. That is a lawyer's job, not yours. Rewrite: you may explain how this GENERALLY works and normalize what he's feeling, but do NOT tell him to file, leave, or settle, do NOT predict custody/support/assets, do NOT name what any state does, and do NOT say whether he should divorce. Point anything decision-shaped to a family-law attorney in his state — once, in your own plain voice. 2-3 sentences.`;
+  }
   if (result.advice_after_pushback) {
     return `[SYSTEM OVERRIDE] Your previous response gave ADVICE after the man already pushed back multiple times. Rewrite completely. Do NOT give advice. Do NOT suggest actions. Instead: acknowledge, sit with him, or go DEEPER. 2-3 sentences max.`;
   }

@@ -12,8 +12,21 @@
 import OpenAI from 'openai';
 import type { StateEnvelope } from '../agents/state-envelope';
 import { retrieveWhispererQuestions, retrieveTrainingContext, type WhispererResult } from './base-whisperer';
+import {
+  detectKnowledgeAreas, buildOrientationNote, DIVORCE_KNOWLEDGE_RED_LINES,
+  type KnowledgeArea,
+} from './divorce-knowledge';
 
 function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); }
+
+/** Knowledge-area → the lens name surfaced to the Composer's ACTIVE FRAMEWORKS list. */
+const KNOWLEDGE_LENS: Record<KnowledgeArea, string> = {
+  process: 'process_orienting',
+  legal_literacy: 'legal_literacy_orienting',
+  co_parenting: 'co_parenting_grounding',
+  financial: 'financial_grounding',
+  emotional: 'emotional_stage_mapping',
+};
 
 /** The six clinical lenses from Conscious Uncoupling training */
 const DIVORCE_LENSES = {
@@ -32,8 +45,13 @@ export const REBUILDING_BLOCKS = [
   'love', 'trust', 'relatedness', 'sexuality', 'singleness', 'purpose', 'freedom',
 ];
 
-/** Red lines — what this Whisperer must NEVER do */
-const DIVORCE_RED_LINES = [
+/**
+ * Red lines — what this Whisperer must NEVER do. The emotional-support lines
+ * (unchanged) plus the domain-knowledge hard red lines from the spec, so a turn
+ * that orients on process/legal/co-parenting/financial content carries the same
+ * guardrails as the LLM path AND the deterministic path.
+ */
+export const DIVORCE_RED_LINES = [
   'Never diagnose depression, PTSD, or any clinical condition',
   'Never advise on custody, legal strategy, or lawyer selection',
   'Never guide communication with the ex-partner',
@@ -42,6 +60,7 @@ const DIVORCE_RED_LINES = [
   'Never name the source fracture framework to the man',
   'Never act as co-parenting mediator',
   'Never suggest reconciliation or discourage it — that is his domain',
+  ...DIVORCE_KNOWLEDGE_RED_LINES,
 ];
 
 /** Run the Divorce Whisperer */
@@ -74,6 +93,16 @@ export async function runDivorceWhisperer(env: StateEnvelope): Promise<Whisperer
   }
   if (frameworks.length === 0) frameworks.push('witnessing_self'); // Default lens
 
+  // ── Domain-knowledge orientation (deterministic; spec Phase 1) ──
+  // When the man is asking to UNDERSTAND the process he is living through (what
+  // happens next, what a term means, the kids, the money), emit curated
+  // orientation guidance + the disclaimer + the escalation targets. Built with
+  // NO LLM and NO DB, so it reaches the Composer even without an OpenAI key. The
+  // hard red lines ride along as landmines so the guardrails are present on the
+  // same turn the knowledge is.
+  const knowledgeAreas = detectKnowledgeAreas(env.utterance);
+  const orientationNote = buildOrientationNote(knowledgeAreas);
+
   // Generate context notes using LLM with training doc intelligence
   let contextNotes = '';
   if (trainingContext) {
@@ -101,8 +130,19 @@ Red lines: ${DIVORCE_RED_LINES.join('; ')}`
     } catch { contextNotes = ''; }
   }
 
+  // Prepend the deterministic orientation note so the curated knowledge leads the
+  // domain intelligence the Composer reads. The LLM clinical note (if any) follows.
+  if (orientationNote) {
+    contextNotes = contextNotes ? `${orientationNote}\n\n${contextNotes}` : orientationNote;
+    frameworks.push(...knowledgeAreas.map(a => KNOWLEDGE_LENS[a]));
+  }
+
   // Landmines specific to divorce conversations
   const landmines: string[] = [];
+  // Knowledge turns carry the hard red lines as explicit AVOID directives.
+  if (knowledgeAreas.length > 0) {
+    landmines.push(...DIVORCE_KNOWLEDGE_RED_LINES);
+  }
   if (frameworks.includes('emotional_flooding')) {
     landmines.push('DO NOT reason with a flooded man. Acknowledge → decelerate → probe only when calm.');
   }
