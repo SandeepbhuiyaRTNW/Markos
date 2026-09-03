@@ -321,9 +321,6 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     // ═══════════════════════════════════════════
     // BOUNDARY SENTINEL (post-Composer)
     // ═══════════════════════════════════════════
-    const boundaryResult = checkBoundary(content);
-    env.sentinels.boundary = runBoundarySentinel(content);
-
     // ── Regeneration budget ────────────────────────────────────────────────
     // The post-generation gates below run in PRIORITY ORDER (boundary ->
     // trajectory -> fantasy -> vocab -> forbidden). Each re-roll is a full
@@ -335,28 +332,53 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     const MAX_REGENS = 2;
     let regens = 0;
     const skippedGates: string[] = [];
+    let legalAdviceFallbackFired = false;
 
-    if (!boundaryResult.passed) {
-      if (regens < MAX_REGENS) {
-        console.log(`[V2] 🚫 Boundary violations: ${boundaryResult.violations.slice(0, 3).join(', ')} — regenerating`);
-        regens++;
-        env.regen_triggers.push('boundary');
-        const overridePrompt = getBoundaryOverridePrompt(boundaryResult);
-        const retryMessages = [...messages, new AIMessage(content), new HumanMessage(overridePrompt)];
-        const retry = await model.invoke(retryMessages);
-        const retryContent = typeof retry.content === 'string' ? retry.content : JSON.stringify(retry.content);
-        content = retryContent || content;
-        content = enforceSocraticDiscipline(content, env.craft_directives);
-        content = enforceMovePolicy(content, policyContext);
-      } else {
-        skippedGates.push('boundary');
-      }
+    // Boundary gate — the ONE gate we RE-VERIFY after every regen and, for legal
+    // advice, refuse to ship on. Marcus orients; a lawyer advises. We recompose
+    // within the shared budget and re-check the NEW draft each pass (a real loop,
+    // not a single unverified retry).
+    let boundaryResult = checkBoundary(content);
+    while (!boundaryResult.passed && regens < MAX_REGENS) {
+      console.log(`[V2] 🚫 Boundary violations: ${boundaryResult.violations.slice(0, 3).join(', ')} — regenerating (${regens + 1}/${MAX_REGENS})`);
+      regens++;
+      env.regen_triggers.push('boundary');
+      const overridePrompt = getBoundaryOverridePrompt(boundaryResult);
+      const retryMessages = [...messages, new AIMessage(content), new HumanMessage(overridePrompt)];
+      const retry = await model.invoke(retryMessages);
+      const retryContent = typeof retry.content === 'string' ? retry.content : JSON.stringify(retry.content);
+      content = retryContent || content;
+      content = enforceSocraticDiscipline(content, env.craft_directives);
+      content = enforceMovePolicy(content, policyContext);
+      boundaryResult = checkBoundary(content); // re-verify the regenerated draft
     }
+
+    // FAIL CLOSED on legal advice: if the draft STILL crosses from orienting into
+    // legal advice after the budget is spent, do NOT ship it. A man mid-divorce
+    // must not receive filing/custody/outcome advice from Marcus. Replace the
+    // draft with a safe, in-voice decline that hands the legal question to a real
+    // attorney and STAYS PRESENT for the rest of the turn. Legal advice is the
+    // only boundary class that fails closed; every other class keeps its best draft.
+    if (boundaryResult.legal_advice) {
+      legalAdviceFallbackFired = true;
+      env.regen_triggers.push('legal_advice_fallback');
+      // Distinct, greppable line so we can measure how often the model ignores the
+      // orient-not-advise override all the way through the regen budget.
+      console.warn(`[V2] ⛔ LEGAL-ADVICE FALLBACK FIRED — model kept crossing the legal line through ${regens} regen(s); shipping safe decline instead of the flagged draft. legal_violations=${boundaryResult.violations.filter(v => v.startsWith('legal-advice')).join('; ')}`);
+      content = buildLegalAdviceFallback();
+    } else if (!boundaryResult.passed) {
+      // Budget spent on a NON-legal boundary violation — keep the best draft
+      // (unchanged behavior).
+      skippedGates.push('boundary');
+    }
+
+    // Observability reflects what actually SHIPS (final content), not the first draft.
+    env.sentinels.boundary = runBoundarySentinel(content);
 
     // Trajectory dedup (from V1). Skip the drift computation entirely once the
     // regen budget is spent — it costs embedding calls we could not act on.
     const prevMarcus = env.conversation_history.filter(m => m.role === 'assistant').map(m => m.content);
-    if (prevMarcus.length >= 2 && regens < MAX_REGENS) {
+    if (!legalAdviceFallbackFired && prevMarcus.length >= 2 && regens < MAX_REGENS) {
       try {
         const drift = await computeTrajectoryDrift(content, prevMarcus);
         if (drift > 0.85) {
@@ -370,7 +392,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
           content = enforceMovePolicy(content, policyContext);
         }
       } catch {}
-    } else if (prevMarcus.length >= 2) {
+    } else if (!legalAdviceFallbackFired && prevMarcus.length >= 2) {
       skippedGates.push('trajectory(eval-skipped)');
     }
 
@@ -378,8 +400,9 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     // CRAFT LAYER POST-COMPOSITION FILTERS
     // ═══════════════════════════════════════════
 
-    // 1. Fantasy-Identity Blocker — re-roll if draft contains forward-projecting templates
-    if (detectFantasyIdentity(content)) {
+    // 1. Fantasy-Identity Blocker — re-roll if draft contains forward-projecting templates.
+    //    Skipped once the legal-advice fallback has fired — the safe decline is final.
+    if (!legalAdviceFallbackFired && detectFantasyIdentity(content)) {
       if (regens < MAX_REGENS) {
         console.log(`[V2] 🎭 Fantasy-identity template detected — regenerating`);
         regens++;
@@ -395,7 +418,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     }
 
     // 2. Vocabulary Fidelity Filter — re-roll if draft substitutes user's concrete words
-    const vocabViolations = detectVocabSubstitutions(env.utterance, content);
+    const vocabViolations = legalAdviceFallbackFired ? [] : detectVocabSubstitutions(env.utterance, content);
     if (vocabViolations.length > 0) {
       if (regens < MAX_REGENS) {
         console.log(`[V2] 📝 Vocab fidelity violations: ${vocabViolations.slice(0, 3).join(', ')} — regenerating`);
@@ -412,7 +435,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     }
 
     // 3. Forbidden Phrase Filter — re-roll if draft contains banned phrases
-    const forbiddenViolations = detectForbiddenPhrases(content);
+    const forbiddenViolations = legalAdviceFallbackFired ? [] : detectForbiddenPhrases(content);
     if (forbiddenViolations.length > 0) {
       if (regens < MAX_REGENS) {
         console.log(`[V2] 🚫 Forbidden phrases: ${forbiddenViolations.join(', ')} — regenerating`);
@@ -667,6 +690,19 @@ export function renderMoveDirective(policy: MovePolicyContext): string {
  */
 export function computeChallengeCeiling(phaseMaxDepth: number, presentedDepth: number): number {
   return Math.max(1, Math.min(phaseMaxDepth, presentedDepth + 1));
+}
+
+/**
+ * Safe, in-voice decline used when a draft STILL trips the legal-advice line after
+ * the regen budget is spent — the boundary gate's fail-closed path. Requirements:
+ * (a) it must NOT read as a system error, (b) it declines ONLY the legal question,
+ * and (c) it stays present for the rest of the turn instead of abandoning him.
+ * Deliberately worded to clear checkBoundary() — no banned therapist-speak, no
+ * legal-advice patterns (no "you should file", no outcome/entitlement claims, no
+ * jurisdiction). Exported so tests can assert it passes the boundary gate.
+ */
+export function buildLegalAdviceFallback(): string {
+  return `The legal side of this isn't mine to answer — where the law lands, what any of it means for your situation, that belongs to a family-law attorney in your state, and it's worth finding a real one to walk you through it. I'd only be guessing, and your life is too heavy for me to gamble with a guess. That part I'll leave to the people trained for it. But everything else you're carrying — how you're actually holding up in the middle of this — I'm not going anywhere. Tell me where you're at with it.`;
 }
 
 function countQuestionSentences(text: string): number {
