@@ -250,15 +250,19 @@ console.log('\n── J. v4 — conversational wise man persona (system prompt +
 assert('system prompt carries the CONVERSATIONAL WISE MAN section', MARCUS_SYSTEM_PROMPT.includes('SECTION 3B: THE CONVERSATIONAL WISE MAN'));
 assert('a conversation is a TRADE — reciprocal disclosure is a standing expectation',
   MARCUS_SYSTEM_PROMPT.includes('A CONVERSATION IS A TRADE') && MARCUS_SYSTEM_PROMPT.includes('interviewed enough'));
-assert('the trade speaks from his historical life, plainly (the quiet-house line, never cited)',
-  MARCUS_SYSTEM_PROMPT.includes('I know what a quiet house does to a man') && MARCUS_SYSTEM_PROMPT.includes('never quoted, never cited'));
+assert('the trade gives reactions, opinions, honesty, presence — never a biography',
+  MARCUS_SYSTEM_PROMPT.includes('Honesty and presence') && MARCUS_SYSTEM_PROMPT.includes('WHAT YOU NEVER TRADE — A LIFE OF YOUR OWN'));
+assert('biography ban is explicit: no life events, memories, family, or world of his own',
+  MARCUS_SYSTEM_PROMPT.includes('NEVER claim your own life events, memories, family, or world'));
+assert('the biography examples are gone from the trade (no buried son, no Danube, no quiet-house line)',
+  !MARCUS_SYSTEM_PROMPT.includes('the children you buried') && !MARCUS_SYSTEM_PROMPT.includes('the Danube winters') && !MARCUS_SYSTEM_PROMPT.includes('I know what a quiet house does to a man'));
 assert('wise WITHOUT lecturing — one true thing, then stop',
   MARCUS_SYSTEM_PROMPT.includes('WISE WITHOUT LECTURING') && MARCUS_SYSTEM_PROMPT.includes('One true thing, then stop'));
 assert('unhurried — ordinary talk is groundwork, NOT failure (the 1am truck line)',
   MARCUS_SYSTEM_PROMPT.includes('ORDINARY TALK IS NOT FAILURE') && MARCUS_SYSTEM_PROMPT.includes('groundwork, not failure'));
 assert('warmth and lightness permitted (no statue)', MARCUS_SYSTEM_PROMPT.includes('WARMTH AND LIGHTNESS') && MARCUS_SYSTEM_PROMPT.includes('nobody tells a statue'));
-assert('AI-honesty boundary restated inside the new section (historical life only)',
-  MARCUS_SYSTEM_PROMPT.includes('Never invent modern experiences'));
+assert('AI-honesty boundary restated inside the new section (no claimed experiences, truth about what he is)',
+  MARCUS_SYSTEM_PROMPT.includes('never claim experiences you have not had'));
 // Contradiction fixes: Section 3 no longer teaches the announced transitions Constraint 8 bans.
 assert('announced-transition contradiction resolved (no longer TAUGHT; kept only as a banned example)',
   !MARCUS_SYSTEM_PROMPT.includes('Anchor the conversation: "Here is what I notice." "Let me ask you something."') &&
@@ -267,6 +271,8 @@ assert('depth panic removed, depth responsibility kept',
   !MARCUS_SYSTEM_PROMPT.includes('YOU are failing') && MARCUS_SYSTEM_PROMPT.includes('DEPTH IS YOUR RESPONSIBILITY'));
 // The governing bar carries the same contract onto every enforced non-crisis turn.
 assert('governing bar carries the trade bullet', GOVERNING_BAR.includes('Trade') && GOVERNING_BAR.includes('interviewed enough'));
+assert('governing bar carries the no-biography rule', GOVERNING_BAR.includes('Never a life of your own') && GOVERNING_BAR.includes('guardian at his side'));
+assert('governing bar biography examples gone', !GOVERNING_BAR.includes('children you buried') && !GOVERNING_BAR.includes('plague years'));
 assert('governing bar carries the wise-man weight line',
   GOVERNING_BAR.includes('wise man') && GOVERNING_BAR.includes('never the moral underlined'));
 assert('governing bar carries the unhurried line', GOVERNING_BAR.includes('Unhurried') && GOVERNING_BAR.includes('groundwork, not failure'));
