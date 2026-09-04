@@ -5,7 +5,7 @@
 
 import { selectMove, moveSelectorEnforced, MOVE_SHAPE, sameMoveShape } from '../src/lib/assessment/move-selector';
 import { MOVE_CALIBRATION, GOVERNING_BAR } from '../src/lib/agents/move-calibration';
-import { renderMoveDirective, enforceMovePolicy } from '../src/lib/agents/orchestrator-v2-composer';
+import { renderMoveDirective, enforceMovePolicy, buildPriorityHierarchy } from '../src/lib/agents/orchestrator-v2-composer';
 import { stripQuestionSentences } from '../src/lib/craft/craft-layer';
 import { MARCUS_SYSTEM_PROMPT } from '../src/lib/agent/system-prompt';
 import { detectCrisisType, needsGentleCheckIn } from '../src/lib/sentinels/crisis';
@@ -275,6 +275,47 @@ assert('governing bar keeps the v3 voice line underneath (real guy on a couch, n
   GOVERNING_BAR.includes('real guy on a couch') && GOVERNING_BAR.includes('Not a poet'));
 // Crisis is unreachable by all of it.
 assert('crisis turn still renders NO directive (persona bar never touches crisis)',
+  renderMoveDirective({ moveDecision: crisisMove, enforceMovePolicy: true }) === '');
+
+console.log('\n── K. v5 — length matches the moment + guide-not-quote-book register ──');
+// Section 3B carries the two new commitments.
+assert('3B: LENGTH MATCHES THE MOMENT section present', MARCUS_SYSTEM_PROMPT.includes('LENGTH MATCHES THE MOMENT'));
+assert('3B: short-when-short / room-when-heavy contract stated',
+  MARCUS_SYSTEM_PROMPT.includes('Never a speech when two lines will do') && MARCUS_SYSTEM_PROMPT.includes('never two lines when he just handed you his heart'));
+assert('3B: wrong length named as not-listening', MARCUS_SYSTEM_PROMPT.includes('its own kind of not-listening'));
+assert('3B: A WISE MAN TALKS — HE DOES NOT QUOTE section present', MARCUS_SYSTEM_PROMPT.includes('A WISE MAN TALKS — HE DOES NOT QUOTE'));
+assert('3B: guide/guardian/well-wisher register named', MARCUS_SYSTEM_PROMPT.includes('a guide, a guardian, a well-wisher'));
+assert('3B: quote-machine killed explicitly (maxim/aphorism/poster bans)',
+  MARCUS_SYSTEM_PROMPT.includes('never a maxim, never an aphorism') && MARCUS_SYSTEM_PROMPT.includes('motivational poster'));
+assert('3B: advice gets the actual answer, plain', MARCUS_SYSTEM_PROMPT.includes('give him the actual answer in plain kitchen-table words'));
+// Section 3 brevity line reconciled with calibration (no longer "say less" absolutism).
+assert('Section 3 brevity reconciled with length attunement',
+  MARCUS_SYSTEM_PROMPT.includes('length is attunement') && !MARCUS_SYSTEM_PROMPT.includes('Say less. Mean more.'));
+// The governing bar carries both onto every enforced non-crisis turn.
+assert('bar: length-matches-the-moment bullet', GOVERNING_BAR.includes('Match the length to the moment') && GOVERNING_BAR.includes('pouring his heart out'));
+assert('bar: guide-not-quote-book bullet', GOVERNING_BAR.includes('not a quote book') && GOVERNING_BAR.includes('motivational poster'));
+assert('bar still question-free after v5 (no-ask moves depend on it)', !GOVERNING_BAR.includes('?'));
+// Deterministic length calibration in the composer priority hierarchy.
+process.env.TURN_KIND_FORK = 'false';
+const casualHier = buildPriorityHierarchy(makeEnv({ utterance: 'just checking in, decent day' }));
+assert('fork off: default 2-4 sentence rule unchanged', casualHier.includes('Keep it 2-4 sentences.'));
+process.env.TURN_KIND_FORK = 'true';
+const casualEnv = makeEnv({ utterance: 'just checking in, decent day' });
+casualEnv.sentinels.listener_stack!.turn_kind = 'casual';
+const casualHierOn = buildPriorityHierarchy(casualEnv);
+assert('fork on + casual: short/light length rule', casualHierOn.includes('a line or two') && casualHierOn.includes('Light matches light'));
+assert('fork on + casual: default 2-4 rule replaced', !casualHierOn.includes('(3) Keep it 2-4 sentences.'));
+const deepEnv = makeEnv({ utterance: 'my dad died and i never cried', depth: 4 });
+deepEnv.sentinels.listener_stack!.turn_kind = 'emotional_disclosure';
+const deepHierOn = buildPriorityHierarchy(deepEnv);
+assert('depth>=4 emotional: take-the-room length rule', deepHierOn.includes('Take the room this needs') && deepHierOn.includes('let the weight set the length'));
+delete process.env.TURN_KIND_FORK;
+const deepHierOff = buildPriorityHierarchy((() => { const e = makeEnv({ utterance: 'my dad died and i never cried', depth: 4 }); e.sentinels.listener_stack!.turn_kind = 'emotional_disclosure'; return e; })());
+assert('depth>=4 emotional: room rule BYTE-IDENTICAL fork on vs off', deepHierOn === deepHierOff);
+const shallowHier = buildPriorityHierarchy(makeEnv({ utterance: 'work was busy', depth: 1 }));
+assert('shallow default: 2-4 sentence rule intact', shallowHier.includes('(3) Keep it 2-4 sentences.'));
+// Crisis is unreachable by all of it.
+assert('crisis turn still renders NO directive (v5 bar never touches crisis)',
   renderMoveDirective({ moveDecision: crisisMove, enforceMovePolicy: true }) === '');
 
 console.log('\n── SUMMARY ──');
