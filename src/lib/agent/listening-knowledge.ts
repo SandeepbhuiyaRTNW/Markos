@@ -240,10 +240,19 @@ export const LISTENING_KNOWLEDGE: readonly ListeningKnowledge[] = [
     area: 'empathy_felt',
     principle: 'Empathy is feeling WITH him — not sympathy for him, not analysis of him.',
     guidance:
-      'Kline: empathy is not sympathy (feeling for/about another) and not apathy (no feeling) — it is feeling and thinking with him, going into his world to see as he sees and feel as he feels. The supportive listener carries three things: discretion (careful about what you say), belief (confidence in his ability), patience (give him the time he needs). Goulston: people who feel "felt" move from defending themselves to considering what you say.',
+      'Kline: empathy is not sympathy (feeling for/about another) and not apathy (no feeling) — it is feeling and thinking with him, going into his world to see as he sees and feel as he feels. The supportive listener carries three things: discretion (careful about what you say), belief (confidence in his ability), patience (give him the time he needs).',
     voice_translation:
       'Say the feeling back as something you are in with him, not something you observe in him: "that\'s a lonely place to be" lands differently than "you seem lonely."',
     provenance: SOURCES.kline,
+  },
+  {
+    area: 'empathy_felt',
+    principle: 'A man who feels "felt" stops defending himself and starts considering what you say.',
+    guidance:
+      'Goulston: people who feel "felt" move from defending themselves to considering what you say. The move is naming the emotion under his words accurately enough that he feels it land — once he feels felt, he no longer has to prove the feeling to you, and the conversation can move.',
+    voice_translation:
+      'In voice, "felt" lands through accuracy, not emphasis: name the emotion under his words in one plain sentence, then hold the beat so he can confirm or correct it.',
+    provenance: SOURCES.goulston,
   },
   {
     area: 'turn_taking',
@@ -400,7 +409,10 @@ const AREA_SIGNALS: Record<ListeningArea, readonly string[]> = {
   ask_reflect_or_silence: ['stop asking questions', 'enough with the questions', 'just listen', 'what do you think', 'your opinion'],
   staying_or_landing: ['i should get going', 'anyway that\'s it', 'that\'s all i guess', 'i\'m tired of talking', 'one more thing', 'wrapping up'],
   difficult_conversations: ['i have to talk to', 'dreading this conversation', 'how do i tell', 'conversation with my ex', 'hard talk', 'what do i say to'],
-  deescalation: ['i\'m so angry', 'furious', 'about to explode', 'can\'t calm down', 'i\'m done with'],
+  // "i'm done with" alone is too broad — routine statements ("i'm done with the report",
+  // "i'm done with that medication") are not escalation. Only the relationally-loaded,
+  // escalated forms signal de-escalation (Codex review, PR #18).
+  deescalation: ['i\'m so angry', 'furious', 'about to explode', 'can\'t calm down', 'i\'m done with her', 'i\'m done with him', 'i\'m done with this marriage', 'i\'m done with my marriage', 'i\'m done with the marriage', 'done with this relationship', 'i\'m done with everything'],
   cost_of_talking: ['i\'m fine', 'it\'s fine', 'not a big deal', 'don\'t want to talk about it', 'handle it myself', 'deal with it myself', 'i should be able to', 'don\'t need help', 'makes me weak', 'less of a man', 'what\'s wrong with me'],
   help_without_looking_like_help: ['don\'t need therapy', 'not going to a therapist', 'therapy isn\'t for me', 'just need to figure', 'practical', 'what do i actually do', 'does talking even help', 'this isn\'t really me', 'not the type to'],
   divorce_talk_terrain: ['she left me', 'she wants a divorce', 'she filed', 'she served me', 'getting divorced', 'getting a divorce', 'going through a divorce', 'my divorce', 'the divorce', 'my ex-wife', 'ex-wife', 'we separated', "we're separating", 'splitting up', 'she took the kids', 'she cheated', 'her affair', 'my marriage is over', 'end of my marriage', 'sign the papers', 'custody battle', 'divorce lawyer', 'my lawyer says', 'mediation'],
