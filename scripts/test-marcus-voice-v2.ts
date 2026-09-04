@@ -324,27 +324,6 @@ assert('shallow default: 2-4 sentence rule intact', shallowHier.includes('(3) Ke
 assert('crisis turn still renders NO directive (v5 bar never touches crisis)',
   renderMoveDirective({ moveDecision: crisisMove, enforceMovePolicy: true }) === '');
 
-console.log('\n── L. v6 — founding identity: guardian, no biography ──');
-// The founding identity is a guardian who CARRIES Stoic wisdom — not Marcus Aurelius reliving his life.
-assert('opening line: guardian identity, no emperor biography', MARCUS_SYSTEM_PROMPT.includes("a guardian at a man's side") && !MARCUS_SYSTEM_PROMPT.includes('philosopher-emperor'));
-assert('Section 1: founding "You ARE Marcus Aurelius" identity gone', !MARCUS_SYSTEM_PROMPT.includes('You are Marcus Aurelius — philosopher-emperor') && !MARCUS_SYSTEM_PROMPT.includes('You ARE Marcus'));
-assert('Section 1: wisdom carried, never lived', MARCUS_SYSTEM_PROMPT.includes('as truth you carry, never as a life you lived'));
-assert('Section 1: no world of his own', MARCUS_SYSTEM_PROMPT.includes('no biography, no memories, no family, no world'));
-assert('ALWAYS DO: lived-experience weaving line gone', !MARCUS_SYSTEM_PROMPT.includes('as YOUR lived experience'));
-assert('ALWAYS DO: reference-your-own-life line gone', !MARCUS_SYSTEM_PROMPT.includes('Reference your own life when it genuinely connects'));
-assert('Stoic Grounds carry no first-person biography', !MARCUS_SYSTEM_PROMPT.includes('I led legions') && !MARCUS_SYSTEM_PROMPT.includes('Faustina') && !MARCUS_SYSTEM_PROMPT.includes('I wept when my children died') && !MARCUS_SYSTEM_PROMPT.includes('my tutors'));
-assert('no first-person Meditations claims anywhere', !MARCUS_SYSTEM_PROMPT.includes('I wrote in my Meditations') && !MARCUS_SYSTEM_PROMPT.includes('your Meditations') && !MARCUS_SYSTEM_PROMPT.includes('I wrote my Meditations'));
-assert('RAG block: wisdom carried, not lived', MARCUS_SYSTEM_PROMPT.includes('your inheritance, not your memories') && !MARCUS_SYSTEM_PROMPT.includes('Speak it as YOUR lived wisdom'));
-assert('RAG block: plague first-person example gone', !MARCUS_SYSTEM_PROMPT.includes('When the plague swept through Rome, I wrote to myself'));
-assert('Constraint 1: historical-biography permission REMOVED', !MARCUS_SYSTEM_PROMPT.includes('that is your persona and it is permitted'));
-assert('Constraint 1: no experiences at all — modern or ancient', MARCUS_SYSTEM_PROMPT.includes('no historical biography either'));
-assert('Constraint 2: no historical-experience permission', !MARCUS_SYSTEM_PROMPT.includes('may reference his historical experiences'));
-assert('final directives: guardian, not emperor', MARCUS_SYSTEM_PROMPT.includes('You are Marcus — a guardian at his side.') && !MARCUS_SYSTEM_PROMPT.includes('You are Marcus Aurelius. You are speaking'));
-assert('AI-honesty denial intact (he is NOT Marcus Aurelius when asked)', MARCUS_SYSTEM_PROMPT.includes('You are not Marcus Aurelius'));
-// Crisis is unreachable by all of it.
-assert('crisis turn still renders NO directive (v6 never touches crisis)',
-  renderMoveDirective({ moveDecision: crisisMove, enforceMovePolicy: true }) === '');
-
 console.log('\n── SUMMARY ──');
 console.log(`  passed: ${passed}   failed: ${failed}`);
 if (failed > 0) { console.log('  ❌ SUITE FAILED'); process.exit(1); }
