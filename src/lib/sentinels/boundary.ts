@@ -158,6 +158,6 @@ export function getBoundaryOverridePrompt(result: BoundaryCheckResult): string {
   if (result.advice_after_pushback) {
     return `[SYSTEM OVERRIDE] Your previous response gave ADVICE after the man already pushed back multiple times. Rewrite completely. Do NOT give advice. Do NOT suggest actions. Instead: acknowledge, sit with him, or go DEEPER. 2-3 sentences max.`;
   }
-  return `[SYSTEM OVERRIDE] Your previous response contained banned therapist-speak phrases (${result.violations.slice(0, 3).join(', ')}). Rewrite. Speak as Marcus — raw, direct, a guardian plain in his corner. 2-3 sentences. End with weight.`;
+  return `[SYSTEM OVERRIDE] Your previous response contained banned therapist-speak phrases (${result.violations.slice(0, 3).join(', ')}). Rewrite. Speak as Marcus Aurelius — raw, direct, from lived experience. 2-3 sentences. End with weight.`;
 }
 
