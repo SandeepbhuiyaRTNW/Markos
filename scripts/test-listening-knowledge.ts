@@ -26,7 +26,7 @@
 
 import {
   detectListeningAreas, buildListeningNote, applyListeningKnowledge,
-  RESPONSE_GUARDRAILS, LISTENING_AREAS, LISTENING_LENS, LISTENING_KNOWLEDGE,
+  RESPONSE_GUARDRAILS, LISTENING_AREAS, LISTENING_LENS, LISTENING_KNOWLEDGE, SOURCES,
 } from '../src/lib/agent/listening-knowledge';
 import { createStateEnvelope, buildEnvelopeContextSummary } from '../src/lib/agents/state-envelope-utils';
 
@@ -135,6 +135,44 @@ function main() {
   const n2 = buildListeningNote(detectListeningAreas(msg));
   assert('identical note on repeated calls', n1 !== null && n1 === n2);
   assert('pacing + difficult_conversations both detected', n1 !== null && n1.includes('[pacing]') && n1.includes('[difficult_conversations]'));
+
+  // ─────────────────────────────────────────────────────────────────────────
+  console.log('\n── F. Codex review fixes (PR #18): empathy provenance + de-escalation signal precision ──');
+
+  // F1. The empathy_felt guidance draws on BOTH Kline and Goulston, so both
+  // sources must be recorded — a source review reading provenance metadata
+  // must not treat the whole area as Kline-derived and miss the Goulston
+  // material. The entry is split so each source's guidance carries its own
+  // provenance record.
+  const empathyEntries = LISTENING_KNOWLEDGE.filter(k => k.area === 'empathy_felt');
+  assert('empathy_felt carries a Kline entry with Kline provenance',
+    empathyEntries.some(k => k.provenance === SOURCES.kline && /Kline/.test(k.guidance)));
+  assert('empathy_felt carries a Goulston entry with Goulston provenance',
+    empathyEntries.some(k => k.provenance === SOURCES.goulston && /Goulston/.test(k.guidance)));
+  assert('no empathy_felt entry cites a source its provenance does not record',
+    empathyEntries.every(k =>
+      (k.provenance === SOURCES.kline && !/Goulston/.test(k.guidance)) ||
+      (k.provenance === SOURCES.goulston && !/Kline/.test(k.guidance))));
+  const envF = envWith("nobody understands what this is like");
+  applyListeningKnowledge(envF);
+  assert('empathy turn still assembles the felt-empathy note after the split',
+    envF.domain_whisperers.frameworks_applied.includes('felt_empathy') &&
+    envF.domain_whisperers.context_notes.some(n => /Kline/.test(n) && /Goulston/.test(n)));
+
+  // F2. "i'm done with" alone was too broad: routine statements must NOT
+  // trigger de-escalation guidance (which assumes anger / "coming in hot").
+  assert('routine: "done with the report" does NOT trigger de-escalation',
+    !detectListeningAreas("i'm done with the report").includes('deescalation'));
+  assert('routine: "done with that medication" does NOT trigger de-escalation',
+    !detectListeningAreas("i'm done with that medication").includes('deescalation'));
+  assert('routine: "done with work for today" does NOT trigger de-escalation',
+    !detectListeningAreas("i'm done with work for today").includes('deescalation'));
+  assert('escalated: "done with her" still detects deescalation',
+    detectListeningAreas("i'm so angry, i'm done with her").includes('deescalation'));
+  assert('escalated: "done with this marriage" still detects deescalation',
+    detectListeningAreas("i'm done with this marriage").includes('deescalation'));
+  assert('escalated: "done with everything" still detects deescalation',
+    detectListeningAreas("i'm done with everything").includes('deescalation'));
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
