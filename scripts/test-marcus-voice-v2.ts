@@ -7,6 +7,7 @@ import { selectMove, moveSelectorEnforced, MOVE_SHAPE, sameMoveShape } from '../
 import { MOVE_CALIBRATION, GOVERNING_BAR } from '../src/lib/agents/move-calibration';
 import { renderMoveDirective, enforceMovePolicy } from '../src/lib/agents/orchestrator-v2-composer';
 import { stripQuestionSentences } from '../src/lib/craft/craft-layer';
+import { MARCUS_SYSTEM_PROMPT } from '../src/lib/agent/system-prompt';
 import { detectCrisisType, needsGentleCheckIn } from '../src/lib/sentinels/crisis';
 import { getCrisisResponse } from '../src/lib/sentinels/crisis-responses';
 import { createStateEnvelope } from '../src/lib/agents/state-envelope-utils';
@@ -243,6 +244,38 @@ assert('third-party friend-risk still third_party_risk', detectCrisisType('my fr
 // a genuinely ambiguous line still does.
 assert('"what\'s the point anymore" no longer a gentle check-in (crisis wins)', needsGentleCheckIn("what's the point anymore") === false);
 assert('"I can\'t do this anymore" still gentle check-in, not crisis', detectCrisisType("I can't do this anymore") === null && needsGentleCheckIn("I can't do this anymore") === true);
+
+console.log('\n── J. v4 — conversational wise man persona (system prompt + governing bar) ──');
+// The persona section exists and carries its four commitments.
+assert('system prompt carries the CONVERSATIONAL WISE MAN section', MARCUS_SYSTEM_PROMPT.includes('SECTION 3B: THE CONVERSATIONAL WISE MAN'));
+assert('a conversation is a TRADE — reciprocal disclosure is a standing expectation',
+  MARCUS_SYSTEM_PROMPT.includes('A CONVERSATION IS A TRADE') && MARCUS_SYSTEM_PROMPT.includes('interviewed enough'));
+assert('the trade speaks from his historical life, plainly (the quiet-house line, never cited)',
+  MARCUS_SYSTEM_PROMPT.includes('I know what a quiet house does to a man') && MARCUS_SYSTEM_PROMPT.includes('never quoted, never cited'));
+assert('wise WITHOUT lecturing — one true thing, then stop',
+  MARCUS_SYSTEM_PROMPT.includes('WISE WITHOUT LECTURING') && MARCUS_SYSTEM_PROMPT.includes('One true thing, then stop'));
+assert('unhurried — ordinary talk is groundwork, NOT failure (the 1am truck line)',
+  MARCUS_SYSTEM_PROMPT.includes('ORDINARY TALK IS NOT FAILURE') && MARCUS_SYSTEM_PROMPT.includes('groundwork, not failure'));
+assert('warmth and lightness permitted (no statue)', MARCUS_SYSTEM_PROMPT.includes('WARMTH AND LIGHTNESS') && MARCUS_SYSTEM_PROMPT.includes('nobody tells a statue'));
+assert('AI-honesty boundary restated inside the new section (historical life only)',
+  MARCUS_SYSTEM_PROMPT.includes('Never invent modern experiences'));
+// Contradiction fixes: Section 3 no longer teaches the announced transitions Constraint 8 bans.
+assert('announced-transition contradiction resolved (no longer TAUGHT; kept only as a banned example)',
+  !MARCUS_SYSTEM_PROMPT.includes('Anchor the conversation: "Here is what I notice." "Let me ask you something."') &&
+  MARCUS_SYSTEM_PROMPT.includes('announcing the move is a Hard Constraint 8 violation'));
+assert('depth panic removed, depth responsibility kept',
+  !MARCUS_SYSTEM_PROMPT.includes('YOU are failing') && MARCUS_SYSTEM_PROMPT.includes('DEPTH IS YOUR RESPONSIBILITY'));
+// The governing bar carries the same contract onto every enforced non-crisis turn.
+assert('governing bar carries the trade bullet', GOVERNING_BAR.includes('Trade') && GOVERNING_BAR.includes('interviewed enough'));
+assert('governing bar carries the wise-man weight line',
+  GOVERNING_BAR.includes('wise man') && GOVERNING_BAR.includes('never the moral underlined'));
+assert('governing bar carries the unhurried line', GOVERNING_BAR.includes('Unhurried') && GOVERNING_BAR.includes('groundwork, not failure'));
+assert('governing bar still question-free (no-ask moves depend on it)', !GOVERNING_BAR.includes('?'));
+assert('governing bar keeps the v3 voice line underneath (real guy on a couch, not a poet)',
+  GOVERNING_BAR.includes('real guy on a couch') && GOVERNING_BAR.includes('Not a poet'));
+// Crisis is unreachable by all of it.
+assert('crisis turn still renders NO directive (persona bar never touches crisis)',
+  renderMoveDirective({ moveDecision: crisisMove, enforceMovePolicy: true }) === '');
 
 console.log('\n── SUMMARY ──');
 console.log(`  passed: ${passed}   failed: ${failed}`);
