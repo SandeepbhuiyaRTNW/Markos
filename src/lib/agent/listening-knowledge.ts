@@ -28,24 +28,54 @@
  *
  * HOW IT REACHES A REPLY (no architecture change)
  * ----------------------------------------------
- * Same channels the divorce knowledge rides: a caller detects which listening
- * area(s) the turn touches and emits `buildListeningNote()` DETERMINISTICALLY
- * into the envelope's `domain_whisperers.context_notes`, with the hard guardrails
- * into `landmines`. Those channels already render into the Composer prompt via
- * `buildEnvelopeContextSummary` (## WHISPERER INTELLIGENCE / ## LANDMINES) and
- * `buildPriorityHierarchy` (PRIORITY 3 — DOMAIN INTELLIGENCE). The assembly works
- * with NO OpenAI key and NO database. The DB-backed channels (embeddings /
- * questions with a `knowledge_area` tag) are the scaled corpus and are seeded
- * separately; this in-code corpus is what orients a live reply today.
+ * Same channels the divorce knowledge rides: a caller detects the ONE listening
+ * area the turn touches (or none) and emits `buildListeningNote()`
+ * DETERMINISTICALLY into the envelope's `domain_whisperers.context_notes`, with
+ * ONLY the fired area's guardrails into `landmines` (each guardrail renders
+ * exactly once — never duplicated into both channels). Those channels already
+ * render into the Composer prompt via `buildEnvelopeContextSummary`
+ * (## WHISPERER INTELLIGENCE / ## LANDMINES) and `buildPriorityHierarchy`
+ * (PRIORITY 3 — DOMAIN INTELLIGENCE). The assembly works with NO OpenAI key and
+ * NO database. The DB-backed channels (embeddings / questions with a
+ * `knowledge_area` tag) are the scaled corpus and are seeded separately; this
+ * in-code corpus is what orients a live reply today.
  * Wiring is IN this PR: `applyListeningKnowledge(env)` runs from the whisperer
  * tier in orchestrator-v2.ts on every turn (agent-wide, deterministic — no LLM,
  * no DB). The null case pushes nothing, so a neutral turn is unchanged.
+ *
+ * TRIGGER RULES (shared with every knowledge module — see trigger-registry.ts)
+ * ----------------------------------------------------------------------------
+ * Detection obeys the registry: whole-phrase word-boundary matching (no
+ * substring accidents); an area is eligible only on TWO independent token
+ * hits, or ONE hit in an utterance of at least MIN_WORDS_SINGLE_SIGNAL (8)
+ * words; at most ONE area fires per turn (most hits wins, ties break by
+ * LISTENING_AREAS order); and every token this module declares is owned by it
+ * in the registry — idiom tokens ("i'm fine", "it's fine", "practical",
+ * "what do you think", "your opinion", "does that make sense",
+ * "you know what i mean") are banned outright, and divorce terrain
+ * ("she filed", "my divorce", "too quiet", …) belongs to the divorce layer.
+ * Total whisperer injection per turn is capped at the render point; landmines
+ * are exempt from trimming (safety outranks the budget).
+ *
+ * DIVORCE TERRAIN (removed per PR #18 review, 2026-09-04)
+ * -------------------------------------------------------
+ * This module previously carried two divorce-detection areas
+ * (divorce_talk_terrain, six_divorces_at_once). They overlapped the divorce
+ * whisperer and divorce-knowledge.ts — a divorce turn got three layers saying
+ * similar things. Those areas are REMOVED; the divorce layer owns that
+ * terrain. The divorce-conversation research below still grounds the
+ * anger/armor guardrails; the Bohannan stations content lives with the
+ * divorce layer's corpus.
  *
  * SAFETY POSTURE
  * --------------
  * Every note is INTERNAL guidance to Marcus ("you may…", "first reflect…"),
  * never a script to read verbatim. This module does not touch the crisis
- * sentinels; crisis turns keep bypassing the Composer entirely. Where a source
+ * sentinels. Crisis truth (verified against orchestrator-v2.ts, 2026-09-04):
+ * ACUTE crisis turns early-return before the whisperer tier and never reach
+ * this module; PASSIVE-crisis turns (level 'elevated') CONTINUE through the
+ * pipeline and DO pass through here — on those turns the crisis layer's
+ * guidance and resources outrank everything in this module. Where a source
  * technique assumes a face-to-face setting (eye contact, body language), it is
  * translated for a VOICE-ONLY product — pace, tone, and silence are the
  * nonverbal channel here. Reviewer fields on every provenance record are null:
@@ -67,9 +97,7 @@ export type ListeningArea =
   | 'difficult_conversations' // when the talk itself is hard: stories, intent, feelings
   | 'deescalation'          // he's resistant, angry, or shut down
   | 'cost_of_talking'       // his armor: why disclosure is expensive for a man
-  | 'help_without_looking_like_help' // lowering the cost: practical, in-control, normal
-  | 'divorce_talk_terrain'  // how real divorce talk with a man arrives and unfolds
-  | 'six_divorces_at_once'; // Bohannan's stations: the parallel divorces he is living
+  | 'help_without_looking_like_help'; // lowering the cost: practical, in-control, normal
 
 export const LISTENING_AREAS: readonly ListeningArea[] = [
   'presence', 'listen_to_understand', 'open_questions', 'reflecting',
@@ -77,7 +105,6 @@ export const LISTENING_AREAS: readonly ListeningArea[] = [
   'turn_taking', 'pacing', 'ask_reflect_or_silence', 'staying_or_landing',
   'difficult_conversations', 'deescalation',
   'cost_of_talking', 'help_without_looking_like_help',
-  'divorce_talk_terrain', 'six_divorces_at_once',
 ];
 
 export interface Provenance {
@@ -295,7 +322,7 @@ export const LISTENING_KNOWLEDGE: readonly ListeningKnowledge[] = [
     area: 'difficult_conversations',
     principle: 'Every hard conversation has three layers: what happened, the feelings, and what it means about him. Move it from blame to contribution and from a message-delivery to a learning conversation.',
     guidance:
-      'Stone/Patton/Heen framework (rebuilt from the genuine published framework — see provenance caveat). Under every hard conversation there are three conversations running at once: (1) WHAT HAPPENED — the fight about who is right, what was meant, and who is to blame. Three shifts: (a) drop the truth assumption — he is not arguing facts, he is arguing interpretations, so move from certainty to curiosity about the other person\'s story and take the "And Stance" (his view AND theirs can both be present); (b) disentangle intent from impact — people leap from "I was hurt" to "you meant to hurt me," and intentions are usually more mixed than that; ask, do not assume; (c) abandon blame for contribution — blame looks backward and judges, contribution looks at the whole system and forward: what did EACH person do, or avoid doing, that got them here. Contributing is not being blameworthy. (2) FEELINGS — feelings are the heart of the situation, not a distraction from it. Unexpressed feelings leak back in as outbursts, withdrawal, and blame. Help him name the real bundle under the simple label, treat feelings as valid whether or not they are "rational," and acknowledge them before any problem-solving. (3) IDENTITY — the internal conversation about what this says about him: am I competent, am I a good person, am I worthy of love. All-or-nothing identity thinking (either good father or failure) makes a man brittle; ground him in the "And Stance" about himself — a good man who also makes mistakes. The more easily he can admit his own mixed motives and contributions, the steadier he walks in. HOW MARKOS USES THIS: when he is dreading a talk — with the ex, a boss, a son — walk him through the three layers out loud: what story is each side telling, what feelings are actually in the room, what identity is at stake for him. Then the moves: begin from the "third story" (how a neutral observer would describe the difference), not from inside his own story; describe the problem as the gap between the two stories; listen from the inside out with genuine curiosity; speak to be understood — lead with what matters most, no exaggerations ("you always," "you never"), no cross-examination; when the other side stays in blame, reframe blame statements as contributions, and name the dynamic when the conversation keeps going off the rails. Two limits to hold: sometimes the right call is to let it go (if his only goal is to change the other person, the conversation will fail — the sane goals are learning their story, saying his own, and problem-solving), and Markos thinks it through with him but never scripts his side of the fight verbatim.',
+      'Stone/Patton/Heen framework (see provenance caveat). Under every hard conversation there are three conversations running at once: (1) WHAT HAPPENED — the fight about who is right, what was meant, and who is to blame. Three shifts: (a) drop the truth assumption — he argues interpretations, not facts; move from certainty to curiosity and take the "And Stance" (his view AND theirs can both be present); (b) disentangle intent from impact — "I was hurt" leaps to "you meant to hurt me"; intentions are usually more mixed — ask, do not assume; (c) abandon blame for contribution — blame looks backward and judges, contribution looks at the whole system and forward: what did EACH person do, or avoid doing, that got them here. Contributing is not being blameworthy. (2) FEELINGS — feelings are the heart of the situation, not a distraction from it. Unexpressed feelings leak back in as outbursts, withdrawal, and blame. Help him name the real bundle under the simple label, treat feelings as valid whether or not they are "rational," and acknowledge them before any problem-solving. (3) IDENTITY — the internal conversation about what this says about him: am I competent, am I a good person, am I worthy of love. All-or-nothing identity thinking (either good father or failure) makes a man brittle; ground him in the "And Stance" about himself — a good man who also makes mistakes. The more easily he can admit his own mixed motives and contributions, the steadier he walks in. HOW MARKOS USES THIS: when he is dreading a talk — with the ex, a boss, a son — walk him through the three layers out loud: what story is each side telling, what feelings are actually in the room, what identity is at stake for him. Then the moves: begin from the "third story" (how a neutral observer would describe the difference), not from inside his own story; describe the problem as the gap between the two stories; listen with genuine curiosity; speak to be understood — lead with what matters most, no "you always / you never," no cross-examination; when the other side stays in blame, reframe blame as contribution, and name the dynamic when it goes off the rails. Two limits to hold: sometimes the right call is to let it go (if his only goal is to change the other person, the conversation will fail — the sane goals are learning their story, saying his own, and problem-solving), and Markos thinks it through with him but never scripts his side of the fight verbatim.',
     voice_translation:
       'This is what a voice companion is for: rehearsing the hard conversation out loud, one layer at a time, with a steady voice. Let him hear himself say it before he has to say it to her.',
     provenance: SOURCES.stone,
@@ -327,27 +354,10 @@ export const LISTENING_KNOWLEDGE: readonly ListeningKnowledge[] = [
       'Side-by-side beats face-to-face for men, and voice is the ultimate side-by-side: he can drive, walk, fix something while he talks. Do not demand sustained eye-of-the-storm emotional focus; let the conversation ride alongside whatever his hands are doing.',
     provenance: SOURCES.addis_mahalik,
   },
-  {
-    area: 'divorce_talk_terrain',
-    principle: 'Divorce talk arrives sideways: the practical question is the doorway, anger is the speakable emotion, and the real disclosure is usually the second or third thing he says, not the first.',
-    guidance:
-      'How real divorce conversations with men actually unfold (Oliffe et al. 2022, interviews with 47 men after relationship break-up; Canfield, Counseling Today 2013; firsthand accounts from men\'s divorce support spaces): (a) HE OPENS WITH THE PRACTICAL - the lawyer, the custody schedule, the money, the paperwork. That is not him avoiding the feeling; it is the only doorway he trusts. Answer the practical in practical terms and stay in the room - the feeling arrives inside the logistics, not instead of them. (b) ANGER IS THE SPEAKABLE EMOTION - men have no trouble saying the rage; what it masks (guilt, sadness, loss) has no permission slip yet (Canfield). Honor the anger without co-signing the villain story, and never trash her to win his trust - men in these spaces consistently value the conversations that do not just "diss the ex," even mid-rage (Oliffe; support-meeting observation). When the anger runs all the way out, the softer thing underneath may surface on its own; your job is to still be there when it does, not to excavate it early. (c) HE TESTS WITH A SMALL DISCLOSURE BEFORE THE REAL ONE - a mention of the empty apartment before the 2am despair. How you receive the small one decides whether the real one comes; men bottle it for good when they expect judgment ("man up," "keep your house in order" - Oliffe). (d) NEVER HAND HIM THE DISMISSAL SCRIPT - "you\'re better off," "plenty of fish," "time to get back out there" is what everyone else says, it ends conversations, and it confirms what he already suspects: nobody treats this as real grief (Men Unfiltered). (e) GRIEF WITHOUT A VILLAIN IS THE HARDEST TO SPEAK - when nobody cheated and nobody left in anger, there is no betrayal to organize the grief around, and men report that made it harder, not easier (Good Men Project first-person account). His grief is also disenfranchised - no casseroles, no funeral, a loss nobody brings food for - so he may not call it grief at all. You can treat it as grief without naming it grief.',
-    voice_translation:
-      'In voice the sideways arrival sounds like: a 1pm call about paperwork that is really about the empty house; "whatever, it is what it is" said in a tone that is not whatever. Match the register he opens in - logistics get logistics first - and let your silences do the inviting. The pause after his anger finishes is the most important silence you will hold all session; do not fill it with analysis.',
-    provenance: SOURCES.oliffe,
-  },
-  {
-    area: 'six_divorces_at_once',
-    principle: 'He is not going through one divorce; he is going through several at once - emotional, economic, co-parental, community, legal, psychic - and they end at different times.',
-    guidance:
-      'Bohannan\'s six stations ("Divorce and After", 1970): the divorce a man talks about on any given night is ONE of six separations running in parallel - the emotional divorce (the intimacy died, often long before papers), the economic divorce (money, the house, two households on one income), the co-parental divorce (staying parents while ending the marriage), the community divorce (friends choosing sides, couple friends fading, the social world built around "us"), the legal divorce (the state\'s paperwork), and the psychic divorce (letting go of the future he had planned and the man he was inside it - the longest one, measured in years). USE: locate which station tonight\'s talk is actually on - lawyer talk is the legal station, the empty weekend is the community one, "who am I without her" is the psychic one - and answer THAT divorce, not the whole pile at once. Two consequences that matter most for men: (1) the COMMUNITY station is the hidden one - his social world was usually organized around the couple, and his main confidant was usually the marriage itself (Scourfield & Evans 2014: men carry fewer close relationships outside it), so divorce removes the relationship and the support channel in the same cut; the violent quiet of the house and the friendless weekend are grief, not weakness. (2) THE LEGAL STATION ENDING SETTLES NOTHING AT THE OTHERS - "the papers are signed" can land the same week he falls apart, and that is not regression, it is sequencing. Never announce his recovery back to him; a man told he has moved on while the psychic divorce is still running learns to hide the rest of it.',
-    voice_translation:
-      'Station tells in his voice and word choice: flat affect and "it is what it is" (emotional), the math he keeps redoing out loud (economic), handoff schedules and "dad, why don\'t you live here anymore" (co-parental), "everyone picked her" and weekends that go quiet (community), court dates and decree language (legal), and the long pauses around "the plan was" (psychic). Naming the station to yourself keeps the reply on the divorce he is actually having tonight.',
-    provenance: SOURCES.bohannan,
-  },
 ];
 
 import type { StateEnvelope } from '../agents/state-envelope';
+import { pickTriggeredArea } from './trigger-registry';
 
 /** Listening-area → the lens name surfaced to the Composer's ACTIVE FRAMEWORKS list. */
 export const LISTENING_LENS: Record<ListeningArea, string> = {
@@ -366,74 +376,102 @@ export const LISTENING_LENS: Record<ListeningArea, string> = {
   deescalation: 'persuasion_cycle_staging',
   cost_of_talking: 'male_disclosure_cost',
   help_without_looking_like_help: 'low_cost_help_framing',
-  divorce_talk_terrain: 'divorce_talk_terrain',
-  six_divorces_at_once: 'bohannan_stations',
 };
 
 /**
  * Hard guardrails for how Markos responds and carries the conversation — the
- * response-side companion to the domain red lines. These are landmines: they
- * constrain every reply, every arena.
+ * response-side companion to the domain red lines. These are landmines. Each
+ * is scoped: 'all' guardrails constrain every fired turn; area-scoped
+ * guardrails ship ONLY when their area fired — a turn never carries another
+ * area's rules. (The two divorce-station guardrails — dismissal script,
+ * declared recovery — left with the divorce areas; the divorce layer owns
+ * that terrain.)
  */
-export const RESPONSE_GUARDRAILS: readonly string[] = [
-  'Never interrupt him or finish his sentences.',
-  'Never prepare the reply while he is still speaking — receive first, then respond.',
-  'First beat of any loaded disclosure is reflection or presence, never advice. A man who has just said the hard thing out loud has not asked to be fixed yet.',
-  'One question per turn. Open questions over yes/no questions.',
-  'Keep turns short: one thought, then hand the floor back. A three-thought turn is a lecture.',
-  'Do not run the same move every turn — reflect, ask, and stay silent are all real moves; mirror his rhythm, not a formula.',
-  'Do not force closure while the conversation is still opening, and do not keep stretching one that has landed.',
-  'Never end a conversation on its heaviest note: hand the thread back, acknowledge it, leave a door open.',
-  'Withhold judgment on the content of a disclosure; curiosity over evaluation.',
-  'Never diagnose him, label people in his life, or side against someone who is not in the room (extends the existing co-parenting/mediation red lines).',
-  'When helping him prepare for a hard conversation, work the three layers (stories, feelings, identity) and map contribution — never assign blame, including to him — and never script his side of the fight verbatim.',
-  'Match his register and pace (already core to the voice); when he is escalated, slow down instead of matching tempo.',
-  'Never treat his reluctance to talk as a problem to name or fix — no "you\'re shutting down," no "you never open up." Lower the cost of talking: normalize, keep him in control, keep it practical.',
-  'Never quote statistics or research at him — the help-seeking and post-breakdown suicidality findings ground your urgency about presence, never his shame or a lecture.',
-  'Never treat his anger as the whole story or try to fix it - anger is usually the one emotion he has permission to speak; what it masks (guilt, sadness, loss) arrives later, on its own clock. Honor it without co-signing the villain story or trashing the ex.',
-  'Never hand him the dismissal script ("you\'re better off," "plenty of fish," "time to get back out there") - it ends the conversation and confirms nobody treats his grief as real grief.',
-  'Never declare his recovery for him ("you\'ve moved on," "you should be over it by now") - the legal divorce ending settles nothing at the other stations; grief someone else pronounces finished goes into hiding.',
-  'Crisis turns are unchanged: the sentinel layer owns them and bypasses all of this.',
+export interface ResponseGuardrail {
+  text: string;
+  areas: readonly ListeningArea[] | 'all';
+}
+
+export const RESPONSE_GUARDRAILS: readonly ResponseGuardrail[] = [
+  { areas: 'all', text: 'Never interrupt him or finish his sentences.' },
+  { areas: 'all', text: 'Never prepare the reply while he is still speaking — receive first, then respond.' },
+  { areas: 'all', text: 'First beat of any loaded disclosure is reflection or presence, never advice. A man who has just said the hard thing out loud has not asked to be fixed yet.' },
+  { areas: 'all', text: 'One question per turn. Open questions over yes/no questions.' },
+  { areas: 'all', text: 'Keep turns short: one thought, then hand the floor back. A three-thought turn is a lecture.' },
+  { areas: 'all', text: 'Do not run the same move every turn — reflect, ask, and stay silent are all real moves; mirror his rhythm, not a formula.' },
+  { areas: 'all', text: 'Do not force closure while the conversation is still opening, and do not keep stretching one that has landed.' },
+  { areas: 'all', text: 'Never end a conversation on its heaviest note: hand the thread back, acknowledge it, leave a door open.' },
+  { areas: 'all', text: 'Withhold judgment on the content of a disclosure; curiosity over evaluation.' },
+  { areas: 'all', text: 'Never diagnose him, label people in his life, or side against someone who is not in the room (extends the existing co-parenting/mediation red lines).' },
+  { areas: 'all', text: 'Crisis: acute crisis turns never reach this module — they early-return before the whisperer tier. Passive-crisis (elevated) turns DO pass through; when they do, the crisis layer\'s guidance and resources outrank everything here.' },
+  { areas: ['difficult_conversations'], text: 'When helping him prepare for a hard conversation, work the three layers (stories, feelings, identity) and map contribution — never assign blame, including to him — and never script his side of the fight verbatim.' },
+  { areas: ['deescalation', 'pacing'], text: 'Match his register and pace (already core to the voice); when he is escalated, slow down instead of matching tempo.' },
+  { areas: ['cost_of_talking'], text: 'Never treat his reluctance to talk as a problem to name or fix — no "you\'re shutting down," no "you never open up." Lower the cost of talking: normalize, keep him in control, keep it practical.' },
+  { areas: ['cost_of_talking', 'help_without_looking_like_help'], text: 'Never quote statistics or research at him — the help-seeking and post-breakdown suicidality findings ground your urgency about presence, never his shame or a lecture.' },
+  { areas: ['deescalation'], text: 'Never treat his anger as the whole story or try to fix it - anger is usually the one emotion he has permission to speak; what it masks (guilt, sadness, loss) arrives later, on its own clock. Honor it without co-signing the villain story or trashing the ex.' },
 ];
 
-/** Keyword → area detection, same shape as divorce-knowledge.ts. */
-const AREA_SIGNALS: Record<ListeningArea, readonly string[]> = {
+/** Every guardrail text, for inventory tests. */
+export const ALL_GUARDRAIL_TEXTS: readonly string[] = RESPONSE_GUARDRAILS.map((g) => g.text);
+
+/**
+ * The guardrails a fired area ships: every 'all' guardrail plus the ones
+ * scoped to that area. This is the ONLY guardrail list injected per turn.
+ */
+export function guardrailsForArea(area: ListeningArea): string[] {
+  return RESPONSE_GUARDRAILS
+    .filter((g) => g.areas === 'all' || g.areas.includes(area))
+    .map((g) => g.text);
+}
+
+/**
+ * Keyword → area detection. Every token here is owned by this module in
+ * trigger-registry.ts: idiom tokens ("i'm fine", "it's fine", "practical",
+ * "what do you think", "your opinion", "does that make sense",
+ * "you know what i mean") are banned outright, "don't want to talk about it"
+ * belongs to embodied-man's consent area, and divorce terrain
+ * ("she filed", "my divorce", "too quiet", …) belongs to the divorce layer —
+ * none of them appear here. Matching is whole-phrase via the registry, never
+ * bare substring.
+ */
+export const LISTENING_AREA_SIGNALS: Record<ListeningArea, readonly string[]> = {
   presence: ['you\'re not listening', 'you keep cutting', 'let me finish', 'are you even'],
   listen_to_understand: ['you don\'t get it', 'that\'s not what i said', 'you misunderstood', 'not what i meant'],
   open_questions: ['i don\'t know how to say', 'hard to explain', 'where do i start'],
-  reflecting: ['does that make sense', 'you know what i mean', 'i feel like nobody hears'],
+  reflecting: ['i feel like nobody hears'],
   patience_and_silence: ['give me a second', 'hold on', 'let me think'],
   withholding_judgment: ['you\'re going to judge', 'promise you won\'t think less', 'i\'m embarrassed', 'ashamed to say'],
   empathy_felt: ['nobody understands', 'i feel alone in this', 'no one gets what it\'s like'],
   turn_taking: ['you talk too much', 'let me get a word in', 'you keep going on', 'stop rambling', 'long-winded'],
   pacing: ['slow down', 'too fast', 'too much at once', 'one thing at a time', 'overwhelming'],
-  ask_reflect_or_silence: ['stop asking questions', 'enough with the questions', 'just listen', 'what do you think', 'your opinion'],
+  ask_reflect_or_silence: ['stop asking questions', 'enough with the questions', 'just listen'],
   staying_or_landing: ['i should get going', 'anyway that\'s it', 'that\'s all i guess', 'i\'m tired of talking', 'one more thing', 'wrapping up'],
   difficult_conversations: ['i have to talk to', 'dreading this conversation', 'how do i tell', 'conversation with my ex', 'hard talk', 'what do i say to'],
   // "i'm done with" alone is too broad — routine statements ("i'm done with the report",
   // "i'm done with that medication") are not escalation. Only the relationally-loaded,
   // escalated forms signal de-escalation (Codex review, PR #18).
   deescalation: ['i\'m so angry', 'furious', 'about to explode', 'can\'t calm down', 'i\'m done with her', 'i\'m done with him', 'i\'m done with this marriage', 'i\'m done with my marriage', 'i\'m done with the marriage', 'done with this relationship', 'i\'m done with everything'],
-  cost_of_talking: ['i\'m fine', 'it\'s fine', 'not a big deal', 'don\'t want to talk about it', 'handle it myself', 'deal with it myself', 'i should be able to', 'don\'t need help', 'makes me weak', 'less of a man', 'what\'s wrong with me'],
-  help_without_looking_like_help: ['don\'t need therapy', 'not going to a therapist', 'therapy isn\'t for me', 'just need to figure', 'practical', 'what do i actually do', 'does talking even help', 'this isn\'t really me', 'not the type to'],
-  divorce_talk_terrain: ['she left me', 'she wants a divorce', 'she filed', 'she served me', 'getting divorced', 'getting a divorce', 'going through a divorce', 'my divorce', 'the divorce', 'my ex-wife', 'ex-wife', 'we separated', "we're separating", 'splitting up', 'she took the kids', 'she cheated', 'her affair', 'my marriage is over', 'end of my marriage', 'sign the papers', 'custody battle', 'divorce lawyer', 'my lawyer says', 'mediation'],
-  six_divorces_at_once: ['empty house', 'house is so quiet', 'house feels so quiet', 'too quiet', 'quiet house', 'sleeping alone', 'sleep alone', 'eating alone', 'eat alone', 'weekends are the hardest', 'weekends are hard', 'weekend is hard', 'nights are the worst', 'friends chose', 'friends took sides', 'friends picked sides', 'lost my friends', 'everyone chose her', 'everyone picked her', 'papers are signed', "it's final", 'it was final', 'finalized', 'officially divorced', 'every other weekend', 'get back out there', 'start dating', 'dating again', 'supposed to move on', 'move on from her', 'who am i without'],
+  cost_of_talking: ['not a big deal', 'handle it myself', 'deal with it myself', 'i should be able to', 'don\'t need help', 'makes me weak', 'less of a man', 'what\'s wrong with me'],
+  help_without_looking_like_help: ['don\'t need therapy', 'not going to a therapist', 'therapy isn\'t for me', 'just need to figure', 'what do i actually do', 'does talking even help', 'this isn\'t really me', 'not the type to'],
 };
 
-/** Deterministic detection: which listening areas does this turn touch? */
+/**
+ * Deterministic detection via the shared registry rules: whole-phrase
+ * matching, two-signals-or-long-utterance eligibility, ONE area per turn
+ * (most hits wins; ties break by LISTENING_AREAS order). Returns an array of
+ * zero or one areas — empty means: stay out of this turn.
+ */
 export function detectListeningAreas(message: string): ListeningArea[] {
-  const lower = message.toLowerCase();
-  const hits: ListeningArea[] = [];
-  for (const area of LISTENING_AREAS) {
-    if (AREA_SIGNALS[area].some((signal) => lower.includes(signal))) hits.push(area);
-  }
-  return hits;
+  const area = pickTriggeredArea(message.toLowerCase(), LISTENING_AREA_SIGNALS, LISTENING_AREAS);
+  return area === null ? [] : [area];
 }
 
 /**
  * Deterministic assembly: the internal guidance note for the Composer.
- * Renders detected areas as internal coaching for Marcus, plus the guardrails.
- * Written as guidance, never as a script to read aloud.
+ * Renders the ONE fired area as internal coaching for Marcus. Guardrails are
+ * NOT in this note — they render exactly once, as landmines, scoped to the
+ * fired area (see guardrailsForArea). Written as guidance, never as a script
+ * to read aloud.
  */
 export function buildListeningNote(areas: readonly ListeningArea[]): string | null {
   if (areas.length === 0) return null;
@@ -445,8 +483,6 @@ export function buildListeningNote(areas: readonly ListeningArea[]): string | nu
     'LISTENING, RESPONSE & CONVERSATION CRAFT — internal guidance for this turn (do not read verbatim):',
     'How to use this note: pick the ONE move that fits what he just said and deliver it in your own plain voice, the way you already talk. Never read the note\'s phrasing back, never stack every technique into one reply, never open with "it sounds like" filler — if the reply would sound canned read aloud, do not send it.',
     ...lines,
-    'Standing guardrails for the reply:',
-    ...RESPONSE_GUARDRAILS.map((g) => `- ${g}`),
   ].join('\n');
 }
 
@@ -465,6 +501,6 @@ export function applyListeningKnowledge(env: Pick<StateEnvelope, 'utterance' | '
   if (note === null) return;
   env.domain_whisperers.invoked.push('listening');
   env.domain_whisperers.context_notes.push(note);
-  env.domain_whisperers.landmines.push(...RESPONSE_GUARDRAILS);
+  env.domain_whisperers.landmines.push(...guardrailsForArea(areas[0]));
   env.domain_whisperers.frameworks_applied.push(...areas.map((a) => LISTENING_LENS[a]));
 }
