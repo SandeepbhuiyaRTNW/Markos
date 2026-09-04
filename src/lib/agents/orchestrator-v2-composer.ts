@@ -652,10 +652,19 @@ export function buildPriorityHierarchy(env: StateEnvelope, policy: PriorityPolic
     lines.push(`PHASE NOTE: This man is in ${phase.toUpperCase()}. He can handle challenge and direct confrontation. Do NOT default to empathy-first. Lead with the provocation, then hold him through it.`);
   }
 
+  // ── Length calibration (v5): the length is part of the answer. Casual stays
+  // short (fork-gated); sacred-ground depth earns room (shared path, so the
+  // fork on/off byte-identity for emotional turns is preserved).
+  const lengthRule = forkActive && kind === 'casual'
+    ? 'Keep it short — a line or two. Light matches light: a quick question or small talk gets a quick, human answer, not a speech.'
+    : depth >= 4
+      ? 'Take the room this needs — 2-4 sentences is the usual shape, not a cap. A man pouring his heart out is not met with two brisk lines; let the weight set the length.'
+      : 'Keep it 2-4 sentences.';
+
   lines.push('');
   lines.push(policy.allowQuestion
-    ? 'YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then ask ONE question or make ONE statement that meets him where he is — deeper only if he opened the door this turn. (3) Keep it 2-4 sentences. End with weight.'
-    : 'YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then make ONE statement that meets him where he is — deeper only if he opened the door this turn. (3) Keep it 2-4 sentences. End with weight.');
+    ? `YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then ask ONE question or make ONE statement that meets him where he is — deeper only if he opened the door this turn. (3) ${lengthRule} End with weight.`
+    : `YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then make ONE statement that meets him where he is — deeper only if he opened the door this turn. (3) ${lengthRule} End with weight.`);
 
   return lines.join('\n');
 }
