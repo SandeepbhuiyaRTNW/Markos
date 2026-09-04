@@ -75,6 +75,28 @@ function main() {
   assert('anti-therapy turn detects help_without_looking_like_help', env3.domain_whisperers.frameworks_applied.includes('low_cost_help_framing'));
 
   // ─────────────────────────────────────────────────────────────────────────
+  console.log('\n── B2. Real divorce-conversation terrain (public research) assembles ──');
+
+  const envT = envWith('she filed last week. my divorce lawyer wants all the financial documents by friday. whatever, it is what it is');
+  const areasT = detectListeningAreas(envT.utterance);
+  assert('divorce opening detects divorce_talk_terrain', areasT.includes('divorce_talk_terrain'));
+  applyListeningKnowledge(envT);
+  const noteT = envT.domain_whisperers.context_notes.find(n => n.includes('LISTENING, RESPONSE & CONVERSATION CRAFT')) || '';
+  assert('terrain note carries the practical-doorway guidance', /HE OPENS WITH THE PRACTICAL/.test(noteT) && /doorway/.test(noteT));
+  assert('terrain note carries anger-as-speakable-emotion guidance', /ANGER IS THE SPEAKABLE EMOTION/.test(noteT));
+  assert('terrain note cites the research base', /Oliffe/.test(noteT) && /Canfield/.test(noteT));
+  assert('dismissal-script guardrail rides as landmine', envT.domain_whisperers.landmines.some(l => /dismissal script/.test(l)));
+  assert('terrain lens lands in frameworks_applied', envT.domain_whisperers.frameworks_applied.includes('divorce_talk_terrain'));
+
+  const envS = envWith("papers are signed, it's final. so why is the house so quiet? everyone says i should be relieved");
+  applyListeningKnowledge(envS);
+  assert('post-decree quiet detects six_divorces_at_once', envS.domain_whisperers.frameworks_applied.includes('bohannan_stations'));
+  assert('stations note names community + psychic stations', envS.domain_whisperers.context_notes.some(n => /community divorce/.test(n) && /psychic divorce/.test(n)));
+  assert('stations note carries legal-ending-settles-nothing', envS.domain_whisperers.context_notes.some(n => /LEGAL STATION ENDING SETTLES NOTHING/.test(n)));
+  assert('stations note carries the confidant-loss grounding', envS.domain_whisperers.context_notes.some(n => /Scourfield/.test(n)));
+  assert('no-declared-recovery guardrail rides as landmine', envS.domain_whisperers.landmines.some(l => /Never declare his recovery/.test(l)));
+
+  // ─────────────────────────────────────────────────────────────────────────
   console.log('\n── C. Null path: a neutral turn is left byte-for-byte alone ──');
   assert('empty message triggers no area', detectListeningAreas('').length === 0);
   assert('neutral message triggers no area', detectListeningAreas('yeah work was alright, we shipped the thing on friday').length === 0);
@@ -99,6 +121,9 @@ function main() {
   assert('no scripting his side of a fight', /never script his side of the fight/.test(g));
   assert('no naming his reluctance', /never treat his reluctance/.test(g));
   assert('no statistics at him', /never quote statistics/.test(g));
+  assert('anger not treated as the whole story', /never treat his anger as the whole story/.test(g));
+  assert('no dismissal script', /never hand him the dismissal script/.test(g));
+  assert('no declaring his recovery', /never declare his recovery/.test(g));
   assert('crisis sentinel carve-out preserved', /crisis turns are unchanged/.test(g));
   assert('every area has knowledge, a lens, and detection signals',
     LISTENING_AREAS.every(a => LISTENING_KNOWLEDGE.some(k => k.area === a) && typeof LISTENING_LENS[a] === 'string'));
