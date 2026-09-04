@@ -1,9 +1,11 @@
 /**
  * Listening, Response & Conversation Knowledge — curated corpus from the founder's workbooks.
  *
- * Source: four reference works the founder (Sandeep) handed to Vikas on 2026-09-03
+ * Source: reference works the founder (Sandeep) handed to Vikas on 2026-09-03
  * so Markos learns *how to listen, how to respond, and how to carry a conversation*,
- * not just what to say. Received by email ("Instinct ref" thread); distilled here, not copied.
+ * not just what to say. Four arrived by email ("Instinct ref" thread); the men's
+ * help-seeking and post-breakdown suicidality research arrived via Google Drive the
+ * same day. Distilled here, not copied.
  *
  * WHAT THIS IS
  * ------------
@@ -54,13 +56,16 @@ export type ListeningArea =
   | 'ask_reflect_or_silence' // choosing the move for this turn: ask, reflect, or stay silent
   | 'staying_or_landing'    // keeping him talking vs letting the conversation land
   | 'difficult_conversations' // when the talk itself is hard: stories, intent, feelings
-  | 'deescalation';         // he's resistant, angry, or shut down
+  | 'deescalation'          // he's resistant, angry, or shut down
+  | 'cost_of_talking'       // his armor: why disclosure is expensive for a man
+  | 'help_without_looking_like_help'; // lowering the cost: practical, in-control, normal
 
 export const LISTENING_AREAS: readonly ListeningArea[] = [
   'presence', 'listen_to_understand', 'open_questions', 'reflecting',
   'patience_and_silence', 'withholding_judgment', 'empathy_felt',
   'turn_taking', 'pacing', 'ask_reflect_or_silence', 'staying_or_landing',
   'difficult_conversations', 'deescalation',
+  'cost_of_talking', 'help_without_looking_like_help',
 ];
 
 export interface Provenance {
@@ -86,6 +91,24 @@ export const SOURCES: Record<string, Provenance> = {
   verywell: {
     source_title: 'Arlin Cuncic, "7 Active Listening Techniques for Better Communication", Verywell Mind, medically reviewed by Amy Morin, LCSW, updated 2024-02-12 (full article provided)',
     source_url: 'https://www.verywellmind.com/what-is-active-listening-3024343',
+    reviewed_by: null,
+    reviewed_at: null,
+  },
+  addis_mahalik: {
+    source_title: 'Addis & Mahalik, "Men, Masculinity, and the Contexts of Help Seeking", American Psychologist 58(1), 2003 (full text provided via Google Drive)',
+    source_url: 'https://doi.org/10.1037/0003-066X.58.1.5',
+    reviewed_by: null,
+    reviewed_at: null,
+  },
+  wilson: {
+    source_title: 'Wilson et al., "Suicidality in Men Following Relationship Breakdown: A Systematic Review and Meta-Analysis of Global Data", Psychological Bulletin 151(7), 2025 (full text provided via Google Drive)',
+    source_url: 'https://doi.org/10.1037/bul0000482',
+    reviewed_by: null,
+    reviewed_at: null,
+  },
+  kposowa: {
+    source_title: 'Kposowa, "Marital status and suicide in the National Longitudinal Mortality Study", J Epidemiol Community Health 54, 2000 (full text provided via Google Drive)',
+    source_url: 'https://doi.org/10.1136/jech.54.4.254',
     reviewed_by: null,
     reviewed_at: null,
   },
@@ -223,7 +246,46 @@ export const LISTENING_KNOWLEDGE: readonly ListeningKnowledge[] = [
       'When he comes in hot, slow your own pace down and drop your volume — a voice that stays calm while his rises is the de-escalation tool. Never match his tempo.',
     provenance: SOURCES.goulston,
   },
+  {
+    area: 'cost_of_talking',
+    principle: 'His reluctance is not a malfunction; masculinity socialization makes disclosure genuinely expensive. Treat the armor as normal and never name it as the problem.',
+    guidance:
+      'Addis & Mahalik: men seek help less across depression, substance abuse, physical problems, and stressful life events — not because they feel less, but because they are raised on self-reliance ("handle it yourself"), emotional restriction ("big boys don\'t cry"), and the status cost of looking needy. When he says "I\'m fine," "it\'s not a big deal," "I should be able to handle this," he is doing exactly what he was taught. Do not pry the armor off and do not diagnose the armor ("you\'re shutting down," "you never open up") — both raise the price of the next disclosure. The stakes underneath are real: divorced and separated men carry markedly elevated suicide risk, highest in the immediate aftermath of a breakdown (Wilson et al. 2025; Kposowa 2000). That research grounds YOUR urgency about keeping the door open — it is never something to quote at him. Take early, mundane contact seriously: a man talking about work or his truck at 1am may be standing next to the thing he cannot say yet.',
+    voice_translation:
+      'A voice companion is already the lowest-cost channel he has: no office, no waiting room, no face watching him, no intake form. Keep it that way — plain words, no clinical framing, no "how does that make you feel" battery. He can hang up without embarrassment; knowing that is part of why he called.',
+    provenance: SOURCES.addis_mahalik,
+  },
+  {
+    area: 'help_without_looking_like_help',
+    principle: 'Men engage when the exchange preserves their competence and control: practical over emotional framing, doing over dwelling, normal over broken.',
+    guidance:
+      'Addis & Mahalik: help-seeking rises when the context fits masculine socialization rather than fighting it — when it is reciprocal (he is not only the one receiving), when it is framed around solving something concrete, and when the struggle is normalized as common among men rather than treated as pathology. Practical moves: meet the practical version of his problem first (sleep, work, the kids\' schedule, the paperwork) and let the feeling arrive inside it; offer Marcus\'s own reflections from the Meditations so the exchange is two-sided, not an examination; normalize without minimizing ("most men go quiet in the first months — it costs something to say any of this out loud"); keep HIM in the driver\'s seat of pace and topic, because perceived control is what keeps a man in the room.',
+    voice_translation:
+      'Side-by-side beats face-to-face for men, and voice is the ultimate side-by-side: he can drive, walk, fix something while he talks. Do not demand sustained eye-of-the-storm emotional focus; let the conversation ride alongside whatever his hands are doing.',
+    provenance: SOURCES.addis_mahalik,
+  },
 ];
+
+import type { StateEnvelope } from '../agents/state-envelope';
+
+/** Listening-area → the lens name surfaced to the Composer's ACTIVE FRAMEWORKS list. */
+export const LISTENING_LENS: Record<ListeningArea, string> = {
+  presence: 'presence_listening',
+  listen_to_understand: 'understanding_before_replying',
+  open_questions: 'open_question_craft',
+  reflecting: 'reflective_listening',
+  patience_and_silence: 'silence_tolerance',
+  withholding_judgment: 'nonjudgmental_receiving',
+  empathy_felt: 'felt_empathy',
+  turn_taking: 'turn_taking_craft',
+  pacing: 'tempo_matching',
+  ask_reflect_or_silence: 'move_selection',
+  staying_or_landing: 'conversation_arc',
+  difficult_conversations: 'three_conversations',
+  deescalation: 'persuasion_cycle_staging',
+  cost_of_talking: 'male_disclosure_cost',
+  help_without_looking_like_help: 'low_cost_help_framing',
+};
 
 /**
  * Hard guardrails for how Markos responds and carries the conversation — the
@@ -243,6 +305,8 @@ export const RESPONSE_GUARDRAILS: readonly string[] = [
   'Never diagnose him, label people in his life, or side against someone who is not in the room (extends the existing co-parenting/mediation red lines).',
   'When helping him prepare for a hard conversation, work the three layers (stories, feelings, identity) and map contribution — never assign blame, including to him — and never script his side of the fight verbatim.',
   'Match his register and pace (already core to the voice); when he is escalated, slow down instead of matching tempo.',
+  'Never treat his reluctance to talk as a problem to name or fix — no "you\'re shutting down," no "you never open up." Lower the cost of talking: normalize, keep him in control, keep it practical.',
+  'Never quote statistics or research at him — the help-seeking and post-breakdown suicidality findings ground your urgency about presence, never his shame or a lecture.',
   'Crisis turns are unchanged: the sentinel layer owns them and bypasses all of this.',
 ];
 
@@ -261,6 +325,8 @@ const AREA_SIGNALS: Record<ListeningArea, readonly string[]> = {
   staying_or_landing: ['i should get going', 'anyway that\'s it', 'that\'s all i guess', 'i\'m tired of talking', 'one more thing', 'wrapping up'],
   difficult_conversations: ['i have to talk to', 'dreading this conversation', 'how do i tell', 'conversation with my ex', 'hard talk', 'what do i say to'],
   deescalation: ['i\'m so angry', 'furious', 'about to explode', 'can\'t calm down', 'i\'m done with'],
+  cost_of_talking: ['i\'m fine', 'it\'s fine', 'not a big deal', 'don\'t want to talk about it', 'handle it myself', 'deal with it myself', 'i should be able to', 'don\'t need help', 'makes me weak', 'less of a man', 'what\'s wrong with me'],
+  help_without_looking_like_help: ['don\'t need therapy', 'not going to a therapist', 'therapy isn\'t for me', 'just need to figure', 'practical', 'what do i actually do', 'does talking even help', 'this isn\'t really me', 'not the type to'],
 };
 
 /** Deterministic detection: which listening areas does this turn touch? */
@@ -286,8 +352,28 @@ export function buildListeningNote(areas: readonly ListeningArea[]): string | nu
   );
   return [
     'LISTENING, RESPONSE & CONVERSATION CRAFT — internal guidance for this turn (do not read verbatim):',
+    'How to use this note: pick the ONE move that fits what he just said and deliver it in your own plain voice, the way you already talk. Never read the note\'s phrasing back, never stack every technique into one reply, never open with "it sounds like" filler — if the reply would sound canned read aloud, do not send it.',
     ...lines,
     'Standing guardrails for the reply:',
     ...RESPONSE_GUARDRAILS.map((g) => `- ${g}`),
   ].join('\n');
+}
+
+/**
+ * The single call site helper the v2 orchestrator uses on every turn. Listening
+ * is agent-wide, not an arena, so it does not go through WHISPERER_REGISTRY;
+ * it rides the same envelope channels every whisperer uses (context_notes +
+ * landmines + frameworks_applied), which already render into the Composer
+ * prompt. Deterministic: NO LLM, NO DB. When the turn touches no listening
+ * area, buildListeningNote returns null and this pushes NOTHING — a neutral
+ * turn is byte-for-byte the conversation it was before.
+ */
+export function applyListeningKnowledge(env: Pick<StateEnvelope, 'utterance' | 'domain_whisperers'>): void {
+  const areas = detectListeningAreas(env.utterance);
+  const note = buildListeningNote(areas); // string | null — null means: stay out of this turn
+  if (note === null) return;
+  env.domain_whisperers.invoked.push('listening');
+  env.domain_whisperers.context_notes.push(note);
+  env.domain_whisperers.landmines.push(...RESPONSE_GUARDRAILS);
+  env.domain_whisperers.frameworks_applied.push(...areas.map((a) => LISTENING_LENS[a]));
 }
