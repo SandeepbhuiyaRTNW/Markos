@@ -30,6 +30,7 @@ import { selectWisdomVoices } from '../wisdom/council';
 import { enforceVocativePrinciple } from '../craft/craft-layer';
 import { WHISPERER_REGISTRY, WHISPERER_ACTIVATION_THRESHOLD } from '../whisperers';
 import { applyListeningKnowledge } from '../agent/listening-knowledge';
+import { applyEmbodiedManKnowledge } from '../agent/embodied-man-knowledge';
 import { computePERMASnapshot } from '../assessment/perma-snapshot';
 import { query } from '../db';
 import { persistTurnMessages, type QueryFn } from './persist-messages';
@@ -310,6 +311,15 @@ export async function processWithAgents(
       // touches no listening area — the null case pushes NOTHING, so a purely
       // neutral turn stays exactly as before.
       applyListeningKnowledge(env);
+      // Embodied Man body-history knowledge — agent-wide, deterministic (NO LLM,
+      // NO DB, zero added latency: keyword detection + string assembly only).
+      // Body-history craft is not an arena, so it is not routed through
+      // WHISPERER_REGISTRY; it rides the same output channels every whisperer
+      // uses (context_notes + landmines + frameworks), which already render into
+      // the Composer prompt. buildEmbodiedManNote returns null when the turn
+      // touches no body-history area — the null case pushes NOTHING, so a purely
+      // neutral turn stays exactly as before.
+      applyEmbodiedManKnowledge(env);
     } catch (err) { recordEnvelopeError(env, 'domain-whisperers', err); }
     finally { done(); }
   })();
