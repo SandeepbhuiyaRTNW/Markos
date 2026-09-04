@@ -3,6 +3,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import { capWhispererInjection } from '../agent/trigger-registry';
 import type {
   StateEnvelope, ListenerStackOutput, CrisisOutput, BoundaryOutput,
   PathwayRouterOutput, MemoryOutput, CulturalOutput, PhaseOutput,
@@ -174,11 +175,19 @@ export function buildEnvelopeContextSummary(
   if (includeWhispererContext && env.domain_whisperers.frameworks_applied.length > 0) {
     parts.push(`## ACTIVE FRAMEWORKS\n${env.domain_whisperers.frameworks_applied.join(', ')}`);
   }
-  if (includeWhispererContext && env.domain_whisperers.landmines.length > 0) {
-    parts.push(`## LANDMINES — DO NOT:\n${env.domain_whisperers.landmines.map(l => `• ${l}`).join('\n')}`);
+  // Hard cap on total whisperer injection (~1,200 tokens/turn): landmines
+  // (safety) are EXEMPT and always render in full; context notes (coaching)
+  // are trimmed to the remaining budget, whole items only. Under the cap this
+  // is byte-identical to the uncapped rendering.
+  const capped = capWhispererInjection(
+    env.domain_whisperers.landmines,
+    env.domain_whisperers.context_notes,
+  );
+  if (includeWhispererContext && capped.landmines.length > 0) {
+    parts.push(`## LANDMINES — DO NOT:\n${capped.landmines.map(l => `• ${l}`).join('\n')}`);
   }
-  if (includeWhispererContext && env.domain_whisperers.context_notes.length > 0) {
-    parts.push(`## WHISPERER INTELLIGENCE\n${env.domain_whisperers.context_notes.join('\n')}`);
+  if (includeWhispererContext && capped.context_notes.length > 0) {
+    parts.push(`## WHISPERER INTELLIGENCE\n${capped.context_notes.join('\n')}`);
   }
   if (env.sentinels.pathway_router.candidates.length > 0) {
     const now = env.sentinels.pathway_router.candidates.filter(c => c.when === 'now');
