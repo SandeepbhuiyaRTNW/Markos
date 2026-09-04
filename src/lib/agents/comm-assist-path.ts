@@ -10,14 +10,33 @@
  *     (see draft-exemption.ts for why the voice gates would mangle it)
  *
  * SAFETY (the whole point): the draft is exempt from the VOICE gates but NEVER
- * from the HARM layers. runHarmLayers (regex + judge) runs on:
- *   1. the REQUEST, before any draft is generated (a harmful ask never drafts)
- *   2. the REQUEST + DRAFT, after generation (a harmful draft is discarded)
+ * from the HARM layers. runHarmLayers runs on:
+ *   1. the REQUEST — regex ONLY (cheap) before generating. A LEXICALLY harmful ask
+ *      never drafts. (A SEMANTICALLY harmful-but-lexically-clean ask DOES generate,
+ *      then the judge catches it at step 2 with the request in view — see F5.)
+ *   2. the REQUEST + every generated FIELD — regex + judge, after generation.
  * Both are unconditional — the exemption has no path into the harm check.
  *
  * generate / judge / voiceGate are injected so this is fully testable offline and
  * so the orchestrator can supply the real composer model + craft-layer gates at
  * cutover without changing this file's logic.
+ *
+ * ⚠️ LIVE-TEST-REQUIRED (cannot be closed offline — flagged in the review):
+ *   F1 judge prompt-injection (see harm-judge.ts).
+ *   F5 semantic input-harm is only caught post-generation (regexOnly input); the
+ *      request is still judged at output, so not a bypass alone — but relies on F1.
+ *   F6 the judge sees only request+draft, no conversation history; a draft harmful
+ *      only in prior context is judged in isolation.
+ *   F8 harm-gate ≠ crisis-gate: a draft containing self-harm/crisis content is not
+ *      checked here (crisis.ts runs on input only).
+ *   F9 STRICT-category over-refusal (custody, alienation) + THREAT negation (C1):
+ *      these refuse the archetypal sympathetic case ("I'm scared I'll never see my
+ *      kids") and genuine apologies ("I'll never threaten her again") because regex
+ *      can't tell victim from aggressor / threat from apology. Proper fix = defer to
+ *      the judge (Option B), blocked on F1. Tracked in test-harm-gate.ts.
+ *   G1 enabling COMM_ASSIST_ENABLED alone does NOTHING — this path is unwired (no
+ *      orchestrator branch, no real generate fn, no voiceGate chain, relaxation
+ *      unapplied). Substantial wiring is required before the feature does anything.
  */
 
 import type { StateEnvelope } from './state-envelope';
