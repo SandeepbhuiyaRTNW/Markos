@@ -29,6 +29,7 @@ import { selectKnowledgePlan } from '../assessment/knowledge-selector';
 import { selectWisdomVoices } from '../wisdom/council';
 import { enforceVocativePrinciple } from '../craft/craft-layer';
 import { WHISPERER_REGISTRY, WHISPERER_ACTIVATION_THRESHOLD } from '../whisperers';
+import { applyListeningKnowledge } from '../agent/listening-knowledge';
 import { computePERMASnapshot } from '../assessment/perma-snapshot';
 import { query } from '../db';
 import { persistTurnMessages, type QueryFn } from './persist-messages';
@@ -300,6 +301,15 @@ export async function processWithAgents(
       });
 
       await Promise.all(whispererPromises);
+
+      // Listening / response / conversation knowledge — agent-wide, deterministic
+      // (NO LLM, NO DB). Listening is not an arena, so it is not routed through
+      // WHISPERER_REGISTRY; it rides the same output channels every whisperer
+      // uses (context_notes + landmines + frameworks), which already render into
+      // the Composer prompt. buildListeningNote returns null when the turn
+      // touches no listening area — the null case pushes NOTHING, so a purely
+      // neutral turn stays exactly as before.
+      applyListeningKnowledge(env);
     } catch (err) { recordEnvelopeError(env, 'domain-whisperers', err); }
     finally { done(); }
   })();
