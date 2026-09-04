@@ -39,19 +39,37 @@
  *
  * HOW IT REACHES A REPLY (no architecture change)
  * ----------------------------------------------
- * Same channels the listening and divorce knowledge ride: a caller detects which
- * embodied-man area(s) the turn touches and emits `buildEmbodiedManNote()`
- * DETERMINISTICALLY into the envelope's `domain_whisperers.context_notes`, with
- * the hard guardrails into `landmines`. Those channels already render into the
- * Composer prompt via `buildEnvelopeContextSummary` (## WHISPERER INTELLIGENCE /
- * ## LANDMINES) and `buildPriorityHierarchy` (PRIORITY 3 — DOMAIN INTELLIGENCE).
- * The assembly works with NO OpenAI key and NO database.
+ * Same channels the listening and divorce knowledge ride: a caller detects the
+ * ONE embodied-man area the turn touches (or none) and emits
+ * `buildEmbodiedManNote()` DETERMINISTICALLY into the envelope's
+ * `domain_whisperers.context_notes`, with ONLY the fired area's guardrails
+ * into `landmines` (each guardrail renders exactly once — never duplicated
+ * into both channels). Those channels already render into the Composer prompt
+ * via `buildEnvelopeContextSummary` (## WHISPERER INTELLIGENCE / ## LANDMINES)
+ * and `buildPriorityHierarchy` (PRIORITY 3 — DOMAIN INTELLIGENCE). The
+ * assembly works with NO OpenAI key and NO database.
+ *
+ * TRIGGER RULES (shared with every knowledge module — see trigger-registry.ts)
+ * ----------------------------------------------------------------------------
+ * Detection obeys the registry: whole-phrase word-boundary matching (no
+ * substring accidents); an area is eligible only on TWO independent token
+ * hits, or ONE hit in an utterance of at least MIN_WORDS_SINGLE_SIGNAL (8)
+ * words; at most ONE area fires per turn (most hits wins, ties break by
+ * EMBODIED_MAN_AREAS order); and every token this module declares is owned by
+ * it in the registry — contested and idiom-prone tokens ("i'm fine",
+ * "whatever", "shame", "the guys", …) are owned by listening or banned
+ * outright. Total whisperer injection per turn is hard-capped at
+ * MAX_WHISPERER_INJECT_CHARS (~1,200 tokens) at the render point.
  *
  * SAFETY POSTURE
  * --------------
  * Every note is INTERNAL guidance to Marcus ("you may…", "first reflect…"),
  * never a script to read verbatim. This module does not touch the crisis
- * sentinels; crisis turns keep bypassing the Composer entirely. The script was
+ * sentinels. Crisis truth (verified against orchestrator-v2.ts, 2026-09-04):
+ * ACUTE crisis turns early-return before the whisperer tier and never reach
+ * this module; PASSIVE-crisis turns (level 'elevated') CONTINUE through the
+ * pipeline and DO pass through here — on those turns the crisis layer's
+ * guidance and resources outrank everything in this module. The script was
  * written for a room and a voice; where a host move assumes a face-to-face
  * setting it is translated for a VOICE-ONLY product — pace, tone, and silence
  * are the nonverbal channel here. The medical boundary is a hard rule, not a
@@ -319,59 +337,90 @@ export const CLINICAL_VOCABULARY_BLACKLIST: readonly string[] = [
 
 /**
  * Hard guardrails for body-history conversations — the script's own rules plus
- * the spec's Sentinel gates, restated as landmines that constrain every reply.
+ * the spec's Sentinel gates, restated as landmines. Each guardrail is scoped:
+ * 'all' guardrails constrain every fired turn; area-scoped guardrails ship
+ * ONLY when their area fired — a turn never carries another area's rules.
  */
-export const EMBODIED_MAN_GUARDRAILS: readonly string[] = [
-  'Never interpret his body for him. "It sounds like your body is…" fails. Reflecting what HE said his body did passes.',
-  'Never assume or suggest that pain, illness, a scar, or a body part has an emotional or psychological cause. No causal body-mind narratives, ever.',
-  'Never diagnose or prognose: no statement about what a symptom is, what condition he has, or what will happen to his body.',
-  'On a current, untreated, or concerning symptom, the ONLY move is the standing referral line, said once: encourage him to get it looked at by someone who can actually examine it, then continue or stop as he chooses. Never repeat the referral, never probe the cause, never ask more than once whether he has seen a doctor.',
-  'Touch, intimacy, sexuality, self-touch, body image, and pleasure require HIS explicit opening. If he has not opened that door, do not raise these topics. If he has, keep it non-graphic — never ask for description of sexual activity, injury, or illness in graphic detail.',
-  'A narrowed or withdrawn topic is closed instantly and stays closed: no returning to it, no asking why, no negotiating.',
-  'Silence is allowed. "I don\'t know" is a valid answer — never push past it, never rephrase the same question at higher intensity.',
-  'Simpler, not harder: when he is stuck, flat, numb, or minimising, the next question is smaller — narrower in time, closer to the body — never more abstract, more emotional, or more layered.',
-  'One main question per turn. Never two questions in one reply.',
-  'Plain body words before emotional language, emotional language before psychological language. Do not promote his sensation into an emotion, or his emotion into a diagnosis.',
-  'Word menus are offered only when he is stuck on a body-word question, and always as a choice he can decline ("whatever fits — or nothing"), never as a list he must answer.',
-  'Never introduce clinical vocabulary — trauma, dysregulation, hyperarousal, hypoarousal, dissociation, somatic, nervous system, fight/flight/freeze as a named model, triggered, regulate, window of tolerance, attachment style, or any diagnosis name. Reflecting HIS OWN word back is permitted; introducing one is not.',
-  'Never characterize the third parties he names — partners, ex-partners, parents, children, other men. Never adjudicate his stories about them, and never script language for him to deliver to them; repair questions ask what HE would do, not what he should say.',
-  'A heavy disclosure pauses forward motion: reflect more than you ask, and never move to a new topic because time has passed. Never advance mid-disclosure.',
-  'Any closing reflection is assembled only from what he actually said: no pattern named as a pattern, no theme he did not say, no recommendation, no score, no comparison to other men.',
-  'This is not therapy, not coaching, not assessment — do not slip into any of those postures, and do not promise outcomes from the conversation itself.',
-  'Crisis turns are unchanged: the sentinel layer owns them and bypasses all of this.',
+export interface EmbodiedManGuardrail {
+  text: string;
+  areas: readonly EmbodiedManArea[] | 'all';
+}
+
+export const EMBODIED_MAN_GUARDRAILS: readonly EmbodiedManGuardrail[] = [
+  { areas: 'all', text: 'Never interpret his body for him. "It sounds like your body is…" fails. Reflecting what HE said his body did passes.' },
+  { areas: 'all', text: 'Never assume or suggest that pain, illness, a scar, or a body part has an emotional or psychological cause. No causal body-mind narratives, ever.' },
+  { areas: 'all', text: 'Never diagnose or prognose: no statement about what a symptom is, what condition he has, or what will happen to his body.' },
+  { areas: 'all', text: 'One main question per turn. Never two questions in one reply.' },
+  { areas: 'all', text: 'Plain body words before emotional language, emotional language before psychological language. Do not promote his sensation into an emotion, or his emotion into a diagnosis.' },
+  { areas: 'all', text: 'Never introduce clinical vocabulary — trauma, dysregulation, hyperarousal, hypoarousal, dissociation, somatic, nervous system, fight/flight/freeze as a named model, triggered, regulate, window of tolerance, attachment style, or any diagnosis name. Reflecting HIS OWN word back is permitted; introducing one is not.' },
+  { areas: 'all', text: 'Never characterize the third parties he names — partners, ex-partners, parents, children, other men. Never adjudicate his stories about them, and never script language for him to deliver to them; repair questions ask what HE would do, not what he should say.' },
+  { areas: 'all', text: 'This is not therapy, not coaching, not assessment — do not slip into any of those postures, and do not promise outcomes from the conversation itself.' },
+  { areas: 'all', text: 'Crisis: acute crisis turns never reach this module — they early-return before the whisperer tier. Passive-crisis (elevated) turns DO pass through; when they do, the crisis layer\'s guidance and resources outrank everything here.' },
+  { areas: ['medical_mention'], text: 'On a current, untreated, or concerning symptom, the ONLY move is the standing referral line, said once: encourage him to get it looked at by someone who can actually examine it, then continue or stop as he chooses. Never repeat the referral, never probe the cause, never ask more than once whether he has seen a doctor.' },
+  { areas: ['touch_intimacy'], text: 'Touch, intimacy, sexuality, self-touch, body image, and pleasure require HIS explicit opening. If he has not opened that door, do not raise these topics. If he has, keep it non-graphic — never ask for description of sexual activity, injury, or illness in graphic detail.' },
+  { areas: ['consent_signal'], text: 'A narrowed or withdrawn topic is closed instantly and stays closed: no returning to it, no asking why, no negotiating.' },
+  { areas: ['stuck_signal'], text: 'Silence is allowed. "I don\'t know" is a valid answer — never push past it, never rephrase the same question at higher intensity.' },
+  { areas: ['stuck_signal'], text: 'Simpler, not harder: when he is stuck, flat, numb, or minimising, the next question is smaller — narrower in time, closer to the body — never more abstract, more emotional, or more layered.' },
+  { areas: ['stuck_signal', 'body_quality', 'body_locus'], text: 'Word menus are offered only when he is stuck on a body-word question, and always as a choice he can decline ("whatever fits — or nothing"), never as a list he must answer.' },
+  { areas: ['body_says_enough', 'hidden_feelings'], text: 'A heavy disclosure pauses forward motion: reflect more than you ask, and never move to a new topic because time has passed. Never advance mid-disclosure.' },
+  { areas: ['letter_to_body'], text: 'Any closing reflection is assembled only from what he actually said: no pattern named as a pattern, no theme he did not say, no recommendation, no score, no comparison to other men.' },
 ];
 
-/** Keyword → area detection, same shape as listening-knowledge.ts. */
-const AREA_SIGNALS: Record<EmbodiedManArea, readonly string[]> = {
+/** Every guardrail text, for inventory tests. */
+export const ALL_GUARDRAIL_TEXTS: readonly string[] = EMBODIED_MAN_GUARDRAILS.map((g) => g.text);
+
+/**
+ * The guardrails a fired area ships: every 'all' guardrail plus the ones
+ * scoped to that area. This is the ONLY guardrail list injected per turn.
+ */
+export function guardrailsForArea(area: EmbodiedManArea): string[] {
+  return EMBODIED_MAN_GUARDRAILS
+    .filter((g) => g.areas === 'all' || g.areas.includes(area))
+    .map((g) => g.text);
+}
+
+/**
+ * Keyword → area detection. Every token here is owned by this module in
+ * trigger-registry.ts: contested tokens ("i'm fine", "hard to explain",
+ * "not a big deal", "furious", …) belong to listening, and idiom/filler
+ * tokens ("whatever", "shame", "the guys", "my brother", "getting older",
+ * "slowing down", "at my age", "i guess", "it is what it is") are banned
+ * outright — none of them appear here. Matching is whole-phrase via the
+ * registry, never bare substring.
+ */
+export const EMBODIED_MAN_AREA_SIGNALS: Record<EmbodiedManArea, readonly string[]> = {
   body_check_in: ['right now my body', 'my body feels', 'how my body feels', 'body feels right now', 'feel it right now'],
   body_locus: ['in my chest', 'in my shoulders', 'in my jaw', 'in my stomach', 'in my throat', 'in my neck', 'in my back', 'in my hands', 'in my gut', 'knot in my', 'pit of my stomach', 'tight chest', 'chest gets tight', 'shoulders go up', 'clench'],
   body_quality: ['feels tight', 'feels heavy', 'feel numb', 'feels numb', 'feeling numb', 'feels hollow', 'feels empty', 'shaky', 'tingly', 'achy', 'fluttery', 'pressure in my', 'tension in my', 'wound up', 'wired', 'on edge'],
   body_impulse: ['wanted to run', 'wanted to hide', 'wanted to yell', 'wanted to scream', 'wanted to cry', 'wanted to disappear', 'wanted to hit', 'wanted to punch', 'i froze', 'i just froze', 'froze up', 'shut down', 'wanted to be held', 'wanted someone to hold'],
-  stuck_signal: ["i don't know", 'i dunno', 'dont know', 'not sure what i feel', "can't describe", 'cant describe', 'hard to explain', 'no idea what i feel', 'i guess', 'whatever', 'it is what it is', "i'm fine", "it's fine", 'not a big deal', 'nothing really', 'doesn\'t matter'],
+  stuck_signal: ["i don't know", 'i dunno', 'dont know', 'not sure what i feel', "can't describe", 'cant describe', 'no idea what i feel', 'nothing really', "doesn't matter", 'doesnt matter'],
   medical_mention: ['chest pain', 'chest tightness', 'shortness of breath', "can't breathe right", 'havent seen a doctor', "haven't seen a doctor", "haven't been to the doctor", "haven't had it checked", "haven't gotten it checked", "haven't got it checked", 'never got it checked', 'undiagnosed', 'blood in my', 'found a lump', "haven't slept in days", "can't sleep for days", 'keeps me up at night', 'pain that won\'t go away', 'pain that wont go away'],
   consent_signal: ["i'd rather not", 'rather not talk', 'rather not go there', 'can we skip', 'skip that', "don't want to talk about", "dont want to talk about", 'off limits', 'off-limits', 'not comfortable talking', "that's private", "don't ask about", 'change the subject', "that's fine to ask", 'okay to ask', 'you can ask'],
-  touch_intimacy: ['sex life', 'intimacy', 'intimate', 'being touched', 'being held', 'cuddling', 'affection', 'masturbat', 'erectile', 'libido', 'in the bedroom', 'my naked body', 'body image', 'how my body looks', 'pleasure', 'sexually', 'no sex', 'sexless', 'hugged'],
-  hidden_feelings: ['angry', 'anger', 'rage', 'furious', 'ashamed', 'shame', 'scared', 'terrified', 'humiliated', 'embarrassed to say', 'lonely', 'loneliness'],
+  touch_intimacy: ['sex life', 'intimacy', 'intimate', 'being touched', 'being held', 'cuddling', 'affection', 'masturbate', 'masturbating', 'masturbation', 'erectile', 'libido', 'in the bedroom', 'my naked body', 'body image', 'how my body looks', 'pleasure', 'sexually', 'no sex', 'sexless', 'hugged'],
+  hidden_feelings: ['anger', 'rage', 'ashamed', 'scared', 'terrified', 'humiliated', 'embarrassed to say', 'lonely', 'loneliness'],
   body_says_enough: ['burnout', 'burned out', 'burnt out', 'breakdown', 'panic attack', 'panic attacks', 'injured', 'injury', 'surgery', 'diagnosed', 'diagnosis', 'chronic pain', 'collapsed', 'gave out', "couldn't get out of bed", 'body quit', 'body gave up', 'heart attack', 'stroke'],
-  men_with_men: ['my buddy', 'my buddies', 'the guys', "men's group", 'mens group', 'another man', 'my best friend', 'my brother', 'my brothers', 'hugged me', 'my old man'],
-  aging_body_now: ['getting older', 'getting old', 'my knees', 'gray hair', 'grey hair', 'not 25 anymore', 'used to be able', "can't do what i used", 'slowing down', 'at my age', 'my body now', 'as i get older', 'as i age'],
+  men_with_men: ['my buddy', 'my buddies', "men's group", 'mens group', 'another man', 'my best friend', 'hugged me', 'my old man'],
+  aging_body_now: ['getting old', 'my knees', 'gray hair', 'grey hair', 'not 25 anymore', 'used to be able', "can't do what i used", 'my body now', 'as i get older', 'as i age'],
   letter_to_body: ['dear body', 'letter to my body', 'what would my body say', 'if my body could', 'my body would say', 'thank my body', 'sorry to my body'],
 };
 
-/** Deterministic detection: which embodied-man areas does this turn touch? */
+/**
+ * Deterministic detection via the shared registry rules: whole-phrase
+ * matching, two-signals-or-long-utterance eligibility, ONE area per turn
+ * (most hits wins; ties break by EMBODIED_MAN_AREAS order). Returns an array
+ * of zero or one areas — empty means: stay out of this turn.
+ */
 export function detectEmbodiedManAreas(message: string): EmbodiedManArea[] {
-  const lower = message.toLowerCase();
-  const hits: EmbodiedManArea[] = [];
-  for (const area of EMBODIED_MAN_AREAS) {
-    if (AREA_SIGNALS[area].some((signal) => lower.includes(signal))) hits.push(area);
-  }
-  return hits;
+  const area = pickTriggeredArea(message.toLowerCase(), EMBODIED_MAN_AREA_SIGNALS, EMBODIED_MAN_AREAS);
+  return area === null ? [] : [area];
 }
 
 /**
  * Deterministic assembly: the internal guidance note for the Composer.
- * Renders detected areas as internal coaching for Marcus, plus the guardrails.
- * Written as guidance, never as a script to read aloud.
+ * Renders the ONE fired area as internal coaching for Marcus. Guardrails are
+ * NOT in this note — they render exactly once, as landmines, scoped to the
+ * fired area (see guardrailsForArea). Written as guidance, never as a script
+ * to read aloud.
  */
 export function buildEmbodiedManNote(areas: readonly EmbodiedManArea[]): string | null {
   if (areas.length === 0) return null;
@@ -388,12 +437,11 @@ export function buildEmbodiedManNote(areas: readonly EmbodiedManArea[]): string 
     'How to use this note: pick the ONE move that fits what he just said and deliver it in your own plain voice, the way you already talk. Never read the note\'s phrasing back, never stack every technique into one reply — if the reply would sound canned read aloud, do not send it.',
     ...lines,
     ...sections,
-    'Standing guardrails for the reply:',
-    ...EMBODIED_MAN_GUARDRAILS.map((g) => `- ${g}`),
   ].join('\n');
 }
 
 import type { StateEnvelope } from '../agents/state-envelope';
+import { pickTriggeredArea } from './trigger-registry';
 
 /**
  * The single call site helper the v2 orchestrator uses on every turn. Body-history
@@ -410,6 +458,6 @@ export function applyEmbodiedManKnowledge(env: Pick<StateEnvelope, 'utterance' |
   if (note === null) return;
   env.domain_whisperers.invoked.push('embodied_man');
   env.domain_whisperers.context_notes.push(note);
-  env.domain_whisperers.landmines.push(...EMBODIED_MAN_GUARDRAILS);
+  env.domain_whisperers.landmines.push(...guardrailsForArea(areas[0]));
   env.domain_whisperers.frameworks_applied.push(...areas.map((a) => EMBODIED_MAN_LENS[a]));
 }
