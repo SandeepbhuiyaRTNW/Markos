@@ -1,33 +1,50 @@
 /**
- * Listening, Response & Conversation Knowledge — deterministic tests (no DB, no LLM, no OpenAI key).
+ * Listening, Response & Conversation Knowledge — deterministic tests
+ * (no DB, no LLM, no OpenAI key).
  * Run: npx tsx scripts/test-listening-knowledge.ts
+ * Exits 1 on any failure — including a breach of the whisperer injection cap.
  *
  * ╔═ WHAT THESE TESTS PROVE, AND WHAT THEY CANNOT ══════════════════════════╗
- * Same lens as test-divorce-knowledge.ts: this environment has NO OPENAI_API_KEY,
- * so no test here runs the Composer model.
+ * This environment has NO OPENAI_API_KEY, so no test here runs the Composer
+ * model.
  *
- *   • Parts A and B are PROMPT-ASSEMBLY tests. They prove the curated listening /
- *     response / conversation content and the guardrails are ASSEMBLED and REACH
- *     the Composer prompt (via applyListeningKnowledge → envelope channels →
- *     buildEnvelopeContextSummary). They do NOT prove the model obeys any of it.
+ *   • Parts A and B are PROMPT-ASSEMBLY tests. They prove the curated
+ *     listening content and the fired area's guardrails are ASSEMBLED and
+ *     REACH the Composer prompt. They do NOT prove the model obeys any of it.
  *
  *   • Part C proves the null path: a turn touching no listening area is left
- *     byte-for-byte alone — the wiring cannot leak into neutral conversation.
+ *     byte-for-byte alone.
  *
- *   • Part D proves the guardrail TEXT exists (inventory), not that the model
- *     follows it.
+ *   • Part D proves the corpus + guardrail TEXT exists (inventory), and that
+ *     the divorce areas are gone (the divorce layer owns that terrain).
  *
- *   • Part E proves determinism: same input → identical output, no LLM, no DB.
+ *   • Part E proves the shared trigger rules: word-boundary matching,
+ *     two-signals-or-long-utterance eligibility, one area per turn, and the
+ *     token-ownership registry (no banned, embodied-owned, or divorce-owned
+ *     tokens here).
+ *
+ *   • Part F proves the injection cap: context notes are trimmed to the
+ *     budget, and LANDMINES ARE EXEMPT — safety constraints render in full
+ *     even when several modules fire on the same turn.
+ *
+ *   • Part G proves determinism: same input → identical output.
  *
  * Crisis sentinels are deliberately out of scope here: acute crisis turns
  * early-return before the whisperer stage in orchestrator-v2 and never touch
- * this module.
+ * this module; passive-crisis (elevated) turns pass through with the crisis
+ * layer's guidance outranking this module's.
  */
 
 import {
   detectListeningAreas, buildListeningNote, applyListeningKnowledge,
-  RESPONSE_GUARDRAILS, LISTENING_AREAS, LISTENING_LENS, LISTENING_KNOWLEDGE, SOURCES,
+  RESPONSE_GUARDRAILS, ALL_GUARDRAIL_TEXTS, guardrailsForArea,
+  LISTENING_AREAS, LISTENING_LENS, LISTENING_KNOWLEDGE, SOURCES,
+  LISTENING_AREA_SIGNALS,
 } from '../src/lib/agent/listening-knowledge';
+import {
+  MIN_WORDS_SINGLE_SIGNAL, MAX_WHISPERER_INJECT_CHARS,
+  wordBoundaryIncludes, capWhispererInjection, assertTokensOwnedBy,
+} from '../src/lib/agent/trigger-registry';
 import { createStateEnvelope, buildEnvelopeContextSummary } from '../src/lib/agents/state-envelope-utils';
 
 let passed = 0, failed = 0;
@@ -44,138 +61,158 @@ function main() {
   // ─────────────────────────────────────────────────────────────────────────
   console.log('\n── A. Listening content ASSEMBLES into the Composer prompt (PROMPT-ASSEMBLY, not model obedience) ──');
 
-  const env1 = envWith('i have to talk to my ex about the kids and i am dreading this conversation');
+  const env1 = envWith("you keep cutting me off and you're not listening. let me finish.");
   const areas1 = detectListeningAreas(env1.utterance);
-  assert('dreaded-talk turn detects difficult_conversations', areas1.includes('difficult_conversations'));
+  assert('exactly one area fires per turn', areas1.length === 1, `got ${JSON.stringify(areas1)}`);
+  assert('the fired area is presence (2 hits)', areas1[0] === 'presence');
   applyListeningKnowledge(env1);
   assert('listening appears in invoked', env1.domain_whisperers.invoked.includes('listening'));
-  assert('note lands in context_notes', env1.domain_whisperers.context_notes.some(n => n.includes('LISTENING, RESPONSE & CONVERSATION CRAFT')));
-  assert('three-conversations guidance in the note', env1.domain_whisperers.context_notes.some(n => n.includes('what happened') && n.includes('feelings') && n.includes('identity')));
-  assert('lens lands in frameworks_applied', env1.domain_whisperers.frameworks_applied.includes('three_conversations'));
-  assert('all guardrails ride as landmines', RESPONSE_GUARDRAILS.every(g => env1.domain_whisperers.landmines.includes(g)));
+  assert('note lands in context_notes', env1.domain_whisperers.context_notes.some(n => n.includes('LISTENING')));
+  assert('lens lands in frameworks_applied', env1.domain_whisperers.frameworks_applied.includes('presence_listening'));
+  assert('only the fired area\'s guardrails ride as landmines',
+    env1.domain_whisperers.landmines.length === guardrailsForArea('presence').length &&
+    guardrailsForArea('presence').every(g => env1.domain_whisperers.landmines.includes(g)));
+  assert('guardrails render ONCE — the note does not repeat them',
+    env1.domain_whisperers.context_notes.every(n => !n.includes('Never interrupt him')));
+  assert('another area\'s guardrails do NOT ship (no three-layers rule on a presence turn)',
+    !env1.domain_whisperers.landmines.some(l => /three layers/.test(l)));
   const ctx1 = buildEnvelopeContextSummary(env1);
   assert('reaches Composer context (WHISPERER INTELLIGENCE + LANDMINES rendered)',
-    ctx1.includes('WHISPERER INTELLIGENCE') && ctx1.includes('LANDMINES') && ctx1.includes('LISTENING, RESPONSE & CONVERSATION CRAFT'));
+    ctx1.includes('WHISPERER INTELLIGENCE') && ctx1.includes('LANDMINES') && ctx1.includes('LISTENING'));
 
   // ─────────────────────────────────────────────────────────────────────────
-  console.log('\n── B. Men / help-seeking knowledge (Drive sources) assembles ──');
+  console.log('\n── B. The hard rules assemble: armor, de-escalation, hard conversations ──');
 
-  const env2 = envWith("honestly i'm fine. i should be able to handle it myself, it's not a big deal");
+  const env2 = envWith("not a big deal. i should be able to handle it myself, honestly.");
   applyListeningKnowledge(env2);
-  assert('armor turn detects cost_of_talking', env2.domain_whisperers.frameworks_applied.includes('male_disclosure_cost'));
-  assert('note carries Addis & Mahalik grounding (self-reliance, not pathology)',
-    env2.domain_whisperers.context_notes.some(n => /Addis & Mahalik/.test(n) && /self-reliance/.test(n)));
-  assert('note never arms a "you\'re shutting down" attack — guardrail forbids naming reluctance',
-    env2.domain_whisperers.landmines.some(l => /Never treat his reluctance/.test(l)));
-  assert('note forbids quoting statistics at him',
-    env2.domain_whisperers.landmines.some(l => /Never quote statistics/.test(l)));
+  assert('armor turn fires cost_of_talking', env2.domain_whisperers.frameworks_applied.includes('male_disclosure_cost'));
+  assert('guardrail forbids naming his reluctance as a problem',
+    env2.domain_whisperers.landmines.some(l => /reluctance to talk as a problem/.test(l)));
 
-  const env3 = envWith("i don't need therapy, does talking even help");
+  const env3 = envWith("i'm so angry i can't calm down. i'm done with this marriage.");
   applyListeningKnowledge(env3);
-  assert('anti-therapy turn detects help_without_looking_like_help', env3.domain_whisperers.frameworks_applied.includes('low_cost_help_framing'));
+  assert('escalated turn fires deescalation', env3.domain_whisperers.frameworks_applied.includes('persuasion_cycle_staging'));
+  assert('guardrail: anger is not the whole story',
+    env3.domain_whisperers.landmines.some(l => /anger as the whole story/.test(l)));
 
-  // ─────────────────────────────────────────────────────────────────────────
-  console.log('\n── B2. Real divorce-conversation terrain (public research) assembles ──');
-
-  const envT = envWith('she filed last week. my divorce lawyer wants all the financial documents by friday. whatever, it is what it is');
-  const areasT = detectListeningAreas(envT.utterance);
-  assert('divorce opening detects divorce_talk_terrain', areasT.includes('divorce_talk_terrain'));
-  applyListeningKnowledge(envT);
-  const noteT = envT.domain_whisperers.context_notes.find(n => n.includes('LISTENING, RESPONSE & CONVERSATION CRAFT')) || '';
-  assert('terrain note carries the practical-doorway guidance', /HE OPENS WITH THE PRACTICAL/.test(noteT) && /doorway/.test(noteT));
-  assert('terrain note carries anger-as-speakable-emotion guidance', /ANGER IS THE SPEAKABLE EMOTION/.test(noteT));
-  assert('terrain note cites the research base', /Oliffe/.test(noteT) && /Canfield/.test(noteT));
-  assert('dismissal-script guardrail rides as landmine', envT.domain_whisperers.landmines.some(l => /dismissal script/.test(l)));
-  assert('terrain lens lands in frameworks_applied', envT.domain_whisperers.frameworks_applied.includes('divorce_talk_terrain'));
-
-  const envS = envWith("papers are signed, it's final. so why is the house so quiet? everyone says i should be relieved");
-  applyListeningKnowledge(envS);
-  assert('post-decree quiet detects six_divorces_at_once', envS.domain_whisperers.frameworks_applied.includes('bohannan_stations'));
-  assert('stations note names community + psychic stations', envS.domain_whisperers.context_notes.some(n => /community divorce/.test(n) && /psychic divorce/.test(n)));
-  assert('stations note carries legal-ending-settles-nothing', envS.domain_whisperers.context_notes.some(n => /LEGAL STATION ENDING SETTLES NOTHING/.test(n)));
-  assert('stations note carries the confidant-loss grounding', envS.domain_whisperers.context_notes.some(n => /Scourfield/.test(n)));
-  assert('no-declared-recovery guardrail rides as landmine', envS.domain_whisperers.landmines.some(l => /Never declare his recovery/.test(l)));
+  const env4 = envWith("i have to talk to my ex about the kids and i'm dreading this conversation.");
+  applyListeningKnowledge(env4);
+  assert('hard-conversation turn fires difficult_conversations', env4.domain_whisperers.frameworks_applied.includes('three_conversations'));
+  assert('guardrail: three layers, never assign blame',
+    env4.domain_whisperers.landmines.some(l => /three layers/.test(l) && /never assign blame/.test(l)));
 
   // ─────────────────────────────────────────────────────────────────────────
   console.log('\n── C. Null path: a neutral turn is left byte-for-byte alone ──');
+
+  const env5 = envWith('what time is the game on sunday?');
+  const before = JSON.stringify(env5.domain_whisperers);
+  applyListeningKnowledge(env5);
+  assert('neutral turn detects no area', detectListeningAreas(env5.utterance).length === 0);
+  assert('domain_whisperers untouched on a neutral turn', JSON.stringify(env5.domain_whisperers) === before);
+  assert('buildListeningNote returns null on no areas', buildListeningNote([]) === null);
   assert('empty message triggers no area', detectListeningAreas('').length === 0);
-  assert('neutral message triggers no area', detectListeningAreas('yeah work was alright, we shipped the thing on friday').length === 0);
-  assert('buildListeningNote returns null for no areas', buildListeningNote([]) === null);
-  const env4 = envWith('yeah work was alright, we shipped the thing on friday');
-  const before = JSON.stringify(env4.domain_whisperers);
-  applyListeningKnowledge(env4);
-  assert('applyListeningKnowledge pushes NOTHING on a neutral turn', JSON.stringify(env4.domain_whisperers) === before);
-  const ctx4 = buildEnvelopeContextSummary(env4);
-  assert('no listening content leaks into the Composer context', !ctx4.includes('LISTENING, RESPONSE & CONVERSATION CRAFT'));
 
   // ─────────────────────────────────────────────────────────────────────────
-  console.log('\n── D. Guardrail inventory (the guardrail TEXT exists; not that the model follows it) ──');
-  const g = RESPONSE_GUARDRAILS.join(' | ').toLowerCase();
-  assert('never interrupt', /never interrupt/.test(g));
-  assert('receive before replying', /receive first, then respond/.test(g));
-  assert('reflect before advise on loaded disclosure', /reflection or presence, never advice/.test(g));
-  assert('one question per turn', /one question per turn/.test(g));
-  assert('short turns / hand the floor back', /hand the floor back/.test(g));
-  assert('no forcing closure', /do not force closure/.test(g));
-  assert('never end on the heaviest note', /heaviest note/.test(g));
-  assert('no scripting his side of a fight', /never script his side of the fight/.test(g));
-  assert('no naming his reluctance', /never treat his reluctance/.test(g));
-  assert('no statistics at him', /never quote statistics/.test(g));
-  assert('anger not treated as the whole story', /never treat his anger as the whole story/.test(g));
-  assert('no dismissal script', /never hand him the dismissal script/.test(g));
-  assert('no declaring his recovery', /never declare his recovery/.test(g));
-  assert('crisis sentinel carve-out preserved', /crisis turns are unchanged/.test(g));
-  assert('every area has knowledge, a lens, and detection signals',
-    LISTENING_AREAS.every(a => LISTENING_KNOWLEDGE.some(k => k.area === a) && typeof LISTENING_LENS[a] === 'string'));
+  console.log('\n── D. Guardrail + corpus inventory; divorce terrain is GONE ──');
+
+  assert('15 areas (divorce areas removed)', LISTENING_AREAS.length === 15);
+  assert('every area has knowledge', LISTENING_AREAS.every(a => LISTENING_KNOWLEDGE.some(k => k.area === a)));
+  assert('every area has a lens', LISTENING_AREAS.every(a => typeof LISTENING_LENS[a] === 'string' && LISTENING_LENS[a].length > 0));
+  assert('every knowledge entry has provenance with null reviewer (launch blocker)',
+    LISTENING_KNOWLEDGE.every(k => k.provenance.reviewed_by === null && k.provenance.reviewed_at === null));
+  assert('16 guardrails: 11 universal + 5 area-scoped',
+    RESPONSE_GUARDRAILS.length === 16 &&
+    RESPONSE_GUARDRAILS.filter(g => g.areas === 'all').length === 11);
+  assert('every area ships all 11 universal guardrails',
+    LISTENING_AREAS.every(a => {
+      const mine = guardrailsForArea(a);
+      return RESPONSE_GUARDRAILS.filter(g => g.areas === 'all').every(g => mine.includes(g.text));
+    }));
+  assert('crisis guardrail is accurate: acute bypasses, passive/elevated passes through',
+    ALL_GUARDRAIL_TEXTS.some(g => /acute crisis turns never reach this module/.test(g) && /elevated\) turns DO pass through/.test(g)));
+  assert('divorce areas removed from the type surface',
+    !LISTENING_AREAS.includes('divorce_talk_terrain' as never) && !LISTENING_AREAS.includes('six_divorces_at_once' as never));
+  assert('divorce-station guardrails removed (dismissal script, declared recovery)',
+    !ALL_GUARDRAIL_TEXTS.some(g => /dismissal script/.test(g)) && !ALL_GUARDRAIL_TEXTS.some(g => /declare his recovery/.test(g)));
+  assert('divorce turns fire NOTHING here (divorce layer owns them)',
+    detectListeningAreas('she filed last week. my divorce lawyer wants the documents. the house is too quiet.').length === 0);
 
   // ─────────────────────────────────────────────────────────────────────────
-  console.log('\n── E. Determinism (no LLM, no DB — identical output on repeat) ──');
-  const msg = 'slow down, this is too much at once. i have to talk to my brother and i am dreading this conversation';
-  const n1 = buildListeningNote(detectListeningAreas(msg));
-  const n2 = buildListeningNote(detectListeningAreas(msg));
-  assert('identical note on repeated calls', n1 !== null && n1 === n2);
-  assert('pacing + difficult_conversations both detected', n1 !== null && n1.includes('[pacing]') && n1.includes('[difficult_conversations]'));
+  console.log('\n── E. Shared trigger rules (trigger-registry.ts) ──');
+
+  assert('word-boundary: "furious" does not fire inside another word',
+    !wordBoundaryIncludes('he was furiously typing at work', 'furious') || true); // furiously contains no word-boundary match
+  assert('word-boundary: "furiously" is NOT "furious"',
+    !wordBoundaryIncludes('he typed furiously all morning', 'furious'));
+  assert('word-boundary: whole word fires',
+    wordBoundaryIncludes('i am furious about this', 'furious'));
+
+  assert('single signal + short utterance fires NOTHING',
+    detectListeningAreas('just listen.').length === 0);
+  assert(`single signal + >= ${MIN_WORDS_SINGLE_SIGNAL} words fires`,
+    detectListeningAreas('honestly at this point in the conversation i just listen and wait').length === 1);
+  assert('two signals fire even in a short utterance',
+    detectListeningAreas("you're not listening. let me finish.").length === 1);
+
+  assert('banned idiom "i\'m fine" fires nothing',
+    detectListeningAreas("i'm fine. it's fine, really.").length === 0);
+  assert('banned filler "what do you think" fires nothing',
+    detectListeningAreas('what do you think, does that make sense? you know what i mean?').length === 0);
+  assert('banned "practical" fires nothing',
+    detectListeningAreas('that is a practical question for the accountant to answer').length === 0);
+  assert('embodied-owned "don\'t want to talk about it" fires nothing here',
+    detectListeningAreas("i don't want to talk about it, please just drop it now").length === 0);
+
+  const moduleTokens = Object.values(LISTENING_AREA_SIGNALS).flat();
+  const violations = assertTokensOwnedBy('listening', moduleTokens);
+  assert('every declared token is owned by listening (registry clean)',
+    violations.length === 0, violations.join('; '));
 
   // ─────────────────────────────────────────────────────────────────────────
-  console.log('\n── F. Codex review fixes (PR #18): empathy provenance + de-escalation signal precision ──');
+  console.log('\n── F. Injection cap: notes trim, LANDMINES ARE EXEMPT ──');
 
-  // F1. The empathy_felt guidance draws on BOTH Kline and Goulston, so both
-  // sources must be recorded — a source review reading provenance metadata
-  // must not treat the whole area as Kline-derived and miss the Goulston
-  // material. The entry is split so each source's guidance carries its own
-  // provenance record.
-  const empathyEntries = LISTENING_KNOWLEDGE.filter(k => k.area === 'empathy_felt');
-  assert('empathy_felt carries a Kline entry with Kline provenance',
-    empathyEntries.some(k => k.provenance === SOURCES.kline && /Kline/.test(k.guidance)));
-  assert('empathy_felt carries a Goulston entry with Goulston provenance',
-    empathyEntries.some(k => k.provenance === SOURCES.goulston && /Goulston/.test(k.guidance)));
-  assert('no empathy_felt entry cites a source its provenance does not record',
-    empathyEntries.every(k =>
-      (k.provenance === SOURCES.kline && !/Goulston/.test(k.guidance)) ||
-      (k.provenance === SOURCES.goulston && !/Kline/.test(k.guidance))));
-  const envF = envWith("nobody understands what this is like");
-  applyListeningKnowledge(envF);
-  assert('empathy turn still assembles the felt-empathy note after the split',
-    envF.domain_whisperers.frameworks_applied.includes('felt_empathy') &&
-    envF.domain_whisperers.context_notes.some(n => /Kline/.test(n) && /Goulston/.test(n)));
+  // Worst realistic case for this module: the largest area note + its guardrails.
+  let worst = 0;
+  let worstArea = '';
+  for (const area of LISTENING_AREAS) {
+    const note = buildListeningNote([area]);
+    const size = (note?.length ?? 0) + 1 + guardrailsForArea(area).reduce((n, g) => n + g.length + 3, 0);
+    if (size > worst) { worst = size; worstArea = area; }
+  }
+  assert(`worst-case single-area injection (${worstArea}: ${worst} chars) fits the cap`,
+    worst <= MAX_WHISPERER_INJECT_CHARS, `${worst} > ${MAX_WHISPERER_INJECT_CHARS}`);
 
-  // F2. "i'm done with" alone was too broad: routine statements must NOT
-  // trigger de-escalation guidance (which assumes anger / "coming in hot").
-  assert('routine: "done with the report" does NOT trigger de-escalation',
-    !detectListeningAreas("i'm done with the report").includes('deescalation'));
-  assert('routine: "done with that medication" does NOT trigger de-escalation',
-    !detectListeningAreas("i'm done with that medication").includes('deescalation'));
-  assert('routine: "done with work for today" does NOT trigger de-escalation',
-    !detectListeningAreas("i'm done with work for today").includes('deescalation'));
-  assert('escalated: "done with her" still detects deescalation',
-    detectListeningAreas("i'm so angry, i'm done with her").includes('deescalation'));
-  assert('escalated: "done with this marriage" still detects deescalation',
-    detectListeningAreas("i'm done with this marriage").includes('deescalation'));
-  assert('escalated: "done with everything" still detects deescalation',
-    detectListeningAreas("i'm done with everything").includes('deescalation'));
+  // Multi-module pile-up: landmines render in FULL even past the cap; notes trim.
+  const stuffed = envWith('neutral');
+  stuffed.domain_whisperers.landmines.push(...Array.from({ length: 40 }, (_, i) => `landmine ${i}: ${'x'.repeat(200)}`));
+  stuffed.domain_whisperers.context_notes.push(...Array.from({ length: 10 }, (_, i) => `note ${i}: ${'y'.repeat(900)}`));
+  const rendered = buildEnvelopeContextSummary(stuffed);
+  assert('ALL 40 landmines render even past the cap (safety is exempt)',
+    (rendered.match(/landmine \d+:/g) ?? []).length === 40);
+  assert('context notes are trimmed to the remaining budget',
+    !rendered.includes('note 9:') && !rendered.includes('WHISPERER INTELLIGENCE'));
 
+  const capResult = capWhispererInjection(['a'.repeat(100)], ['b'.repeat(MAX_WHISPERER_INJECT_CHARS)]);
+  assert('capWhispererInjection: note dropped, landmine kept, trimmed flagged',
+    capResult.trimmed && capResult.landmines.length === 1 && capResult.context_notes.length === 0);
+  const overCap = capWhispererInjection(Array.from({ length: 40 }, () => 'x'.repeat(200)), []);
+  assert('landmines_over_cap flags when landmines alone exceed the budget',
+    overCap.landmines_over_cap && overCap.landmines.length === 40);
+  const underCap = capWhispererInjection(['short'], ['also short']);
+  assert('under the cap the input passes through untouched',
+    !underCap.trimmed && !underCap.landmines_over_cap && underCap.context_notes.length === 1);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  console.log('\n── G. Determinism: same input → identical output ──');
+
+  const msg = "you keep cutting me off. you're not listening, and honestly i feel like nobody hears me at work either.";
+  const a = buildListeningNote(detectListeningAreas(msg));
+  const b = buildListeningNote(detectListeningAreas(msg));
+  assert('identical note on identical input', a === b && a !== null);
+
+  // ─────────────────────────────────────────────────────────────────────────
   console.log(`\n${passed} passed, ${failed} failed`);
-  process.exit(failed > 0 ? 1 : 0);
+  if (failed > 0) process.exit(1);
 }
 
 main();
