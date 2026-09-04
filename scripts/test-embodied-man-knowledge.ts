@@ -229,11 +229,16 @@ function main() {
   const rendered = buildEnvelopeContextSummary(stuffed);
   const lmMatch = rendered.match(/## LANDMINES — DO NOT:\n([\s\S]*?)(\n\n## |\n\n$|$)/);
   const wiMatch = rendered.match(/## WHISPERER INTELLIGENCE\n([\s\S]*?)(\n\n## |\n\n$|$)/);
-  const renderedChars = (lmMatch?.[1].length ?? 0) + (wiMatch?.[1].length ?? 0);
-  assert(`rendered whisperer sections stay under the cap (${renderedChars} chars)`,
-    renderedChars <= MAX_WHISPERER_INJECT_CHARS, `${renderedChars} > ${MAX_WHISPERER_INJECT_CHARS}`);
-  assert('trimming keeps landmines before dropping them for notes',
-    (lmMatch?.[1] ?? '').includes('landmine 0'));
+  // Landmines (safety) are EXEMPT from the cap: they render in full even when
+  // they alone exceed it. Context notes absorb the entire trim.
+  assert('landmines are exempt from the cap: all 40 render in full',
+    (lmMatch?.[1] ?? '').includes('landmine 39'));
+  assert('context notes absorb the whole trim when landmines exceed the cap',
+    !(wiMatch?.[1] ?? '').includes('note 0'));
+  const overCap = capWhispererInjection(
+    Array.from({ length: 40 }, (_, i) => `landmine ${i}: ${'x'.repeat(200)}`), ['a note']);
+  assert('landmines_over_cap flags the breach, landmines kept, notes trimmed',
+    overCap.landmines_over_cap && overCap.landmines.length === 40 && overCap.context_notes.length === 0);
 
   const capResult = capWhispererInjection(['a'.repeat(100)], ['b'.repeat(MAX_WHISPERER_INJECT_CHARS)]);
   assert('capWhispererInjection reports trimmed when an item does not fit',
