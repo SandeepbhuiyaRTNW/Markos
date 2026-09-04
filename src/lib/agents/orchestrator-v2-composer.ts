@@ -475,6 +475,10 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
       await regenForBoundary();
       if (!legalAdviceFallbackFired && !boundaryResult.passed) skippedGates.push('boundary(post-craft-rewrite)');
     }
+    // KNOWN EDGE: a regen fired by THIS post-craft boundary pass is boundary-verified
+    // but not re-checked by the craft gates (fantasy/vocab/forbidden) again — those are
+    // fail-open by design, and the shared MAX_REGENS budget makes the case rare, so we
+    // accept it rather than loop the gates a second time.
 
     // Observability reflects what actually SHIPS (final content), not the first draft.
     env.sentinels.boundary = runBoundarySentinel(content);
