@@ -329,59 +329,72 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     // total re-rolls at MAX_REGENS so the highest-priority violations still win,
     // then stop and keep the best draft — logging which lower-priority gates
     // were skipped. (env.regen_triggers is preserved for turn_logs observability.)
+    // Every gate RE-VERIFIES the new draft after each re-roll — no unverified
+    // rewrite ships — and any craft-gate rewrite re-enters the boundary loop
+    // before the turn ends, since a rewrite can re-introduce a boundary
+    // violation. The re-checks are deterministic (regex/string) except the
+    // trajectory drift embedding, which only runs on the rare regen path; the
+    // shared budget still caps total re-rolls, so worst-case latency is
+    // unchanged.
     const MAX_REGENS = 2;
     let regens = 0;
     const skippedGates: string[] = [];
     let legalAdviceFallbackFired = false;
 
-    // Boundary gate — the ONE gate we RE-VERIFY after every regen and, for legal
-    // advice, refuse to ship on. Marcus orients; a lawyer advises. We recompose
-    // within the shared budget and re-check the NEW draft each pass (a real loop,
-    // not a single unverified retry).
+    // Boundary gate — RE-VERIFIED after every regen and, for legal advice,
+    // refuses to ship. Marcus orients; a lawyer advises. Factored into a closure
+    // so ANY later gate that rewrites content can re-enter it: a rewrite from
+    // the trajectory/fantasy/vocab/forbidden gates never passed this loop, and
+    // an unverified rewrite must never ship.
     let boundaryResult = checkBoundary(content);
-    while (!boundaryResult.passed && regens < MAX_REGENS) {
-      console.log(`[V2] 🚫 Boundary violations: ${boundaryResult.violations.slice(0, 3).join(', ')} — regenerating (${regens + 1}/${MAX_REGENS})`);
-      regens++;
-      env.regen_triggers.push('boundary');
-      const overridePrompt = getBoundaryOverridePrompt(boundaryResult);
-      const retryMessages = [...messages, new AIMessage(content), new HumanMessage(overridePrompt)];
-      const retry = await model.invoke(retryMessages);
-      const retryContent = typeof retry.content === 'string' ? retry.content : JSON.stringify(retry.content);
-      content = retryContent || content;
-      content = enforceSocraticDiscipline(content, env.craft_directives);
-      content = enforceMovePolicy(content, policyContext);
-      boundaryResult = checkBoundary(content); // re-verify the regenerated draft
-    }
-
-    // FAIL CLOSED on legal advice: if the draft STILL crosses from orienting into
-    // legal advice after the budget is spent, do NOT ship it. A man mid-divorce
-    // must not receive filing/custody/outcome advice from Marcus. Replace the
-    // draft with a safe, in-voice decline that hands the legal question to a real
-    // attorney and STAYS PRESENT for the rest of the turn. Legal advice is the
-    // only boundary class that fails closed; every other class keeps its best draft.
-    if (boundaryResult.legal_advice) {
-      legalAdviceFallbackFired = true;
-      env.regen_triggers.push('legal_advice_fallback');
-      // Distinct, greppable line so we can measure how often the model ignores the
-      // orient-not-advise override all the way through the regen budget.
-      console.warn(`[V2] ⛔ LEGAL-ADVICE FALLBACK FIRED — model kept crossing the legal line through ${regens} regen(s); shipping safe decline instead of the flagged draft. legal_violations=${boundaryResult.violations.filter(v => v.startsWith('legal-advice')).join('; ')}`);
-      content = buildLegalAdviceFallback();
-    } else if (!boundaryResult.passed) {
+    const regenForBoundary = async (): Promise<void> => {
+      while (!boundaryResult.passed && regens < MAX_REGENS) {
+        console.log(`[V2] 🚫 Boundary violations: ${boundaryResult.violations.slice(0, 3).join(', ')} — regenerating (${regens + 1}/${MAX_REGENS})`);
+        regens++;
+        env.regen_triggers.push('boundary');
+        const overridePrompt = getBoundaryOverridePrompt(boundaryResult);
+        const retryMessages = [...messages, new AIMessage(content), new HumanMessage(overridePrompt)];
+        const retry = await model.invoke(retryMessages);
+        const retryContent = typeof retry.content === 'string' ? retry.content : JSON.stringify(retry.content);
+        content = retryContent || content;
+        content = enforceSocraticDiscipline(content, env.craft_directives);
+        content = enforceMovePolicy(content, policyContext);
+        boundaryResult = checkBoundary(content); // re-verify the regenerated draft
+      }
+      // FAIL CLOSED on legal advice: if the draft STILL crosses from orienting
+      // into legal advice after the budget is spent, do NOT ship it. A man
+      // mid-divorce must not receive filing/custody/outcome advice from Marcus.
+      // Replace the draft with a safe, in-voice decline that hands the legal
+      // question to a real attorney and STAYS PRESENT for the rest of the turn.
+      // Legal advice is the only boundary class that fails closed; every other
+      // class keeps its best draft.
+      if (boundaryResult.legal_advice) {
+        legalAdviceFallbackFired = true;
+        env.regen_triggers.push('legal_advice_fallback');
+        // Distinct, greppable line so we can measure how often the model ignores
+        // the orient-not-advise override all the way through the regen budget.
+        console.warn(`[V2] ⛔ LEGAL-ADVICE FALLBACK FIRED — model kept crossing the legal line through ${regens} regen(s); shipping safe decline instead of the flagged draft. legal_violations=${boundaryResult.violations.filter(v => v.startsWith('legal-advice')).join('; ')}`);
+        content = buildLegalAdviceFallback();
+      }
+    };
+    await regenForBoundary();
+    if (!legalAdviceFallbackFired && !boundaryResult.passed) {
       // Budget spent on a NON-legal boundary violation — keep the best draft
       // (unchanged behavior).
       skippedGates.push('boundary');
     }
 
-    // Observability reflects what actually SHIPS (final content), not the first draft.
-    env.sentinels.boundary = runBoundarySentinel(content);
+    // Set when any gate AFTER the boundary pass rewrites content — those drafts
+    // must re-enter the boundary loop before they can ship.
+    let postBoundaryRewrite = false;
 
     // Trajectory dedup (from V1). Skip the drift computation entirely once the
     // regen budget is spent — it costs embedding calls we could not act on.
     const prevMarcus = env.conversation_history.filter(m => m.role === 'assistant').map(m => m.content);
     if (!legalAdviceFallbackFired && prevMarcus.length >= 2 && regens < MAX_REGENS) {
       try {
-        const drift = await computeTrajectoryDrift(content, prevMarcus);
-        if (drift > 0.85) {
+        let drift = await computeTrajectoryDrift(content, prevMarcus);
+        while (drift > 0.85 && regens < MAX_REGENS) {
           console.log(`[V2] 🔄 Trajectory dedup (drift: ${drift.toFixed(3)}) — regenerating`);
           regens++;
           env.regen_triggers.push('trajectory_dedup');
@@ -390,7 +403,10 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
           const dedupRetry = await model.invoke(dedupMessages);
           content = typeof dedupRetry.content === 'string' ? dedupRetry.content : content;
           content = enforceMovePolicy(content, policyContext);
+          postBoundaryRewrite = true;
+          drift = await computeTrajectoryDrift(content, prevMarcus); // re-verify the regenerated draft
         }
+        if (drift > 0.85) skippedGates.push('trajectory(cap-reached)');
       } catch {}
     } else if (!legalAdviceFallbackFired && prevMarcus.length >= 2) {
       skippedGates.push('trajectory(eval-skipped)');
@@ -402,8 +418,9 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
 
     // 1. Fantasy-Identity Blocker — re-roll if draft contains forward-projecting templates.
     //    Skipped once the legal-advice fallback has fired — the safe decline is final.
-    if (!legalAdviceFallbackFired && detectFantasyIdentity(content)) {
-      if (regens < MAX_REGENS) {
+    if (!legalAdviceFallbackFired) {
+      let fantasyHit = detectFantasyIdentity(content);
+      while (fantasyHit && regens < MAX_REGENS) {
         console.log(`[V2] 🎭 Fantasy-identity template detected — regenerating`);
         regens++;
         env.regen_triggers.push('fantasy_identity');
@@ -412,44 +429,59 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
         const fantasyRetry = await model.invoke(fantasyOverride);
         content = typeof fantasyRetry.content === 'string' ? fantasyRetry.content : content;
         content = enforceMovePolicy(content, policyContext);
-      } else {
-        skippedGates.push('fantasy-identity');
+        postBoundaryRewrite = true;
+        fantasyHit = detectFantasyIdentity(content); // re-verify the regenerated draft
       }
+      if (fantasyHit) skippedGates.push('fantasy-identity');
     }
 
     // 2. Vocabulary Fidelity Filter — re-roll if draft substitutes user's concrete words
-    const vocabViolations = legalAdviceFallbackFired ? [] : detectVocabSubstitutions(env.utterance, content);
-    if (vocabViolations.length > 0) {
-      if (regens < MAX_REGENS) {
-        console.log(`[V2] 📝 Vocab fidelity violations: ${vocabViolations.slice(0, 3).join(', ')} — regenerating`);
-        regens++;
-        env.regen_triggers.push('vocab_fidelity');
-        const vocabOverride = [...messages, new AIMessage(content),
-          new HumanMessage(`[SYSTEM OVERRIDE] Your response translated the user's specific words into clinical abstractions. The user's EXACT words must appear in your response. Return at least one specific noun, verb, or phrase from the user's message verbatim. Do NOT substitute "throw up" with "heavy feeling" or "cheated" with "betrayal" etc. Rewrite using the user's own vocabulary. 2-3 sentences.`)];
-        const vocabRetry = await model.invoke(vocabOverride);
-        content = typeof vocabRetry.content === 'string' ? vocabRetry.content : content;
-        content = enforceMovePolicy(content, policyContext);
-      } else {
-        skippedGates.push('vocab-fidelity');
-      }
+    let vocabViolations = legalAdviceFallbackFired ? [] : detectVocabSubstitutions(env.utterance, content);
+    while (vocabViolations.length > 0 && regens < MAX_REGENS) {
+      console.log(`[V2] 📝 Vocab fidelity violations: ${vocabViolations.slice(0, 3).join(', ')} — regenerating`);
+      regens++;
+      env.regen_triggers.push('vocab_fidelity');
+      const vocabOverride = [...messages, new AIMessage(content),
+        new HumanMessage(`[SYSTEM OVERRIDE] Your response translated the user's specific words into clinical abstractions. The user's EXACT words must appear in your response. Return at least one specific noun, verb, or phrase from the user's message verbatim. Do NOT substitute "throw up" with "heavy feeling" or "cheated" with "betrayal" etc. Rewrite using the user's own vocabulary. 2-3 sentences.`)];
+      const vocabRetry = await model.invoke(vocabOverride);
+      content = typeof vocabRetry.content === 'string' ? vocabRetry.content : content;
+      content = enforceMovePolicy(content, policyContext);
+      postBoundaryRewrite = true;
+      vocabViolations = detectVocabSubstitutions(env.utterance, content); // re-verify the regenerated draft
     }
+    if (vocabViolations.length > 0) skippedGates.push('vocab-fidelity');
 
     // 3. Forbidden Phrase Filter — re-roll if draft contains banned phrases
-    const forbiddenViolations = legalAdviceFallbackFired ? [] : detectForbiddenPhrases(content);
-    if (forbiddenViolations.length > 0) {
-      if (regens < MAX_REGENS) {
-        console.log(`[V2] 🚫 Forbidden phrases: ${forbiddenViolations.join(', ')} — regenerating`);
-        regens++;
-        env.regen_triggers.push('forbidden_phrase');
-        const forbiddenOverride = [...messages, new AIMessage(content),
-          new HumanMessage(`[SYSTEM OVERRIDE] Your response contained forbidden phrases (${forbiddenViolations.join(', ')}). These are banned. Rewrite without any of them. Be direct and concrete. 2-3 sentences.`)];
-        const forbiddenRetry = await model.invoke(forbiddenOverride);
-        content = typeof forbiddenRetry.content === 'string' ? forbiddenRetry.content : content;
-        content = enforceMovePolicy(content, policyContext);
-      } else {
-        skippedGates.push('forbidden-phrase');
-      }
+    let forbiddenViolations = legalAdviceFallbackFired ? [] : detectForbiddenPhrases(content);
+    while (forbiddenViolations.length > 0 && regens < MAX_REGENS) {
+      console.log(`[V2] 🚫 Forbidden phrases: ${forbiddenViolations.join(', ')} — regenerating`);
+      regens++;
+      env.regen_triggers.push('forbidden_phrase');
+      const forbiddenOverride = [...messages, new AIMessage(content),
+        new HumanMessage(`[SYSTEM OVERRIDE] Your response contained forbidden phrases (${forbiddenViolations.join(', ')}). These are banned. Rewrite without any of them. Be direct and concrete. 2-3 sentences.`)];
+      const forbiddenRetry = await model.invoke(forbiddenOverride);
+      content = typeof forbiddenRetry.content === 'string' ? forbiddenRetry.content : content;
+      content = enforceMovePolicy(content, policyContext);
+      postBoundaryRewrite = true;
+      forbiddenViolations = detectForbiddenPhrases(content); // re-verify the regenerated draft
     }
+    if (forbiddenViolations.length > 0) skippedGates.push('forbidden-phrase');
+
+    // Any rewrite produced by the craft gates above never passed through the
+    // boundary loop — re-verify before it ships, with the same fail-closed
+    // legal-advice path as the primary pass.
+    if (!legalAdviceFallbackFired && postBoundaryRewrite) {
+      boundaryResult = checkBoundary(content);
+      await regenForBoundary();
+      if (!legalAdviceFallbackFired && !boundaryResult.passed) skippedGates.push('boundary(post-craft-rewrite)');
+    }
+    // KNOWN EDGE: a regen fired by THIS post-craft boundary pass is boundary-verified
+    // but not re-checked by the craft gates (fantasy/vocab/forbidden) again — those are
+    // fail-open by design, and the shared MAX_REGENS budget makes the case rare, so we
+    // accept it rather than loop the gates a second time.
+
+    // Observability reflects what actually SHIPS (final content), not the first draft.
+    env.sentinels.boundary = runBoundarySentinel(content);
 
     if (skippedGates.length > 0) {
       console.log(`[V2] ⏭ Regen cap (${MAX_REGENS}) reached — skipped: ${skippedGates.join(', ')} (kept best draft)`);
@@ -652,19 +684,10 @@ export function buildPriorityHierarchy(env: StateEnvelope, policy: PriorityPolic
     lines.push(`PHASE NOTE: This man is in ${phase.toUpperCase()}. He can handle challenge and direct confrontation. Do NOT default to empathy-first. Lead with the provocation, then hold him through it.`);
   }
 
-  // ── Length calibration (v5): the length is part of the answer. Casual stays
-  // short (fork-gated); sacred-ground depth earns room (shared path, so the
-  // fork on/off byte-identity for emotional turns is preserved).
-  const lengthRule = forkActive && kind === 'casual'
-    ? 'Keep it short — a line or two. Light matches light: a quick question or small talk gets a quick, human answer, not a speech.'
-    : depth >= 4
-      ? 'Take the room this needs — 2-4 sentences is the usual shape, not a cap. A man pouring his heart out is not met with two brisk lines; let the weight set the length.'
-      : 'Keep it 2-4 sentences.';
-
   lines.push('');
   lines.push(policy.allowQuestion
-    ? `YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then ask ONE question or make ONE statement that meets him where he is — deeper only if he opened the door this turn. (3) ${lengthRule} End with weight.`
-    : `YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then make ONE statement that meets him where he is — deeper only if he opened the door this turn. (3) ${lengthRule} End with weight.`);
+    ? 'YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then ask ONE question or make ONE statement that meets him where he is — deeper only if he opened the door this turn. (3) Match the length to the moment — a line or two for light talk, 2-4 sentences for most turns, more room when he is somewhere heavy. End with weight.'
+    : 'YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then make ONE statement that meets him where he is — deeper only if he opened the door this turn. (3) Match the length to the moment — a line or two for light talk, 2-4 sentences for most turns, more room when he is somewhere heavy. End with weight.');
 
   return lines.join('\n');
 }
