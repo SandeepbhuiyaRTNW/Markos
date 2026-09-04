@@ -150,7 +150,7 @@ export interface TriggerOwnershipEntry {
  */
 export const TRIGGER_OWNERSHIP: readonly TriggerOwnershipEntry[] = [
   // ── Banned as idiom/filler (owner 'neither') ─────────────────────────────
-  { token: 'whatever',          owner: 'neither', reason: 'Idiom/filler: fires on casual dismissal ("whatever happens"). Also contradicts the presented+1 question cap in 82b4ec1 — Cihan\'s product decision, dropped entirely.' },
+  { token: 'whatever',          owner: 'neither', reason: 'Idiom/filler: fires on casual dismissal ("whatever happens"). Also contradicts the presented+1 question cap in 82b4ec1 — Vikas\'s decision, pending Cihan\'s call, dropped entirely.' },
   { token: 'shame',             owner: 'neither', reason: 'Idiom: "that\'s a shame about the weather" fired hidden_feelings in measurement.' },
   { token: 'the guys',          owner: 'neither', reason: 'Casual male-company reference, not a friendship-depth signal.' },
   { token: 'my brother',        owner: 'neither', reason: 'Family mention, not men-with-men territory.' },
