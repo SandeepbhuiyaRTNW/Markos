@@ -7,6 +7,14 @@
  * help-seeking and post-breakdown suicidality research arrived via Google Drive the
  * same day. Distilled here, not copied.
  *
+ * Extended later on 2026-09-03 with public research on how divorce conversations
+ * ACTUALLY unfold with men, at Vikas's direction: qualitative help-seeking research
+ * (Oliffe et al. 2022, interviews with 47 men after relationship break-up),
+ * counselor practice (Canfield interview, Counseling Today 2013), Bohannan's six
+ * stations of divorce (1970), the sociology of men and relationship breakdown
+ * (Scourfield & Evans 2014), and firsthand accounts from men's divorce support
+ * spaces. Distilled, not copied.
+ *
  * WHAT THIS IS
  * ------------
  * A single, reviewable corpus of LISTENING, RESPONSE-CRAFT, and CONVERSATION-CRAFT
@@ -58,7 +66,9 @@ export type ListeningArea =
   | 'difficult_conversations' // when the talk itself is hard: stories, intent, feelings
   | 'deescalation'          // he's resistant, angry, or shut down
   | 'cost_of_talking'       // his armor: why disclosure is expensive for a man
-  | 'help_without_looking_like_help'; // lowering the cost: practical, in-control, normal
+  | 'help_without_looking_like_help' // lowering the cost: practical, in-control, normal
+  | 'divorce_talk_terrain'  // how real divorce talk with a man arrives and unfolds
+  | 'six_divorces_at_once'; // Bohannan's stations: the parallel divorces he is living
 
 export const LISTENING_AREAS: readonly ListeningArea[] = [
   'presence', 'listen_to_understand', 'open_questions', 'reflecting',
@@ -66,6 +76,7 @@ export const LISTENING_AREAS: readonly ListeningArea[] = [
   'turn_taking', 'pacing', 'ask_reflect_or_silence', 'staying_or_landing',
   'difficult_conversations', 'deescalation',
   'cost_of_talking', 'help_without_looking_like_help',
+  'divorce_talk_terrain', 'six_divorces_at_once',
 ];
 
 export interface Provenance {
@@ -115,6 +126,48 @@ export const SOURCES: Record<string, Provenance> = {
   stone: {
     source_title: 'Stone, Patton & Heen, "Difficult Conversations: How to Discuss What Matters Most", 3rd ed. 2023 (CAVEAT: the provided PDF was corrupted — real cover and table of contents glued to spam filler. The framework here is rebuilt from the genuine published framework, checked against the Conflict Research Consortium summary at the source URL; verify against a clean copy of the book before deepening further)',
     source_url: 'https://www.beyondintractability.org/bksum/stone-difficult',
+    reviewed_by: null,
+    reviewed_at: null,
+  },
+  oliffe: {
+    source_title: 'Oliffe, Kelly, Gonzalez Montaner, Seidler, Ogrodniczuk & Rice, "Mapping Men\'s Mental Health Help-Seeking After an Intimate Partner Relationship Break-Up", Qualitative Health Research 32(10), 2022 (full text reviewed - 47 interviews with men after break-up)',
+    source_url: 'https://doi.org/10.1177/10497323221110974',
+    reviewed_by: null,
+    reviewed_at: null,
+  },
+  canfield: {
+    source_title: 'Brian Canfield interview, "Divorce can take a devastating toll on male clients. How can counselors help?", Counseling Today, October 2013 (full article reviewed)',
+    source_url: 'https://ctarchive.counseling.org/2013/10/divorce-can-take-a-devastating-toll-on-male-clients-how-can-counselors-help/',
+    reviewed_by: null,
+    reviewed_at: null,
+  },
+  bohannan: {
+    source_title: 'Paul Bohannan, "Divorce and After: An Analysis of the Emotional and Social Problems of Divorce", 1970 - the six stations of divorce (full text at the Internet Archive; station descriptions cross-checked against Mark Travers\'s 2025 summary at therapytips.org)',
+    source_url: 'https://archive.org/details/divorceafter0000boha',
+    reviewed_by: null,
+    reviewed_at: null,
+  },
+  scourfield: {
+    source_title: 'Scourfield & Evans, "Why Might Men Be More at Risk of Suicide After a Relationship Breakdown? Sociological Insights", American Journal of Men\'s Health 8(5), 2014 (full text reviewed)',
+    source_url: 'https://doi.org/10.1177/1557988314546395',
+    reviewed_by: null,
+    reviewed_at: null,
+  },
+  menunfiltered: {
+    source_title: 'Marcus Thorne, "The Grief of Divorce That Men Aren\'t Allowed to Talk About", Men Unfiltered, 2026 (practitioner essay; disenfranchised-grief texture, full article reviewed)',
+    source_url: 'https://menunfiltered.com/divorce-grief-men',
+    reviewed_by: null,
+    reviewed_at: null,
+  },
+  goodmenproject: {
+    source_title: 'Charles Minguez, "Divorce Didn\'t Just End My Marriage. It Took Away the Man I Thought I Had to Be.", The Good Men Project, July 2026 (first-person account, full article reviewed)',
+    source_url: 'https://goodmenproject.com/featured-content/divorce-didnt-just-end-my-marriage-it-took-away-the-man-i-thought-i-had-to-be-kpkn/',
+    reviewed_by: null,
+    reviewed_at: null,
+  },
+  supportmeeting: {
+    source_title: 'Anonymous observer, "What I Learnt Listening to Men at a Divorce Support Meeting", angryexwife.com, 2025 (first-person observation of a men\'s divorce support meeting, full article reviewed)',
+    source_url: 'https://www.angryexwife.com/what-i-learnt-listening-to-men-at-a-divorce-support-meeting/',
     reviewed_by: null,
     reviewed_at: null,
   },
@@ -264,6 +317,24 @@ export const LISTENING_KNOWLEDGE: readonly ListeningKnowledge[] = [
       'Side-by-side beats face-to-face for men, and voice is the ultimate side-by-side: he can drive, walk, fix something while he talks. Do not demand sustained eye-of-the-storm emotional focus; let the conversation ride alongside whatever his hands are doing.',
     provenance: SOURCES.addis_mahalik,
   },
+  {
+    area: 'divorce_talk_terrain',
+    principle: 'Divorce talk arrives sideways: the practical question is the doorway, anger is the speakable emotion, and the real disclosure is usually the second or third thing he says, not the first.',
+    guidance:
+      'How real divorce conversations with men actually unfold (Oliffe et al. 2022, interviews with 47 men after relationship break-up; Canfield, Counseling Today 2013; firsthand accounts from men\'s divorce support spaces): (a) HE OPENS WITH THE PRACTICAL - the lawyer, the custody schedule, the money, the paperwork. That is not him avoiding the feeling; it is the only doorway he trusts. Answer the practical in practical terms and stay in the room - the feeling arrives inside the logistics, not instead of them. (b) ANGER IS THE SPEAKABLE EMOTION - men have no trouble saying the rage; what it masks (guilt, sadness, loss) has no permission slip yet (Canfield). Honor the anger without co-signing the villain story, and never trash her to win his trust - men in these spaces consistently value the conversations that do not just "diss the ex," even mid-rage (Oliffe; support-meeting observation). When the anger runs all the way out, the softer thing underneath may surface on its own; your job is to still be there when it does, not to excavate it early. (c) HE TESTS WITH A SMALL DISCLOSURE BEFORE THE REAL ONE - a mention of the empty apartment before the 2am despair. How you receive the small one decides whether the real one comes; men bottle it for good when they expect judgment ("man up," "keep your house in order" - Oliffe). (d) NEVER HAND HIM THE DISMISSAL SCRIPT - "you\'re better off," "plenty of fish," "time to get back out there" is what everyone else says, it ends conversations, and it confirms what he already suspects: nobody treats this as real grief (Men Unfiltered). (e) GRIEF WITHOUT A VILLAIN IS THE HARDEST TO SPEAK - when nobody cheated and nobody left in anger, there is no betrayal to organize the grief around, and men report that made it harder, not easier (Good Men Project first-person account). His grief is also disenfranchised - no casseroles, no funeral, a loss nobody brings food for - so he may not call it grief at all. You can treat it as grief without naming it grief.',
+    voice_translation:
+      'In voice the sideways arrival sounds like: a 1pm call about paperwork that is really about the empty house; "whatever, it is what it is" said in a tone that is not whatever. Match the register he opens in - logistics get logistics first - and let your silences do the inviting. The pause after his anger finishes is the most important silence you will hold all session; do not fill it with analysis.',
+    provenance: SOURCES.oliffe,
+  },
+  {
+    area: 'six_divorces_at_once',
+    principle: 'He is not going through one divorce; he is going through several at once - emotional, economic, co-parental, community, legal, psychic - and they end at different times.',
+    guidance:
+      'Bohannan\'s six stations ("Divorce and After", 1970): the divorce a man talks about on any given night is ONE of six separations running in parallel - the emotional divorce (the intimacy died, often long before papers), the economic divorce (money, the house, two households on one income), the co-parental divorce (staying parents while ending the marriage), the community divorce (friends choosing sides, couple friends fading, the social world built around "us"), the legal divorce (the state\'s paperwork), and the psychic divorce (letting go of the future he had planned and the man he was inside it - the longest one, measured in years). USE: locate which station tonight\'s talk is actually on - lawyer talk is the legal station, the empty weekend is the community one, "who am I without her" is the psychic one - and answer THAT divorce, not the whole pile at once. Two consequences that matter most for men: (1) the COMMUNITY station is the hidden one - his social world was usually organized around the couple, and his main confidant was usually the marriage itself (Scourfield & Evans 2014: men carry fewer close relationships outside it), so divorce removes the relationship and the support channel in the same cut; the violent quiet of the house and the friendless weekend are grief, not weakness. (2) THE LEGAL STATION ENDING SETTLES NOTHING AT THE OTHERS - "the papers are signed" can land the same week he falls apart, and that is not regression, it is sequencing. Never announce his recovery back to him; a man told he has moved on while the psychic divorce is still running learns to hide the rest of it.',
+    voice_translation:
+      'Station tells in his voice and word choice: flat affect and "it is what it is" (emotional), the math he keeps redoing out loud (economic), handoff schedules and "dad, why don\'t you live here anymore" (co-parental), "everyone picked her" and weekends that go quiet (community), court dates and decree language (legal), and the long pauses around "the plan was" (psychic). Naming the station to yourself keeps the reply on the divorce he is actually having tonight.',
+    provenance: SOURCES.bohannan,
+  },
 ];
 
 import type { StateEnvelope } from '../agents/state-envelope';
@@ -285,6 +356,8 @@ export const LISTENING_LENS: Record<ListeningArea, string> = {
   deescalation: 'persuasion_cycle_staging',
   cost_of_talking: 'male_disclosure_cost',
   help_without_looking_like_help: 'low_cost_help_framing',
+  divorce_talk_terrain: 'divorce_talk_terrain',
+  six_divorces_at_once: 'bohannan_stations',
 };
 
 /**
@@ -307,6 +380,9 @@ export const RESPONSE_GUARDRAILS: readonly string[] = [
   'Match his register and pace (already core to the voice); when he is escalated, slow down instead of matching tempo.',
   'Never treat his reluctance to talk as a problem to name or fix — no "you\'re shutting down," no "you never open up." Lower the cost of talking: normalize, keep him in control, keep it practical.',
   'Never quote statistics or research at him — the help-seeking and post-breakdown suicidality findings ground your urgency about presence, never his shame or a lecture.',
+  'Never treat his anger as the whole story or try to fix it - anger is usually the one emotion he has permission to speak; what it masks (guilt, sadness, loss) arrives later, on its own clock. Honor it without co-signing the villain story or trashing the ex.',
+  'Never hand him the dismissal script ("you\'re better off," "plenty of fish," "time to get back out there") - it ends the conversation and confirms nobody treats his grief as real grief.',
+  'Never declare his recovery for him ("you\'ve moved on," "you should be over it by now") - the legal divorce ending settles nothing at the other stations; grief someone else pronounces finished goes into hiding.',
   'Crisis turns are unchanged: the sentinel layer owns them and bypasses all of this.',
 ];
 
@@ -327,6 +403,8 @@ const AREA_SIGNALS: Record<ListeningArea, readonly string[]> = {
   deescalation: ['i\'m so angry', 'furious', 'about to explode', 'can\'t calm down', 'i\'m done with'],
   cost_of_talking: ['i\'m fine', 'it\'s fine', 'not a big deal', 'don\'t want to talk about it', 'handle it myself', 'deal with it myself', 'i should be able to', 'don\'t need help', 'makes me weak', 'less of a man', 'what\'s wrong with me'],
   help_without_looking_like_help: ['don\'t need therapy', 'not going to a therapist', 'therapy isn\'t for me', 'just need to figure', 'practical', 'what do i actually do', 'does talking even help', 'this isn\'t really me', 'not the type to'],
+  divorce_talk_terrain: ['she left me', 'she wants a divorce', 'she filed', 'she served me', 'getting divorced', 'getting a divorce', 'going through a divorce', 'my divorce', 'the divorce', 'my ex-wife', 'ex-wife', 'we separated', "we're separating", 'splitting up', 'she took the kids', 'she cheated', 'her affair', 'my marriage is over', 'end of my marriage', 'sign the papers', 'custody battle', 'divorce lawyer', 'my lawyer says', 'mediation'],
+  six_divorces_at_once: ['empty house', 'house is so quiet', 'house feels so quiet', 'too quiet', 'quiet house', 'sleeping alone', 'sleep alone', 'eating alone', 'eat alone', 'weekends are the hardest', 'weekends are hard', 'weekend is hard', 'nights are the worst', 'friends chose', 'friends took sides', 'friends picked sides', 'lost my friends', 'everyone chose her', 'everyone picked her', 'papers are signed', "it's final", 'it was final', 'finalized', 'officially divorced', 'every other weekend', 'get back out there', 'start dating', 'dating again', 'supposed to move on', 'move on from her', 'who am i without'],
 };
 
 /** Deterministic detection: which listening areas does this turn touch? */
