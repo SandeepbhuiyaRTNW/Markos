@@ -37,8 +37,9 @@
  * with NO OpenAI key and NO database. The DB-backed channels (embeddings /
  * questions with a `knowledge_area` tag) are the scaled corpus and are seeded
  * separately; this in-code corpus is what orients a live reply today.
- * Wiring into the composer/whisperers is deliberately left out of this PR — the
- * corpus lands first so Vikas and Sandeep review content before behavior changes.
+ * Wiring is IN this PR: `applyListeningKnowledge(env)` runs from the whisperer
+ * tier in orchestrator-v2.ts on every turn (agent-wide, deterministic — no LLM,
+ * no DB). The null case pushes nothing, so a neutral turn is unchanged.
  *
  * SAFETY POSTURE
  * --------------
