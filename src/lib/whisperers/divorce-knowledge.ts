@@ -9,6 +9,12 @@
  * NOT legal, financial, custody, or clinical ADVICE. The standing line the whole
  * module is built around: **Markos orients; professionals advise.**
  *
+ * Deepened 2026-09-03 with the four divorce references the founder provided via
+ * Google Drive: Hetherington & Kelly's outcome research (For Better or For
+ * Worse), McKay et al.'s practical guide (The Divorce Book), Emery's
+ * family-renegotiation frame (Renegotiating Family Relationships), and Maione's
+ * co-parenting course text (Children & Divorce). Distilled, not copied.
+ *
  * HOW IT REACHES A REPLY (no architecture change)
  * ----------------------------------------------
  * The divorce whisperer (divorce.ts) detects which knowledge area(s) a man's
@@ -148,6 +154,10 @@ export const CO_PARENTING_BASICS: readonly string[] = [
   'Telling kids works best age-appropriately, together when possible, with a simple, consistent message: this is not their fault, both parents still love them, and it is not their job to fix it.',
   'Business-like communication lowers the temperature: brief, informative, friendly, firm (a "BIFF"-style note). Treat exchanges like a working handoff, not a place to relitigate the marriage.',
   'Never route conflict THROUGH the kids — no messenger duty, no interrogation about the other house, no venting about their mother to them.',
+  'Divorce ends a marriage, not a family — the relationships get renegotiated, not dissolved (Emery). The working goal is two connected households a child can move between, not one broken home. This frame alone lowers the catastrophe in his head: he is not losing his kids, he is renegotiating how he parents them.',
+  'Children grieve the divorce too, on their own timeline, and a child\'s anger or withdrawal is usually grief or loyalty strain — not a verdict on him as a father (Emery). He does not have to win the child back; he has to stay steady while the child finds their own way through.',
+  'Match the response to the child\'s age and stage (Maione): young kids need routine, reassurance, and simple repeated messages; teenagers need honesty without a loyalty bind and room to be angry. What reassures a 6-year-old can insult a 15-year-old.',
+  'Early on, stabilize before optimizing (McKay): where the kids sleep, the handoff rhythm, who tells the school — boring, concrete, done. The big permanent parenting decisions wait until the ground stops moving.',
 ];
 
 /**
@@ -180,6 +190,43 @@ export const STAGE_EMOTION_MAP: readonly StageEmotionMap[] = [
   { stage: 'Negotiation or mediation', blocks: ['letting_go', 'self_worth'], note: 'Bargaining forces letting-go and tests self-worth — grief sits under the numbers.' },
   { stage: 'Decree', blocks: ['transition', 'loneliness'], note: 'The decree lands as transition and loneliness — the paperwork ends before the feelings do.' },
   { stage: 'Post-decree life', blocks: ['purpose', 'freedom', 'openness'], note: 'Post-decree is where purpose, freedom, and openness can re-emerge — rebuilding a self, not replacing a marriage.' },
+];
+
+/**
+ * 3.6 Adjustment pathways — Hetherington & Kelly's headline finding from the
+ * longest divorce study run: most people do FINE after divorce, and the first
+ * ~two years are the hardest. The pathways below are how real adults actually
+ * adjust; they exist so the whisperer can NORMALIZE and ANTICIPATE. They are
+ * never labels to hand a man ("you're a seeker") — they are reading lenses only.
+ */
+export interface AdjustmentPathway {
+  pathway: string;
+  pattern: string;
+}
+
+export const ADJUSTMENT_PATHWAYS: readonly AdjustmentPathway[] = [
+  { pathway: 'good-enoughs', pattern: 'The largest group. Life after divorce is messier and smaller in places, but broadly OK — decent parenting, decent days, no triumph narrative. Normalizing this matters most: ordinary and fine is the actual median outcome.' },
+  { pathway: 'enhancers', pattern: 'A minority who genuinely grow through the divorce — more competent, more themselves afterward. Growth is real but not owed to anyone; never hold it up as the standard he must hit.' },
+  { pathway: 'competent loners', pattern: 'Well-functioning alone — work, friends, interests — with little interest in repartnering soon. Solitude here is health, not failure.' },
+  { pathway: 'seekers', pattern: 'Anxious to repartner fast; being alone feels unbearable. Common in men. Watch for the panic-date filling the hole — name the need underneath without shaming the strategy.' },
+  { pathway: 'swingers', pattern: 'Younger crowd; parties, drinks, short relationships. The social high is real and so is the avoidance underneath it. Same posture: no shame, honest naming.' },
+  { pathway: 'defeated', pattern: 'A minority who stay stuck for years — depression, bitterness, stalled life. The research is clear this is the exception, not the rule; it is also the group that most needs a steady presence and, when it stays dark, a route to a therapist.' },
+];
+
+/** Hetherington & Kelly's core normalization: the shape of adjustment over time. */
+export const ADJUSTMENT_ARC =
+  'The first year or two after separation is the storm — identity, money, kids, loneliness all moving at once. Most men stabilize; the research majority lands at "good enough," not broken and not transformed. Adjustment is measured in years, not weeks.';
+
+/**
+ * Early-stage stabilization (McKay, The Divorce Book) — the practical first
+ * moves while the ground is still moving. Orientation about what the early
+ * weeks GENERALLY ask for; never a directive about his case.
+ */
+export const EARLY_STAGE_GROUNDING: readonly string[] = [
+  'Stabilize the immediate: where he sleeps, the kids\' routine, the immediate bills — small and concrete beats big and permanent in the first weeks.',
+  'Expect the emotional weather to be at its worst exactly when the logistics demand the most; that collision is normal, not proof he is failing.',
+  'Big permanent decisions (the house, the final parenting plan, major money moves) generally wait until the first storm passes — orientation about sequence, not a ruling on his timeline.',
+  'Getting his own documents and records gathered early gives him footing; disclosure comes for everyone and being ready lowers the dread.',
 ];
 
 /**
@@ -233,6 +280,10 @@ export const KNOWLEDGE_PROVENANCE: readonly KnowledgeProvenance[] = [
   { knowledge_area: 'co_parenting', source_title: 'Child-development literature (Amato & Keith meta-analyses) + APA public resources', source_url: 'https://www.apa.org/topics/divorce-child-custody', jurisdiction: 'general', reviewed_by: null, reviewed_at: null },
   { knowledge_area: 'financial', source_title: 'CFP Board + CDFA public education materials', source_url: 'https://www.cfp.net/', jurisdiction: 'general', reviewed_by: null, reviewed_at: null },
   { knowledge_area: 'emotional', source_title: "Fisher, Rebuilding Workbook (stage mapping)", source_url: 'corpus:rebuilding-workbook', jurisdiction: 'general', reviewed_by: null, reviewed_at: null },
+  { knowledge_area: 'emotional', source_title: 'Hetherington & Kelly, "For Better or For Worse: Divorce Reconsidered", 2003 (full text provided via Google Drive)', source_url: 'corpus:for-better-or-for-worse', jurisdiction: 'general', reviewed_by: null, reviewed_at: null },
+  { knowledge_area: 'co_parenting', source_title: 'Emery, "Renegotiating Family Relationships: Divorce, Child Custody, and Mediation", 2nd ed. 2011 (full text provided via Google Drive)', source_url: 'corpus:renegotiating-family-relationships', jurisdiction: 'general', reviewed_by: null, reviewed_at: null },
+  { knowledge_area: 'co_parenting', source_title: 'Maione, "Children & Divorce: A Positive Parenting Approach" (full text provided via Google Drive)', source_url: 'corpus:children-and-divorce-maione', jurisdiction: 'general', reviewed_by: null, reviewed_at: null },
+  { knowledge_area: 'process', source_title: 'McKay, Blades, Rogers & Gosse, "The Divorce Book: A Practical and Compassionate Guide", 1999 (full text provided via Google Drive)', source_url: 'corpus:the-divorce-book-mckay', jurisdiction: 'general', reviewed_by: null, reviewed_at: null },
 ];
 
 /**
@@ -279,6 +330,7 @@ export function buildOrientationNote(areas: KnowledgeArea[]): string {
     if (area === 'process') {
       const stages = PROCESS_STAGES.map(s => s.stage).join(' → ');
       parts.push(`PROCESS (general arc, in your own plain words, only as far as he is asking): ${stages}. Frame any timeline as a rough range that varies by case and state. Name what he can control here vs. what he cannot.`);
+      parts.push(`EARLY STAGE (McKay — orientation about sequence, never a directive about his case): ${EARLY_STAGE_GROUNDING.join(' ')}`);
     } else if (area === 'legal_literacy') {
       const terms = LEGAL_TERMS.map(t => `${t.term} — ${t.plain}`).join(' • ');
       parts.push(`LEGAL LITERACY (define plainly, so he is not lost in his lawyer's office; definitions only, never what he will get): ${terms}`);
@@ -289,6 +341,7 @@ export function buildOrientationNote(areas: KnowledgeArea[]): string {
     } else if (area === 'emotional') {
       const map = STAGE_EMOTION_MAP.map(m => `${m.stage}: ${m.blocks.join('/')}`).join(' • ');
       parts.push(`EMOTIONAL STAGE-MAP (what tends to come NEXT, so you can meet it): ${map}. Use it to anticipate, never to tell him how he "should" feel.`);
+      parts.push(`ADJUSTMENT (Hetherington & Kelly — normalize honestly, never label him with a pathway): ${ADJUSTMENT_ARC} Real pathways men take: ${ADJUSTMENT_PATHWAYS.map(w => `${w.pathway} (${w.pattern})`).join(' • ')}`);
     }
   }
 
