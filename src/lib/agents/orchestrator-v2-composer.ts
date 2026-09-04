@@ -686,8 +686,8 @@ export function buildPriorityHierarchy(env: StateEnvelope, policy: PriorityPolic
 
   lines.push('');
   lines.push(policy.allowQuestion
-    ? 'YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then ask ONE question or make ONE statement that meets him where he is — deeper only if he opened the door this turn. (3) Keep it 2-4 sentences. End with weight.'
-    : 'YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then make ONE statement that meets him where he is — deeper only if he opened the door this turn. (3) Keep it 2-4 sentences. End with weight.');
+    ? 'YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then ask ONE question or make ONE statement that meets him where he is — deeper only if he opened the door this turn. (3) Match the length to the moment — a line or two for light talk, 2-4 sentences for most turns, more room when he is somewhere heavy. End with weight.'
+    : 'YOUR RESPONSE MUST: (1) Reflect something SPECIFIC he said — use his words. (2) Then make ONE statement that meets him where he is — deeper only if he opened the door this turn. (3) Match the length to the moment — a line or two for light talk, 2-4 sentences for most turns, more room when he is somewhere heavy. End with weight.');
 
   return lines.join('\n');
 }
