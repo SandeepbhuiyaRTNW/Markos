@@ -39,17 +39,19 @@
  *   - ONE AREA PER TURN per module: the eligible area with the most token
  *     hits wins; ties break by the module's declared area order. Only the
  *     winning area's guidance and guardrails are injected.
- *   - TOTAL WHISPERER INJECTION CAP: context notes rendered into the Composer
- *     prompt are capped at MAX_WHISPERER_INJECT_CHARS (~1,200 tokens) minus
- *     whatever the landmines use. LANDMINES ARE EXEMPT FROM TRIMMING: they
- *     are safety constraints ("never diagnose", "consent is instant"), and a
- *     token budget must never silently drop a "never". When several modules
- *     fire on one turn and the budget is exhausted, coaching (context notes)
- *     is what gets trimmed — safety guidance always renders in full, even if
- *     it alone exceeds the cap (flagged via landmines_over_cap so tests can
- *     assert on it). Enforced at the single render point
- *     (buildEnvelopeContextSummary) so it covers every whisperer, present and
- *     future.
+ *   - COACHING-NOTE CAP (NOT a total cap): with landmines exempt, this is no
+ *     longer a bound on total injection. Only context notes (coaching) are
+ *     bounded — trimmed to MAX_WHISPERER_INJECT_CHARS minus whatever the
+ *     landmines use. LANDMINES (guardrails) ARE NOT BOUNDED: they are safety
+ *     constraints ("never diagnose", "consent is instant"), and a token budget
+ *     must never silently drop a "never", so they always render in full — even
+ *     when they alone exceed the cap (flagged via landmines_over_cap;
+ *     buildEnvelopeContextSummary warns on it). One area's guardrails can
+ *     already be most of the budget: difficult_conversations alone is 4,759 of
+ *     4,800 chars. When several modules fire, coaching is what gets trimmed and
+ *     total injection can exceed ~1,200 tokens. Enforced at the single render
+ *     point (buildEnvelopeContextSummary) so it covers every whisperer, present
+ *     and future.
  *
  * Everything here is deterministic: pure string matching, no LLM, no DB, no
  * per-turn round trips. Zero added latency beyond the regex scans the modules
@@ -67,11 +69,12 @@
 export const MIN_WORDS_SINGLE_SIGNAL = 8;
 
 /**
- * Budget for the total whisperer injection rendered into one Composer prompt,
- * in characters (~4 chars/token → roughly 1,200 tokens). Context notes are
- * trimmed to what the landmines leave of this budget; landmines themselves
- * are NEVER trimmed (see the file header). buildEnvelopeContextSummary
- * enforces it; the module tests assert the worst case.
+ * Budget for CONTEXT NOTES (coaching) only, in characters (~4 chars/token →
+ * roughly 1,200 tokens). This is NOT a total-injection cap: notes are trimmed
+ * to what the landmines leave of this budget; landmines (safety guardrails)
+ * are NEVER trimmed (see the file header), so total injection can exceed this
+ * when guardrails are heavy. buildEnvelopeContextSummary enforces it; the
+ * module tests assert the worst case.
  */
 export const MAX_WHISPERER_INJECT_CHARS = 4800;
 
@@ -160,7 +163,7 @@ export interface TriggerOwnershipEntry {
  */
 export const TRIGGER_OWNERSHIP: readonly TriggerOwnershipEntry[] = [
   // ── Banned as idiom/filler (owner 'neither') ─────────────────────────────
-  { token: 'whatever',          owner: 'neither', reason: 'Idiom/filler: fires on casual dismissal ("whatever happens"). Also contradicts the presented+1 question cap in 82b4ec1 — Cihan\'s product decision, dropped entirely.' },
+  { token: 'whatever',          owner: 'neither', reason: 'Idiom/filler: fires on casual dismissal ("whatever happens"). Also contradicts the presented+1 question cap in 82b4ec1 — Vikas\'s decision, pending Cihan\'s call, dropped entirely.' },
   { token: 'shame',             owner: 'neither', reason: 'Idiom: "that\'s a shame about the weather" fired hidden_feelings in measurement.' },
   { token: 'the guys',          owner: 'neither', reason: 'Casual male-company reference, not a friendship-depth signal.' },
   { token: 'my brother',        owner: 'neither', reason: 'Family mention, not men-with-men territory.' },

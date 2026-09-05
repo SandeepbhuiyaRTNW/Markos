@@ -3,7 +3,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { capWhispererInjection } from '../agent/trigger-registry';
+import { capWhispererInjection, MAX_WHISPERER_INJECT_CHARS } from '../agent/trigger-registry';
 import type {
   StateEnvelope, ListenerStackOutput, CrisisOutput, BoundaryOutput,
   PathwayRouterOutput, MemoryOutput, CulturalOutput, PhaseOutput,
@@ -175,14 +175,23 @@ export function buildEnvelopeContextSummary(
   if (includeWhispererContext && env.domain_whisperers.frameworks_applied.length > 0) {
     parts.push(`## ACTIVE FRAMEWORKS\n${env.domain_whisperers.frameworks_applied.join(', ')}`);
   }
-  // Hard cap on total whisperer injection (~1,200 tokens/turn): landmines
-  // (safety) are EXEMPT and always render in full; context notes (coaching)
-  // are trimmed to the remaining budget, whole items only. Under the cap this
-  // is byte-identical to the uncapped rendering.
+  // Coaching-note cap (NOT a total cap): landmines (safety) are EXEMPT and
+  // always render in full; context notes (coaching) are trimmed to the
+  // remaining budget, whole items only. Under the cap this is byte-identical
+  // to the uncapped rendering.
   const capped = capWhispererInjection(
     env.domain_whisperers.landmines,
     env.domain_whisperers.context_notes,
   );
+  // The one production signal that a turn blew the injection budget: safety
+  // guardrails alone exceeded the cap and rendered in full (coaching trimmed).
+  // Greppable, [turn-timing]/[turn-persist]-style key=value line.
+  if (capped.landmines_over_cap) {
+    const landmineChars = env.domain_whisperers.landmines.reduce((n, l) => n + l.length + 3, 0);
+    console.warn(
+      `[whisperer-cap] landmines_over_cap landmine_chars=${landmineChars} cap=${MAX_WHISPERER_INJECT_CHARS} notes_dropped=${env.domain_whisperers.context_notes.length - capped.context_notes.length} conversation_id=${env.conversation_id}`,
+    );
+  }
   if (includeWhispererContext && capped.landmines.length > 0) {
     parts.push(`## LANDMINES — DO NOT:\n${capped.landmines.map(l => `• ${l}`).join('\n')}`);
   }

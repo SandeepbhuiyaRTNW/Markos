@@ -140,8 +140,6 @@ function main() {
   // ─────────────────────────────────────────────────────────────────────────
   console.log('\n── E. Shared trigger rules (trigger-registry.ts) ──');
 
-  assert('word-boundary: "furious" does not fire inside another word',
-    !wordBoundaryIncludes('he was furiously typing at work', 'furious') || true); // furiously contains no word-boundary match
   assert('word-boundary: "furiously" is NOT "furious"',
     !wordBoundaryIncludes('he typed furiously all morning', 'furious'));
   assert('word-boundary: whole word fires',
