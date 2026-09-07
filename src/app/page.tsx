@@ -15,6 +15,7 @@ import AppHeader from '@/components/AppHeader';
 import SettingsScreen from '@/components/SettingsScreen';
 import Orb3D from '@/components/Orb3D';
 import IntroSequence from '@/components/IntroSequence';
+import { InterviewOffer, InterviewConsent, InterviewProgress, type InterviewPublicState } from '@/components/InterviewFlow';
 import StoicField from '@/components/StoicField';
 import type { CSSProperties } from 'react';
 
@@ -29,9 +30,9 @@ const safeLocal = {
 };
 
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
-type AppView = 'analytics' | 'voice' | 'session-detail' | 'session-notes' | 'settings';
+type AppView = 'analytics' | 'voice' | 'session-detail' | 'session-notes' | 'settings' | 'interview';
 type InputMode = 'session-type' | 'pick-session' | 'choice' | 'voice' | 'text' | 'listening';
-type SessionType = 'continue' | 'fresh';
+type SessionType = 'continue' | 'fresh' | 'interview';
 
 // Editorial helpers for the start screens (colours contrast-checked; see AnalyticsDashboard).
 function relDayUpper(dateStr: string): string {
@@ -100,6 +101,12 @@ export default function Home() {
   const [introDone, setIntroDone] = useState(false);   // cinematic intro finished/skipped -> show landing
   const [pendingEntry, setPendingEntry] = useState(false); // just authed -> drop into the mic once ready
   const [sessionType, setSessionType] = useState<SessionType>('continue');
+  // Embodied Man interview skeleton: server-side session state, whether THIS
+  // conversation is an interview sitting, and the post-onboarding offer.
+  const [interview, setInterview] = useState<InterviewPublicState | null>(null);
+  const [interviewBusy, setInterviewBusy] = useState(false);
+  const [interviewMode, setInterviewMode] = useState(false);
+  const [showInterviewOffer, setShowInterviewOffer] = useState(false);
   const [continueFromId, setContinueFromId] = useState<string | null>(null);
   const [recentSessions, setRecentSessions] = useState<Array<{
     id: string; sessionNumber: number; title: string; summary: string | null;
@@ -140,6 +147,16 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [transcripts, openingMessage]);
 
+  // Interview state rides along with the session chrome (dashboard card,
+  // progress strip); refetched after every transition via interviewAction.
+  useEffect(() => {
+    if (!userId) return;
+    fetch(`/api/interview?userId=${userId}`)
+      .then((r) => r.json())
+      .then((data) => { if (data && data.phase) setInterview(data); })
+      .catch(() => { /* interview state is optional chrome — never block the app */ });
+  }, [userId]);
+
   useEffect(() => {
     if (!userId) return;
     setCheckingOnboarding(true);
@@ -163,7 +180,7 @@ export default function Home() {
       const isTextMode = mode === 'text';
       const st = opts?.sessionType ?? sessionType;
       const cf = opts?.continueFrom !== undefined ? opts.continueFrom : continueFromId;
-      const sessionTypeParam = st === 'fresh' ? '&sessionType=fresh' : '';
+      const sessionTypeParam = st === 'continue' ? '' : `&sessionType=${st}`;
       const continueParam = cf ? `&continueFrom=${cf}` : '';
       const url = `/api/conversation/opening?userId=${userId}${isTextMode ? '&skipTts=true' : ''}${sessionTypeParam}${continueParam}`;
       const r = await fetch(url);
@@ -220,7 +237,7 @@ export default function Home() {
     void fetchOpening('voice', opts);
   }, [fetchOpening]);
 
-  const handleStartFresh = useCallback(() => enterVoice({ sessionType: 'fresh', continueFrom: null }), [enterVoice]);
+  const handleStartFresh = useCallback(() => { setInterviewMode(false); enterVoice({ sessionType: 'fresh', continueFrom: null }); }, [enterVoice]);
 
   // Once the opening is ready, move from the "listening" entry screen into the room.
   useEffect(() => {
@@ -231,11 +248,11 @@ export default function Home() {
   // just-authed user is dropped straight into the mic-open listening screen. It waits for
   // onboardingComplete, so it never fights the onboarding gate (new users still onboard first).
   useEffect(() => {
-    if (userId && onboardingComplete && pendingEntry && viewRef.current !== 'voice') {
+    if (userId && onboardingComplete && pendingEntry && !showInterviewOffer && viewRef.current !== 'voice') {
       setPendingEntry(false);
       enterVoice({ sessionType: 'fresh', continueFrom: null });
     }
-  }, [userId, onboardingComplete, pendingEntry, enterVoice]);
+  }, [userId, onboardingComplete, pendingEntry, showInterviewOffer, enterVoice]);
 
   const handleSendCode = async () => {
     if (!email || !email.includes('@')) { setAuthError('Please enter a valid email.'); return; }
@@ -300,6 +317,9 @@ export default function Home() {
   };
 
   const handleLogout = () => {
+    setInterviewMode(false);
+    setInterview(null);
+    setShowInterviewOffer(false);
     safeLocal.remove('marcus_userId');
     safeLocal.remove('marcus_email');
     setUserId(null);
@@ -347,6 +367,7 @@ export default function Home() {
   // "Write" — enter text mode directly (the restored typed conversation).
   const handleWrite = () => {
     if (fetchingOpeningRef.current) return;
+    setInterviewMode(false);
     setConversationId(null); setTranscripts([]); setOpeningMessage(null); setSessionNotes(null);
     setSelectedConvId(null); setSidebarOpen(false);
     setSessionType('fresh'); setContinueFromId(null);
@@ -355,6 +376,62 @@ export default function Home() {
     setInputMode('text');
     void fetchOpening('text', { sessionType: 'fresh', continueFrom: null });
   };
+
+  // ─── Embodied Man interview (skeleton) ───
+  // One POST per transition; the server owns the state machine. The returned
+  // state replaces local state so every surface (card, strip, consent) agrees.
+  const interviewAction = useCallback(async (action: string): Promise<InterviewPublicState | null> => {
+    if (!userId) return null;
+    setInterviewBusy(true);
+    try {
+      const res = await fetch('/api/interview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, action }),
+      });
+      const data = await res.json();
+      if (res.ok && data && data.phase) { setInterview(data); return data as InterviewPublicState; }
+    } catch (err) { console.error('Interview action error:', err); }
+    finally { setInterviewBusy(false); }
+    return null;
+  }, [userId]);
+
+  // "Begin your interview" (dashboard card, text-mode link, onboarding offer):
+  // record the intent, then show the consent gate. Nothing starts before consent.
+  const handleInterviewBegin = useCallback(async () => {
+    const st = await interviewAction('begin');
+    if (st) { setShowInterviewOffer(false); setView('interview'); viewRef.current = 'interview'; }
+  }, [interviewAction]);
+
+  // Consent screen "I'm ready": first run consents, a paused interview resumes
+  // (new sitting, same section), an open sitting just re-enters. Then drop into
+  // the voice room with the conversation tagged as an interview sitting.
+  const handleInterviewReady = useCallback(async () => {
+    if (!interview) return;
+    const action = interview.phase === 'paused' ? 'resume'
+      : (interview.phase === 'in_progress' || interview.phase === 'gate_pending') ? null
+      : 'consent';
+    const st = action ? await interviewAction(action) : interview;
+    if (!st) return;
+    setInterviewMode(true);
+    enterVoice({ sessionType: 'interview', continueFrom: null });
+  }, [interview, interviewAction, enterVoice]);
+
+  const handleInterviewNotYet = useCallback(() => { setView('analytics'); viewRef.current = 'analytics'; }, []);
+
+  // Pause: sitting closes, progress persists — back to the dashboard, where the
+  // card offers "Continue your interview" another day.
+  const handleInterviewPause = useCallback(async () => {
+    await interviewAction('pause');
+    setInterviewMode(false);
+    setView('analytics'); viewRef.current = 'analytics';
+  }, [interviewAction]);
+
+  const handleInterviewAdvance = useCallback(async () => {
+    const st = await interviewAction('advance');
+    if (st?.phase === 'completed') { setInterviewMode(false); setView('analytics'); viewRef.current = 'analytics'; }
+  }, [interviewAction]);
+
+  const handleInterviewAcceptGate = useCallback(async () => { await interviewAction('accept-gate'); }, [interviewAction]);
 
   const handleTranscript = useCallback((userText: string, marcusText: string, emotion?: string) => {
     setTranscripts((prev) => [...prev, { user: userText, marcus: marcusText, emotion }]);
@@ -373,6 +450,7 @@ export default function Home() {
 
   const handleNewSession = async () => {
     if (fetchingOpeningRef.current) return;
+    setInterviewMode(false);
     if (conversationId && view === 'voice' && (transcripts.length > 0 || openingMessage)) return;
     setConversationId(null);
     setTranscripts([]);
@@ -454,6 +532,7 @@ export default function Home() {
 
   // Continue a conversation directly from the dashboard — goes straight to voice/text choice
   const handleContinueSession = (sessionId: string) => {
+    setInterviewMode(false);
     // Straight into the mic-open room, continuing that thread (no voice/text step).
     enterVoice({ sessionType: 'continue', continueFrom: sessionId });
   };
@@ -607,7 +686,54 @@ export default function Home() {
         <ShaderBackground state="idle" register={0} />
         <AppHeader mode="focused" />
         <div className="relative z-10">
-          <OnboardingFlow userId={userId} onComplete={() => setOnboardingComplete(true)} />
+          <OnboardingFlow userId={userId} onComplete={() => {
+            setOnboardingComplete(true);
+            // Offer the Embodied Man interview as his first conversation. A man
+            // who already has an interview (or whose state fails to load) skips
+            // the offer and lands exactly as before.
+            fetch(`/api/interview?userId=${userId}`)
+              .then((r) => r.json())
+              .then((st) => {
+                if (st && st.phase) setInterview(st);
+                if (st?.phase === 'not_started') setShowInterviewOffer(true);
+              })
+              .catch(() => { /* offer is optional — never block entry */ });
+          }} />
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Interview offer (post-onboarding: the interview as his first conversation) ───
+  if (showInterviewOffer) {
+    return (
+      <div className="h-screen w-screen flex flex-col relative overflow-hidden" style={{ background: '#faf9f6' }}>
+        <ShaderBackground contained state="idle" register={0} />
+        <AppHeader mode="focused" />
+        <div className="relative z-10 flex-1 min-h-0">
+          <InterviewOffer
+            onBegin={handleInterviewBegin}
+            onSkip={() => setShowInterviewOffer(false)}
+            busy={interviewBusy}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Interview consent gate (its own focused view — nothing starts before this) ───
+  if (view === 'interview' && interview) {
+    return (
+      <div className="h-screen w-screen flex flex-col relative overflow-hidden" style={{ background: '#faf9f6' }}>
+        <ShaderBackground contained state="idle" register={0} />
+        <AppHeader mode="focused" onHome={handleGoToAnalytics} onClose={handleGoToAnalytics} />
+        <div className="relative z-10 flex-1 min-h-0">
+          <InterviewConsent
+            state={interview}
+            onReady={handleInterviewReady}
+            onNotYet={handleInterviewNotYet}
+            busy={interviewBusy}
+          />
         </div>
       </div>
     );
@@ -624,6 +750,15 @@ export default function Home() {
             emotional register. Presentation only; sits behind all content (z-0). */}
         <ShaderBackground state={state} register={register} />
         <AppHeader mode="focused" onHome={handleGoToAnalytics} onClose={handleGoToAnalytics} />
+        {interviewMode && interview && (interview.phase === 'in_progress' || interview.phase === 'gate_pending') && (
+          <InterviewProgress
+            state={interview}
+            onPause={handleInterviewPause}
+            onAdvance={handleInterviewAdvance}
+            onAcceptGate={handleInterviewAcceptGate}
+            busy={interviewBusy}
+          />
+        )}
 
         {/* Session row — prototype's single flex:1 align-items:center row; content centered */}
         <div className="relative z-10 flex-1 flex items-center justify-center px-6 sm:px-10 lg:px-16 py-9 min-h-0" style={{ borderBottom: '2px solid #14100e' }}>
@@ -842,7 +977,7 @@ export default function Home() {
           ) : view === 'settings' ? (
             <SettingsScreen email={userEmail} handsFree={handsFree} onToggleHandsFree={setHandsFree} onSignOut={handleLogout} onDeleteAll={handleDeleteAll} onStartOver={handleStartOver} />
           ) : view === 'analytics' ? (
-            <AnalyticsDashboard userId={userId} onSelectSession={handleSelectSession} onContinueSession={handleContinueSession} onStartFresh={handleStartFresh} />
+            <AnalyticsDashboard userId={userId} onSelectSession={handleSelectSession} onContinueSession={handleContinueSession} onStartFresh={handleStartFresh} interview={interview} onBeginInterview={handleInterviewBegin} onResumeInterview={() => { setView('interview'); viewRef.current = 'interview'; }} interviewBusy={interviewBusy} />
           ) : view === 'session-notes' && sessionNotes ? (
             /* ─── Session Notes (post end-session) ─── */
             <div className="relative flex-1 overflow-hidden">
@@ -926,6 +1061,15 @@ export default function Home() {
               {/* Write — text mode, on the system: YOU in sans, MARCUS in serif, editorial composer */}
               {inputMode === 'text' && (
                 <div className="relative z-10 flex-1 flex flex-col overflow-hidden">
+                  {interviewMode && interview && (interview.phase === 'in_progress' || interview.phase === 'gate_pending') && (
+                    <InterviewProgress
+                      state={interview}
+                      onPause={handleInterviewPause}
+                      onAdvance={handleInterviewAdvance}
+                      onAcceptGate={handleInterviewAcceptGate}
+                      busy={interviewBusy}
+                    />
+                  )}
                   <div className="flex-1 overflow-y-auto">
                     <div className="mx-auto w-full px-6 sm:px-10 lg:px-16 py-10 fade-in-up" style={{ maxWidth: 680 }}>
                       {openingLoading && <p style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#6b6259' }}>One moment…</p>}
@@ -951,6 +1095,16 @@ export default function Home() {
                   </div>
                   <div className="flex-none">
                     <div className="mx-auto w-full px-6 sm:px-10 lg:px-16 py-5" style={{ maxWidth: 680 }}>
+                      {!interviewMode && interview && interview.phase === 'not_started' && (
+                        <button
+                          onClick={handleInterviewBegin}
+                          disabled={interviewBusy}
+                          className="transition-opacity hover:underline underline-offset-4 disabled:cursor-not-allowed"
+                          style={{ fontSize: 13, color: '#713b12', marginBottom: 10 }}
+                        >
+                          Begin your interview &rarr;
+                        </button>
+                      )}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <input
                           value={textInput}
