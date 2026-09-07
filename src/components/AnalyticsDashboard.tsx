@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { getSessionTitle, relativeDate, numberWord } from '@/lib/sessionMeta';
+import { InterviewCard, type InterviewPublicState } from '@/components/InterviewFlow';
 
 interface Topic { label: string; count: number; }
 interface WeeklyUsage { week: string; sessions: number; }
@@ -27,6 +28,12 @@ interface AnalyticsDashboardProps {
   onContinueSession?: (id: string) => void;
   /** Start a brand-new (fresh) session — "or say something new". */
   onStartFresh?: () => void;
+  /** Embodied Man interview skeleton: state + entries. Optional — the
+      dashboard renders exactly as before when they are not passed. */
+  interview?: InterviewPublicState | null;
+  onBeginInterview?: () => void;
+  onResumeInterview?: () => void;
+  interviewBusy?: boolean;
 }
 
 // ── Editorial helpers ───────────────────────────────────────────────────────────────
@@ -64,7 +71,7 @@ function threadSentence(data: AnalyticsData): string {
 
 const EYEBROW: React.CSSProperties = { fontSize: 13, letterSpacing: '0.22em', textTransform: 'uppercase', color: MUTED };
 
-export default function AnalyticsDashboard({ userId, onSelectSession, onContinueSession, onStartFresh }: AnalyticsDashboardProps) {
+export default function AnalyticsDashboard({ userId, onSelectSession, onContinueSession, onStartFresh, interview, onBeginInterview, onResumeInterview, interviewBusy }: AnalyticsDashboardProps) {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -94,6 +101,11 @@ export default function AnalyticsDashboard({ userId, onSelectSession, onContinue
               <button onClick={onStartFresh} className="inline-flex items-center gap-2 transition-opacity hover:underline underline-offset-4" style={{ color: TERRA, fontSize: 19, marginTop: 24 }}>
                 Start the first one <ArrowRight className="w-5 h-5" strokeWidth={1.75} />
               </button>
+            )}
+            {interview && onBeginInterview && onResumeInterview && (
+              <div className="text-left" style={{ marginTop: 8 }}>
+                <InterviewCard state={interview} onBegin={onBeginInterview} onResume={onResumeInterview} busy={interviewBusy ?? false} />
+              </div>
             )}
           </div>
         </div>
@@ -138,6 +150,11 @@ export default function AnalyticsDashboard({ userId, onSelectSession, onContinue
                   </div>
                 )}
               </div>
+
+              {/* The interview — always one tap away, in the same editorial voice */}
+              {interview && onBeginInterview && onResumeInterview && (
+                <InterviewCard state={interview} onBegin={onBeginInterview} onResume={onResumeInterview} busy={interviewBusy ?? false} />
+              )}
 
               {/* BEFORE — past sessions as plain lines (no rows, borders, icons, counts, tags) */}
               {convs.length > 1 && (
