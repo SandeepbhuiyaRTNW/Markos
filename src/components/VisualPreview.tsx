@@ -7,8 +7,7 @@ import ShaderBackground, { emotionToRegister } from './ShaderBackground';
 import AppHeader from './AppHeader';
 
 /** Development-only visual preview. Real room markup; sample data; no microphone or API calls. */
-export default function VisualPreview({ emotion = 'calm' }: { emotion?: string }) {
-  const state = 'speaking' as 'idle' | 'listening' | 'processing' | 'speaking';
+export default function VisualPreview({ emotion = 'calm', state = 'speaking' }: { emotion?: string; state?: 'idle' | 'listening' | 'processing' | 'speaking' }) {
   const register = emotionToRegister(emotion) ?? 0.3;
   const [showTranscript, setShowTranscript] = useState(false);
   const [handsFree, setHandsFree] = useState(true);
@@ -32,7 +31,7 @@ export default function VisualPreview({ emotion = 'calm' }: { emotion?: string }
           <div className="flex items-center gap-8 sm:gap-11 w-full" style={{ maxWidth: 860 }}>
             <div className="relative flex-none flex items-center justify-center">
               <div className="relative flex items-center justify-center" style={{ width: 220, height: 220 }}>
-                <Orb3D size={204} register={register} getLevel={() => 0.3 + Math.sin(performance.now() / 450) * 0.22} />
+                <Orb3D size={244} activity={state} register={register} getLevel={() => 0.3 + Math.sin(performance.now() / 450) * 0.22} />
               </div>
             </div>
             <div className="flex-1 min-w-0">

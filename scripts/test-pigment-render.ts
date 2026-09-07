@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 async function main() {
   const requireTools = createRequire(`${process.env.MARKOS_PLATE_TOOLS || '/tmp/markos-plate-tools'}/package.json`);
   const { chromium } = requireTools('playwright');
-  const bundle = await build({ stdin: { contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import PigmentPlate from './src/components/PigmentPlate'; window.level=0; window.weight=0; const root=createRoot(document.getElementById('root')); window.redraw=()=>root.render(React.createElement('div', {style:{position:'relative',width:640,height:400}}, React.createElement(PigmentPlate,{mode:'field',register:window.weight}), React.createElement('div',{id:'orb',style:{position:'absolute',left:200,top:90,width:220,height:220}}, React.createElement(PigmentPlate,{mode:'orb',register:window.weight,getLevel:()=>window.level})))); window.redraw();`, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, write: false, format: 'iife', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' } });
+  const bundle = await build({ stdin: { contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import PigmentPlate from './src/components/PigmentPlate'; window.activity='listening'; window.level=0; window.weight=0; const root=createRoot(document.getElementById('root')); window.redraw=()=>root.render(React.createElement('div', {style:{position:'relative',width:640,height:400}}, React.createElement(PigmentPlate,{mode:'field',register:window.weight}), React.createElement('div',{id:'orb',style:{position:'absolute',left:200,top:90,width:220,height:220}}, React.createElement(PigmentPlate,{mode:'orb',activity:window.activity,register:window.weight,getLevel:()=>window.level})))); window.redraw();`, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, write: false, format: 'iife', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' } });
   const css = readFileSync('src/app/globals.css', 'utf8').split('/* Offline p5.brush')[1];
   const browser = await chromium.launch({ headless: true, channel: 'chrome', args: ['--enable-unsafe-swiftshader'] });
   try {
@@ -34,8 +34,10 @@ async function main() {
       await page.waitForFunction('document.querySelectorAll(".pigment-plate").length === 2');
       if (mode === 'motion') {
         await page.waitForFunction('document.querySelectorAll("[data-painted=true]").length === 2');
+        const listening = await page.evaluate(`(()=>{const m=document.querySelector('#orb .plate-canvas').paperShaderMount;const gl=m.canvasElement.getContext('webgl2');const p=gl.getParameter(gl.CURRENT_PROGRAM);return gl.getUniform(p,gl.getUniformLocation(p,'uListening'))})()`);
+        assert(listening > .99, 'Listening state must reach the shader');
         const before = await page.screenshot();
-        await page.evaluate('window.level=1;window.weight=1;window.redraw()');
+        await page.evaluate("window.activity='speaking';window.level=1;window.weight=1;window.redraw()");
         await page.waitForTimeout(2000);
         const after = await page.screenshot();
         const a = await sharp(before).raw().toBuffer(), b = await sharp(after).raw().toBuffer();
@@ -53,7 +55,8 @@ async function main() {
         let changed = 0;
         for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) changed++;
         assert(changed > 1000, `Expected moving pigment, only ${changed} channels changed`);
-        const uniforms = await page.evaluate(`Array.from(document.querySelectorAll('.plate-canvas')).map(el=>{const m=el.paperShaderMount;const gl=m.canvasElement.getContext('webgl2'); const program=gl.getParameter(gl.CURRENT_PROGRAM);return {level:gl.getUniform(program,gl.getUniformLocation(program,'uLevel')), register:gl.getUniform(program,gl.getUniformLocation(program,'uRegister'))}})`);
+        const uniforms = await page.evaluate(`Array.from(document.querySelectorAll('.plate-canvas')).map(el=>{const m=el.paperShaderMount;const gl=m.canvasElement.getContext('webgl2'); const program=gl.getParameter(gl.CURRENT_PROGRAM);return {level:gl.getUniform(program,gl.getUniformLocation(program,'uLevel')), register:gl.getUniform(program,gl.getUniformLocation(program,'uRegister')), speaking:gl.getUniform(program,gl.getUniformLocation(program,'uSpeaking')), listening:gl.getUniform(program,gl.getUniformLocation(program,'uListening'))}})`);
+        assert(uniforms[1].speaking > .9 && uniforms[1].listening < .1, 'Speaking motion must replace listening without remounting');
         assert(uniforms[1].level > .9, 'Existing audio envelope must reach uLevel');
         const cornerAlpha = await page.evaluate(`(()=>{const m=document.querySelector('#orb .plate-canvas').paperShaderMount;m.setUniforms({uMotionTime:0});const gl=m.canvasElement.getContext('webgl2');const pixel=new Uint8Array(4);gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,pixel);return pixel[3]})()`);
         assert.equal(cornerAlpha, 0, 'Orb corners must be transparent, never a white rectangle');

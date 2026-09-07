@@ -1,9 +1,10 @@
 'use client';
 
 import type { CSSProperties } from 'react';
-import PigmentPlate, { MARCUS_PLATES } from './PigmentPlate';
+import PigmentPlate, { MARCUS_PLATES, type OrbActivity } from './PigmentPlate';
 
 interface Orb3DProps {
+  activity?: OrbActivity;
   getLevel?: () => number;
   register?: number;
   size?: number;
@@ -14,8 +15,8 @@ interface Orb3DProps {
 }
 
 /** Existing audio-envelope interface; only the visual renderer changes. */
-export default function Orb3D({ getLevel, register = .2, size = 220, parallax = true, className, style, plates = MARCUS_PLATES }: Orb3DProps) {
+export default function Orb3D({ activity = 'idle', getLevel, register = .2, size = 220, parallax = true, className, style, plates = MARCUS_PLATES }: Orb3DProps) {
   return <div aria-hidden className={className} style={{ position: 'relative', width: size, height: size, flexShrink: 0, ...style }}>
-    <PigmentPlate mode="orb" getLevel={getLevel} register={register} parallax={parallax} plates={plates} />
+    <PigmentPlate mode="orb" activity={activity} getLevel={getLevel} register={register} parallax={parallax} plates={plates} />
   </div>;
 }

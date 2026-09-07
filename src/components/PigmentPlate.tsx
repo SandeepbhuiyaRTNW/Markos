@@ -14,6 +14,8 @@ precision highp float;
 uniform mediump vec2 u_resolution;
 uniform float uMotionTime;
 uniform float uLevel;
+uniform float uListening;
+uniform float uSpeaking;
 uniform float uRegister;
 uniform float uOrb;
 uniform vec2 uPointer;
@@ -39,12 +41,18 @@ void main() {
   float t = uMotionTime;
   if (uOrb > .5) {
     // Two overlapping pigment impressions. Boundaries come from p5.brush, never a disc mask.
-    p /= 1.12 + .055 * sin(t*.8) + uLevel * .09;
+    // Listening gathers pigment inward; speaking carries it outward in soft waves.
+    float breath = sin(t * 1.25);
+    float radius = length(p);
+    float voiceWave = sin(radius * 19. - t * 3.6);
+    p /= 1.12 + .035 * breath + uLevel * (.035 + uSpeaking * .15);
+    p *= 1. + uListening * uLevel * .065 * sin(radius * 10. + t * 1.8);
+    p += p * voiceWave * uSpeaking * (.012 + uLevel * .05);
     p += uPointer * .008;
-    float turn = sin(t*.37) * (.035 + uLevel*.055);
+    float turn = sin(t*.37) * (.035 + uLevel*.055) + uListening * sin(radius*8.+t*.9) * (.025+uLevel*.065);
     p = mat2(cos(turn), -sin(turn), sin(turn), cos(turn)) * p;
     vec2 displacement = vec2(sin(p.y*13.+t*.8), cos(p.x*11.-t*.6));
-    displacement *= .008 + uLevel*.022;
+    displacement *= .008 + uLevel * (.012 + uSpeaking*.022 + uListening*.009);
     vec3 first = paint(p + .5 + displacement);
     vec3 second = paint(p * .96 + .5 - displacement*.7 + vec2(.023,-.012));
     vec3 pigment = mix(vec3(1.), first, .88) * mix(vec3(1.), second, .30);
@@ -81,8 +89,11 @@ function fieldColors(weight: number) {
   return cool.map((color, i) => color.map((channel, j) => channel + (warm[i][j] - channel) * weight));
 }
 
+export type OrbActivity = 'idle' | 'listening' | 'processing' | 'speaking';
+
 interface Props {
   mode: 'orb' | 'field';
+  activity?: OrbActivity;
   register?: number;
   getLevel?: () => number;
   speed?: number;
@@ -92,10 +103,10 @@ interface Props {
 }
 
 /** Visual consumer only: reads the existing audio envelope and emotion scalar. */
-export default function PigmentPlate({ mode, register = .2, getLevel, speed = .18, parallax = false, plates = MARCUS_PLATES, style }: Props) {
+export default function PigmentPlate({ mode, activity = 'idle', register = .2, getLevel, speed = .18, parallax = false, plates = MARCUS_PLATES, style }: Props) {
   const host = useRef<HTMLDivElement>(null);
-  const input = useRef({ register, getLevel, speed });
-  useEffect(() => { input.current = { register, getLevel, speed }; }, [register, getLevel, speed]);
+  const input = useRef({ register, getLevel, speed, activity });
+  useEffect(() => { input.current = { register, getLevel, speed, activity }; }, [register, getLevel, speed, activity]);
   const plate = plates[Math.round(clampRegister(register) * 7)] || MARCUS_PLATES[0];
 
   useEffect(() => {
@@ -108,6 +119,8 @@ export default function PigmentPlate({ mode, register = .2, getLevel, speed = .1
       if (mq.matches || plates.length !== 8) return;
       let disposed = false, frame = 0, mount: ShaderMount | undefined;
       let last = 0, time = 0, level = .2, weight = clampRegister(input.current.register), drift = input.current.speed;
+      let listening = input.current.activity === 'listening' ? 1 : 0;
+      let speaking = input.current.activity === 'speaking' ? 1 : 0;
       const pointer = [0, 0];
       const canvasHost = document.createElement('div');
       canvasHost.className = 'plate-canvas';
@@ -147,7 +160,7 @@ export default function PigmentPlate({ mode, register = .2, getLevel, speed = .1
             }))),
           ]);
           if (disposed) return;
-          const uniforms: ShaderMountUniforms = { uMotionTime: 0, uLevel: level, uRegister: weight, uOrb: mode === 'orb' ? 1 : 0, uPointer: pointer };
+          const uniforms: ShaderMountUniforms = { uMotionTime: 0, uLevel: level, uListening: listening, uSpeaking: speaking, uRegister: weight, uOrb: mode === 'orb' ? 1 : 0, uPointer: pointer };
           images.forEach((image, i) => { uniforms[`uPlate${i}`] = image; });
           if (mode === 'field') {
             const noise = getShaderNoiseTexture();
@@ -172,10 +185,13 @@ export default function PigmentPlate({ mode, register = .2, getLevel, speed = .1
                 const raw = input.current.getLevel?.() ?? .18;
                 const target = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 0;
                 level += (target - level) * (1 - Math.exp(-dt / (target > level ? .32 : 1.4)));
+                const settle = 1 - Math.exp(-dt / .55);
+                listening += ((input.current.activity === 'listening' ? 1 : 0) - listening) * settle;
+                speaking += ((input.current.activity === 'speaking' ? 1 : 0) - speaking) * settle;
                 weight += (clampRegister(input.current.register) - weight) * (1 - Math.exp(-dt / 4.5));
                 drift += (input.current.speed - drift) * (1 - Math.exp(-dt / .65));
                 time += dt * (mode === 'orb' ? .65 + level*.65 : drift*4) * (1 - weight*.25);
-                mount?.setUniforms({ uMotionTime: time, uLevel: level, uRegister: weight, uPointer: [...pointer], ...(mode === 'field' ? { uPaperTime: time, u_colors: fieldColors(weight) } : {}) });
+                mount?.setUniforms({ uMotionTime: time, uLevel: level, uListening: listening, uSpeaking: speaking, uRegister: weight, uPointer: [...pointer], ...(mode === 'field' ? { uPaperTime: time, u_colors: fieldColors(weight) } : {}) });
                 canvasHost.style.visibility = 'visible';
                 element.dataset.painted = 'true';
               }

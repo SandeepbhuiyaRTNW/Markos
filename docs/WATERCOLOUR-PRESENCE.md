@@ -124,3 +124,9 @@ Existing suite results:
 | `scripts/test-w1-composer-return-path.ts` | PASS |
 | `scripts/test-w1-message-persistence.ts` | PASS |
 | `scripts/test-w4-await-persist.ts` | PASS |
+
+## Voice activity refinement
+
+The voice-room orb is 244px rather than 204px inside its existing 220px layout wrapper. Listening gently gathers and turns pigment inward; speaking expands the painted volume with outward travelling displacement. Existing voice state reaches `uListening` / `uSpeaking` through visual props; their weights ease over .55 seconds without rebuilding WebGL or reloading textures. The original `uLevel` envelope and emotion mapping remain unchanged. Idle/processing use the quiet painted breathing movement, and reduced-motion/no-WebGL stays static.
+
+Development previews accept `state=listening` or `state=speaking` alongside `emotion`. No controls were added. The graphics regression checks state delivery, eased listening-to-speaking handoff, audio levels, background motion and fallbacks. TypeScript, build and targeted lint passed. No assets were added by this refinement.

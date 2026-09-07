@@ -471,7 +471,8 @@ export default function VoiceOrb({
           already tapped below). Same component + shader as the landing page. Its static
           artwork covers no-WebGL / reduced-motion, so it degrades cleanly. */}
       <Orb3D
-        size={204}
+        size={244}
+        activity={state}
         register={register}
         className="voice-orb-sculpture"
         getLevel={() => {
