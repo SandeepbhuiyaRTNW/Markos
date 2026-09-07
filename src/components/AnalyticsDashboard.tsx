@@ -30,13 +30,11 @@ interface AnalyticsDashboardProps {
 }
 
 // ── Editorial helpers ───────────────────────────────────────────────────────────────
-// Text colours below are contrast-checked against the e4634c7 ShaderBackground field
-// (darkest field = clay #f0e0d0, L 0.764): #14100e 14.7:1, #3d352e 9.3:1, #6b6259 4.6:1,
-// terracotta text #8a4a14 5.3:1 — all pass (headings/body >=7, muted >=4.5).
-const INK = '#14100e';        // hero heading            — 14.7:1
-const INK_SOFT = '#3d352e';   // session titles / body   — 9.3:1
-const MUTED = '#6b6259';      // eyebrows, dates, count   — 4.6:1
-const TERRA = '#8a4a14';      // warm action (darkened from #b0611f, which fails at 3.6:1)
+// Darkest-region results, including grain: docs/plate-contrast.json.
+const INK = '#14100e';       // headings: 15.867:1
+const INK_SOFT = '#3d352e';  // body: 10.083:1
+const MUTED = '#6b6259';     // muted: 5.009:1
+const TERRA = '#713b12';     // bronze ink: 7.539:1
 
 function dayTimeEyebrow(dateStr: string): string {
   const dt = new Date(dateStr);
@@ -93,7 +91,7 @@ export default function AnalyticsDashboard({ userId, onSelectSession, onContinue
               This is where your conversations will live.
             </h1>
             {onStartFresh && (
-              <button onClick={onStartFresh} className="inline-flex items-center gap-2 transition-opacity hover:opacity-70" style={{ color: TERRA, fontSize: 19, marginTop: 24 }}>
+              <button onClick={onStartFresh} className="inline-flex items-center gap-2 transition-opacity hover:underline underline-offset-4" style={{ color: TERRA, fontSize: 19, marginTop: 24 }}>
                 Start the first one <ArrowRight className="w-5 h-5" strokeWidth={1.75} />
               </button>
             )}
@@ -112,7 +110,7 @@ export default function AnalyticsDashboard({ userId, onSelectSession, onContinue
       <div className="relative z-10 h-full overflow-y-auto">
         <div className="mx-auto w-full px-6 sm:px-10 lg:px-16 py-16 fade-in-up" style={{ maxWidth: 720 }}>
           {loading || !data ? (
-            <p style={{ ...EYEBROW, opacity: 0.6 }}>Loading…</p>
+            <p style={EYEBROW}>Loading…</p>
           ) : (
             <>
               {/* Eyebrow — when you left off */}
@@ -127,14 +125,14 @@ export default function AnalyticsDashboard({ userId, onSelectSession, onContinue
               <div style={{ marginTop: 22 }}>
                 <button
                   onClick={() => onContinueSession?.(convs[0].id)}
-                  className="inline-flex items-center gap-2 transition-opacity hover:opacity-70"
+                  className="inline-flex items-center gap-2 transition-opacity hover:underline underline-offset-4"
                   style={{ color: TERRA, fontSize: 19, lineHeight: 1.3 }}
                 >
                   Pick that back up <ArrowRight className="w-5 h-5" strokeWidth={1.75} />
                 </button>
                 {onStartFresh && (
                   <div style={{ marginTop: 8 }}>
-                    <button onClick={onStartFresh} className="transition-opacity hover:opacity-70" style={{ color: MUTED, fontSize: 15 }}>
+                    <button onClick={onStartFresh} className="transition-opacity hover:underline underline-offset-4" style={{ color: MUTED, fontSize: 15 }}>
                       or say something new
                     </button>
                   </div>
@@ -150,7 +148,7 @@ export default function AnalyticsDashboard({ userId, onSelectSession, onContinue
                       <button
                         key={s.id}
                         onClick={() => onSelectSession(s.id)}
-                        className="block w-full text-left transition-opacity hover:opacity-70"
+                        className="block w-full text-left transition-opacity hover:underline underline-offset-4"
                         style={{ marginTop: 22 }}
                       >
                         <div style={{ fontSize: 20, color: INK_SOFT, lineHeight: 1.3 }}>{sessionTitle(s)}</div>

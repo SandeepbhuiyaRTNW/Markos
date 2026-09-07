@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import StoicField from '@/components/StoicField';
-import Orb3D from '@/components/Orb3D';
+import MarcusWelcome from '@/components/MarcusWelcome';
 
 // The intro: ~100 unspoken lines pack the screen solid one at a time (accelerating), then
 // every one falls INTO a growing point of light (the orb), nearest-to-centre first. Ground is
@@ -93,7 +93,7 @@ export default function IntroSequence({ onDone }: { onDone: () => void }) {
       const cy = insetY + (row + 0.5) * cellH + (Math.random() - 0.5) * cellH * 0.7;
       return {
         id: i, text: LINES[i % LINES.length],
-        cx, cy, size: 10.5 + Math.random() * 6, op: 0.4 + Math.random() * 0.52,
+        cx, cy, size: 10.5 + Math.random() * 6, op: 0.92 + Math.random() * 0.08,
         dx: cx0 - cx, dy: cy0 - cy, rot: (Math.random() - 0.5) * 50,
         arrived: false, collapsing: false,
       };
@@ -123,7 +123,7 @@ export default function IntroSequence({ onDone }: { onDone: () => void }) {
     T(() => setOrbScale(true), collapseStart + 60);
     T(() => setOrbUp(true), collapseStart + ORB_GROW);
     const done = collapseStart + ORB_GROW + SETTLE;
-    T(finish, done);
+    // The welcome owns completion once the painted orb settles; Skip remains available.
     setTotal(Math.round(done));
     // eslint-disable-next-line no-console
     console.log(`[intro] ${N} lines, total ≈ ${(done / 1000).toFixed(1)}s`);
@@ -163,12 +163,12 @@ export default function IntroSequence({ onDone }: { onDone: () => void }) {
         ))}
         {orb && (
           <div style={{ position: 'absolute', left: '50%', top: orbUp ? '38%' : '50%', transform: 'translate(-50%,-50%)', transition: 'top 2s cubic-bezier(.22,.61,.36,1)', zIndex: 5 }}>
-            <div style={{ transform: orbScale ? 'scale(1)' : 'scale(0.03)', transition: `transform ${ORB_GROW}ms cubic-bezier(.34,.02,.2,1)`, filter: 'drop-shadow(0 0 26px rgba(244,226,188,0.55))' }}>
-              <Orb3D size={200} />
+            <div style={{ transform: orbScale ? 'scale(1)' : 'scale(0.03)', transition: `transform ${ORB_GROW}ms cubic-bezier(.34,.02,.2,1)` }}>
+              <MarcusWelcome active={orbUp} onComplete={finish} />
             </div>
           </div>
         )}
-        <button onClick={finish} className="absolute bottom-6 right-8 transition-opacity hover:opacity-70" style={{ fontSize: 12, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#4a4436' }}>Skip</button>
+        <button onClick={finish} className="absolute bottom-6 right-8 transition-opacity hover:underline underline-offset-4" style={{ fontSize: 12, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#4a4436' }}>Skip</button>
       </div>
     </div>
   );

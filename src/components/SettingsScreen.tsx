@@ -9,7 +9,7 @@ const INK = '#14100e';
 const INK_SOFT = '#3d352e';
 const MUTED = '#6b6259';
 const MUTED_STRONG = '#5c534b';
-const TERRA = '#8a4a14';
+const TERRA = '#713b12';
 const EYEBROW: CSSProperties = { fontSize: 13, letterSpacing: '0.22em', textTransform: 'uppercase', color: MUTED };
 
 interface SettingsScreenProps {
@@ -50,7 +50,7 @@ export default function SettingsScreen({ email, handsFree, onToggleHandsFree, on
           <p style={EYEBROW}>Account</p>
           <div style={{ marginTop: 16 }}>
             <p style={{ fontSize: 17, color: INK_SOFT }}>{email || '—'}</p>
-            <button onClick={onSignOut} className="transition-opacity hover:opacity-70" style={{ fontSize: 15, color: MUTED_STRONG, marginTop: 10 }}>Sign out</button>
+            <button onClick={onSignOut} className="transition-opacity hover:underline underline-offset-4" style={{ fontSize: 15, color: MUTED_STRONG, marginTop: 10 }}>Sign out</button>
           </div>
         </section>
 
@@ -86,11 +86,11 @@ export default function SettingsScreen({ email, handsFree, onToggleHandsFree, on
               Removes every session and its transcript. Marcus keeps what he already knows about you.
             </p>
             {!confirmAll ? (
-              <button onClick={() => setConfirmAll(true)} className="transition-opacity hover:opacity-70" style={{ fontSize: 15, color: MUTED_STRONG, marginTop: 10 }}>Clear conversations…</button>
+              <button onClick={() => setConfirmAll(true)} className="transition-opacity hover:underline underline-offset-4" style={{ fontSize: 15, color: MUTED_STRONG, marginTop: 10 }}>Clear conversations…</button>
             ) : (
               <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 16 }}>
                 <button onClick={() => setConfirmAll(false)} style={{ fontSize: 15, color: INK, fontWeight: 500 }}>Keep them</button>
-                <button onClick={runAll} disabled={busy === 'all'} className="transition-opacity hover:opacity-70 disabled:opacity-50" style={{ fontSize: 15, color: TERRA }}>{busy === 'all' ? 'Clearing…' : `Clear all ${n || ''} — keep memory`}</button>
+                <button onClick={runAll} disabled={busy === 'all'} className="transition-opacity hover:underline underline-offset-4 disabled:cursor-not-allowed" style={{ fontSize: 15, color: TERRA }}>{busy === 'all' ? 'Clearing…' : `Clear all ${n || ''} — keep memory`}</button>
               </div>
             )}
           </div>
@@ -102,7 +102,7 @@ export default function SettingsScreen({ email, handsFree, onToggleHandsFree, on
               Deletes everything — and Marcus forgets you entirely.
             </p>
             {!confirmOver ? (
-              <button onClick={() => setConfirmOver(true)} className="transition-opacity hover:opacity-70" style={{ fontSize: 15, color: MUTED_STRONG, marginTop: 10 }}>Start over…</button>
+              <button onClick={() => setConfirmOver(true)} className="transition-opacity hover:underline underline-offset-4" style={{ fontSize: 15, color: MUTED_STRONG, marginTop: 10 }}>Start over…</button>
             ) : (
               <div style={{ marginTop: 16, maxWidth: 460 }}>
                 <p style={{ fontSize: 15, lineHeight: 1.6, color: INK_SOFT }}>
@@ -121,7 +121,7 @@ export default function SettingsScreen({ email, handsFree, onToggleHandsFree, on
                   <button
                     onClick={runOver}
                     disabled={erase.trim().toUpperCase() !== 'ERASE' || busy === 'over'}
-                    className="transition-opacity disabled:opacity-40"
+                    className="transition-opacity disabled:cursor-not-allowed"
                     style={{ fontSize: 15, color: TERRA }}
                   >
                     {busy === 'over' ? 'Erasing…' : 'Erase everything'}

@@ -13,7 +13,7 @@ interface ConversationViewProps { conversationId: string; onBack: () => void; }
 
 const MUTED = '#6b6259';
 const INK_SOFT = '#3d352e';
-const TERRA = '#8a4a14';
+const TERRA = '#713b12';
 const EYEBROW: CSSProperties = { fontSize: 13, letterSpacing: '0.22em', textTransform: 'uppercase', color: MUTED };
 
 export default function ConversationView({ conversationId, onBack }: ConversationViewProps) {
@@ -68,7 +68,7 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
     <div className="relative flex-1 overflow-hidden">
       <div className="relative z-10 h-full overflow-y-auto">
         <div className="mx-auto w-full px-6 sm:px-10 lg:px-16 py-14" style={{ maxWidth: 720 }}>
-          <button onClick={onBack} className="inline-flex items-center gap-1.5 transition-opacity hover:opacity-70" style={{ color: MUTED, fontSize: 13 }}>
+          <button onClick={onBack} className="inline-flex items-center gap-1.5 transition-opacity hover:underline underline-offset-4" style={{ color: MUTED, fontSize: 13 }}>
             <ArrowLeft className="w-4 h-4" strokeWidth={1.75} /> Back
           </button>
 
@@ -86,7 +86,7 @@ export default function ConversationView({ conversationId, onBack }: Conversatio
               />
 
               {!takeaways.length && !summary && (
-                <button onClick={generateSummary} disabled={generating} className="inline-flex items-center gap-2 transition-opacity hover:opacity-70 disabled:opacity-50" style={{ color: TERRA, fontSize: 16, marginTop: 24 }}>
+                <button onClick={generateSummary} disabled={generating} className="inline-flex items-center gap-2 transition-opacity hover:underline underline-offset-4 disabled:cursor-not-allowed" style={{ color: TERRA, fontSize: 16, marginTop: 24 }}>
                   {generating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</> : 'Generate summary'}
                 </button>
               )}

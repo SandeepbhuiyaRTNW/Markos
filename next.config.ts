@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  devIndicators: false,
   reactCompiler: true,
   serverExternalPackages: ["pg", "pg-pool", "pg-native"],
   // Pass env vars through to SSR runtime (needed for Amplify)
