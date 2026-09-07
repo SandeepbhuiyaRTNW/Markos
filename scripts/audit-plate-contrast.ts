@@ -4,7 +4,7 @@ import ts from 'typescript';
 import sharp from 'sharp';
 import assert from 'node:assert/strict';
 
-const screens = ['src/app/page.tsx', ...['IntroSequence', 'OnboardingFlow', 'AppHeader', 'AnalyticsDashboard', 'Sidebar', 'ConversationView', 'SessionSummary', 'SettingsScreen', 'VisualPreview'].map(n => `src/components/${n}.tsx`)];
+const screens = ['src/app/page.tsx', ...['MarcusWelcome', 'IntroSequence', 'OnboardingFlow', 'AppHeader', 'AnalyticsDashboard', 'Sidebar', 'ConversationView', 'SessionSummary', 'SettingsScreen', 'VisualPreview'].map(n => `src/components/${n}.tsx`)];
 const colours = new Map<string, Set<string>>();
 function record(hex: string, file: string) {
   if (!/^#[a-f\d]{6}$/i.test(hex)) return;

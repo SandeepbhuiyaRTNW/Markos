@@ -271,6 +271,7 @@
       "colour": "#3d352e",
       "files": [
         "src/app/page.tsx",
+        "src/components/MarcusWelcome.tsx",
         "src/components/AnalyticsDashboard.tsx",
         "src/components/Sidebar.tsx",
         "src/components/ConversationView.tsx",
@@ -320,6 +321,7 @@
       "colour": "#6b6259",
       "files": [
         "src/app/page.tsx",
+        "src/components/MarcusWelcome.tsx",
         "src/components/AnalyticsDashboard.tsx",
         "src/components/Sidebar.tsx",
         "src/components/ConversationView.tsx",
@@ -337,6 +339,7 @@
       "colour": "#713b12",
       "files": [
         "src/app/page.tsx",
+        "src/components/MarcusWelcome.tsx",
         "src/components/OnboardingFlow.tsx",
         "src/components/AnalyticsDashboard.tsx",
         "src/components/ConversationView.tsx",

@@ -15,6 +15,7 @@ import AppHeader from '@/components/AppHeader';
 import SettingsScreen from '@/components/SettingsScreen';
 import Orb3D from '@/components/Orb3D';
 import IntroSequence from '@/components/IntroSequence';
+import MarcusWelcome from '@/components/MarcusWelcome';
 import StoicField from '@/components/StoicField';
 import type { CSSProperties } from 'react';
 
@@ -504,7 +505,7 @@ export default function Home() {
           <div className="mx-auto w-full px-6 sm:px-10 lg:px-16" style={{ maxWidth: 640 }}>
             {/* Hero */}
             <div className="flex justify-center" style={{ marginTop: 24 }}>
-              <Orb3D size={168} />
+              <MarcusWelcome />
             </div>
             <p className="text-center" style={{ fontSize: 13, letterSpacing: '0.22em', textTransform: 'uppercase', color: '#332c26', marginTop: 32 }}>A voice for what you don’t say</p>
             <h1 className="font-serif text-center" style={{ fontSize: 'clamp(30px,5.5vw,50px)', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.12, color: '#100d0a', marginTop: 14, maxWidth: 560, marginLeft: 'auto', marginRight: 'auto' }}>Most men don’t have anyone to say it to.</h1>
