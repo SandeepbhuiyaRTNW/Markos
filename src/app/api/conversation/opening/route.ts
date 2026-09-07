@@ -4,6 +4,8 @@ import { query } from '@/lib/db';
 import { getMemoryContext, getSessionHistory, getStylePreferences } from '@/lib/memory/memory-manager';
 import { synthesizeSpeech } from '@/lib/voice/tts';
 import { buildSystemPrompt } from '@/lib/agent/system-prompt';
+import { loadInterviewState } from '@/lib/interview/store';
+import { currentSection, TOTAL_SECTIONS } from '@/lib/interview/session';
 import { emitTurnTiming, type TurnTimingCtx } from '@/lib/observability/turn-timing';
 
 function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); }
@@ -160,8 +162,30 @@ export async function GET(req: NextRequest) {
       if (lastPondering.length > 0) continuitySection += `\nPondering topics given to him:\n${lastPondering.map(t => `- ${t}`).join('\n')}`;
     }
 
+    // Interview sittings get their own opening: greet him INTO the section he
+    // is on (or back into it, another day). Consent already happened in the UI.
+    // The deep question content is not authored yet, so the instruction bars
+    // inventing the interview's questions — receive, don't interrogate.
+    let interviewInstruction = '';
+    if (sessionType === 'interview') {
+      const iState = await loadInterviewState(userId).catch(() => null);
+      const section = iState ? currentSection(iState) : null;
+      if (section) {
+        const resuming = (iState?.sittings.length ?? 0) > 1;
+        interviewInstruction = `
+
+## INTERVIEW SESSION CONTEXT
+He is in the Embodied Man interview${resuming ? ', picking it back up after time away' : ''} — Section ${section.section} of ${TOTAL_SECTIONS}: "${section.name}" (${section.life_stage}). He has already consented to the interview's depth in the app — do not re-ask permission for the interview itself. The interview's deep question content is NOT authored yet: do NOT invent its questions, do NOT announce a questionnaire or a list of sections. Receive whatever he brings inside this section's territory, in your usual plain voice.`;
+      }
+    }
+
     let openingInstruction: string;
-    if (sessionType === 'fresh') {
+    if (sessionType === 'interview' && interviewInstruction) {
+      openingInstruction = `
+
+## YOUR TASK — OPEN AN INTERVIEW SITTING${interviewInstruction}
+Open the sitting in 2-3 sentences: welcome him into this part of the interview and end with ONE open doorway into the section's territory — not a scripted interview question. Do NOT read the context above back to him, and do NOT start with "Brother" — vary your openings.`;
+    } else if (sessionType === 'fresh') {
       const nameGreeting = userName ? `You know this man as ${userName}. ` : '';
       openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION (NEW TOPIC)
 ${nameGreeting}He has chosen to start a NEW topic today — do NOT reference previous conversations, past struggles, or pondering topics. He wants a clean start on something different.
