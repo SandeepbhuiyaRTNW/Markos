@@ -85,8 +85,8 @@ export default function OnboardingFlow({ userId, onComplete }: OnboardingFlowPro
     else if (phase === 'questions' && step > 0) { setStep(step - 1); setCurrentAnswer(answers[QUESTIONS[step - 1].id] || ''); }
   };
 
-  const inputClass = 'w-full h-12 px-4 rounded-xl bg-white border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-[#a3785e]/25 focus:border-[#a3785e]/30 transition-all text-sm';
-  const textareaClass = 'w-full px-4 py-3 rounded-xl bg-white border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-[#a3785e]/25 focus:border-[#a3785e]/30 transition-all text-sm resize-none leading-relaxed';
+  const inputClass = 'w-full h-12 px-4 rounded-xl bg-white border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#a3785e]/25 focus:border-[#a3785e]/30 transition-all text-sm';
+  const textareaClass = 'w-full px-4 py-3 rounded-xl bg-white border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#a3785e]/25 focus:border-[#a3785e]/30 transition-all text-sm resize-none leading-relaxed';
 
   return (
     <div className="h-screen flex flex-col items-center justify-center px-6 fade-in-up">
@@ -94,10 +94,10 @@ export default function OnboardingFlow({ userId, onComplete }: OnboardingFlowPro
         {/* Progress */}
         <div className="mb-10">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[11px] tracking-widest uppercase text-[#a3785e]/70">
+            <span className="text-[11px] tracking-widest uppercase text-[#713b12]">
               {phase === 'profile' ? 'Your Profile' : 'Getting to Know You'}
             </span>
-            <span className="text-[11px] text-muted-foreground/40 tabular-nums">
+            <span className="text-[11px] text-muted-foreground tabular-nums">
               {currentStepNum} / {totalSteps}
             </span>
           </div>
@@ -115,20 +115,20 @@ export default function OnboardingFlow({ userId, onComplete }: OnboardingFlowPro
             <h2 className="text-2xl font-semibold leading-snug mb-2 text-foreground">
               Before we begin, tell me about yourself.
             </h2>
-            <p className="text-sm mb-8 text-muted-foreground/70">
+            <p className="text-sm mb-8 text-muted-foreground">
               Marcus remembers everything. This helps him understand you from the start.
             </p>
             <div className="space-y-5">
               <div>
-                <label className="text-[11px] uppercase tracking-widest mb-2 block text-muted-foreground/50">Name</label>
+                <label className="text-[11px] uppercase tracking-widest mb-2 block text-muted-foreground">Name</label>
                 <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="What should Marcus call you?" className={inputClass} autoFocus />
               </div>
               <div>
-                <label className="text-[11px] uppercase tracking-widest mb-2 block text-muted-foreground/50">Age</label>
+                <label className="text-[11px] uppercase tracking-widest mb-2 block text-muted-foreground">Age</label>
                 <input type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="Your age" min={13} max={120} className={inputClass} />
               </div>
               <div>
-                <label className="text-[11px] uppercase tracking-widest mb-2 block text-muted-foreground/50">What brought you here?</label>
+                <label className="text-[11px] uppercase tracking-widest mb-2 block text-muted-foreground">What brought you here?</label>
                 <textarea value={whatBroughtYou} onChange={(e) => setWhatBroughtYou(e.target.value)} placeholder="What are you hoping to find or work through?" rows={3} className={textareaClass} />
               </div>
             </div>
@@ -141,7 +141,7 @@ export default function OnboardingFlow({ userId, onComplete }: OnboardingFlowPro
             <h2 className="text-2xl font-semibold leading-snug mb-2 text-foreground">
               {QUESTIONS[step].question}
             </h2>
-            <p className="text-sm mb-8 text-muted-foreground/70">
+            <p className="text-sm mb-8 text-muted-foreground">
               {QUESTIONS[step].subtext}
             </p>
             <textarea
@@ -159,7 +159,7 @@ export default function OnboardingFlow({ userId, onComplete }: OnboardingFlowPro
         <div className="flex items-center justify-between mt-8">
           <button
             onClick={handleBack}
-            className={`flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors ${phase === 'profile' ? 'opacity-0 pointer-events-none' : ''}`}
+            className={`flex items-center gap-1 text-xs text-muted-foreground hover:text-muted-foreground transition-colors ${phase === 'profile' ? 'opacity-0 pointer-events-none' : ''}`}
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             Back
@@ -168,7 +168,7 @@ export default function OnboardingFlow({ userId, onComplete }: OnboardingFlowPro
           <button
             onClick={phase === 'profile' ? handleProfileNext : handleQuestionNext}
             disabled={phase === 'profile' ? !canContinueProfile : !currentAnswer.trim() || saving}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-[#44403c] hover:bg-[#57534e] text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-[#44403c] hover:bg-[#57534e] text-white disabled:cursor-not-allowed transition-all"
           >
             {saving ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>

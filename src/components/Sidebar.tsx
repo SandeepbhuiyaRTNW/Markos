@@ -55,7 +55,7 @@ export default function Sidebar({ userId, onSelectSession, activeSessionId, refr
             <button
               key={s.id}
               onClick={() => onSelectSession(s.id)}
-              className="block w-full text-left transition-opacity hover:opacity-70"
+              className="block w-full text-left transition-opacity hover:underline underline-offset-4"
               style={{ marginTop: 18 }}
             >
               <div style={{ fontSize: 16, lineHeight: 1.3, color: activeSessionId === s.id ? INK : INK_SOFT, fontWeight: activeSessionId === s.id ? 500 : 400 }}>

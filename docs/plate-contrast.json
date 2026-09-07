@@ -1,0 +1,450 @@
+{
+  "method": "Every decoded atlas pixel. Field half only under text; pigment half is decorative orb. Multiply worst grain; floor rounding. Also independent RGB minima for all possible bilinear/crossfade combinations. No mean luminance.",
+  "totalAssetBytes": 2711923,
+  "opacityCases": [
+    {
+      "colour": "#2b2721",
+      "opacity": 0.92,
+      "darkestFieldRatio": 9.968,
+      "required": 7,
+      "pass": true
+    }
+  ],
+  "grainFloor": 0.996078431372549,
+  "crossfadeChannelFloor": [
+    235,
+    235,
+    235
+  ],
+  "crossfadeLuminanceFloor": 0.831,
+  "plates": [
+    {
+      "plate": "aegean.webp",
+      "bytes": 356982,
+      "darkestXY": [
+        519,
+        290
+      ],
+      "fieldLuminance": 0.831,
+      "pigmentLuminance": 0,
+      "ratios": {
+        "#100d0a": 16.251,
+        "#14100e": 15.867,
+        "#2b2721": 12.45,
+        "#332c26": 11.521,
+        "#3d352e": 10.083,
+        "#4a4436": 8.113,
+        "#5a1a10": 11.079,
+        "#5c534b": 6.305,
+        "#6b6259": 5.009,
+        "#713b12": 7.539,
+        "#f4ecdd": 1.016,
+        "#faf9f6": 1.132,
+        "#ffffff": 1.192
+      }
+    },
+    {
+      "plate": "ash.webp",
+      "bytes": 331870,
+      "darkestXY": [
+        484,
+        290
+      ],
+      "fieldLuminance": 0.831,
+      "pigmentLuminance": 0,
+      "ratios": {
+        "#100d0a": 16.251,
+        "#14100e": 15.867,
+        "#2b2721": 12.45,
+        "#332c26": 11.521,
+        "#3d352e": 10.083,
+        "#4a4436": 8.113,
+        "#5a1a10": 11.079,
+        "#5c534b": 6.305,
+        "#6b6259": 5.009,
+        "#713b12": 7.539,
+        "#f4ecdd": 1.016,
+        "#faf9f6": 1.132,
+        "#ffffff": 1.192
+      }
+    },
+    {
+      "plate": "bronze.webp",
+      "bytes": 363848,
+      "darkestXY": [
+        484,
+        318
+      ],
+      "fieldLuminance": 0.831,
+      "pigmentLuminance": 0,
+      "ratios": {
+        "#100d0a": 16.251,
+        "#14100e": 15.867,
+        "#2b2721": 12.45,
+        "#332c26": 11.521,
+        "#3d352e": 10.083,
+        "#4a4436": 8.113,
+        "#5a1a10": 11.079,
+        "#5c534b": 6.305,
+        "#6b6259": 5.009,
+        "#713b12": 7.539,
+        "#f4ecdd": 1.016,
+        "#faf9f6": 1.132,
+        "#ffffff": 1.192
+      }
+    },
+    {
+      "plate": "burden.webp",
+      "bytes": 355048,
+      "darkestXY": [
+        484,
+        319
+      ],
+      "fieldLuminance": 0.831,
+      "pigmentLuminance": 0,
+      "ratios": {
+        "#100d0a": 16.251,
+        "#14100e": 15.867,
+        "#2b2721": 12.45,
+        "#332c26": 11.521,
+        "#3d352e": 10.083,
+        "#4a4436": 8.113,
+        "#5a1a10": 11.079,
+        "#5c534b": 6.305,
+        "#6b6259": 5.009,
+        "#713b12": 7.539,
+        "#f4ecdd": 1.016,
+        "#faf9f6": 1.132,
+        "#ffffff": 1.192
+      }
+    },
+    {
+      "plate": "marble.webp",
+      "bytes": 299914,
+      "darkestXY": [
+        422,
+        381
+      ],
+      "fieldLuminance": 0.831,
+      "pigmentLuminance": 0,
+      "ratios": {
+        "#100d0a": 16.251,
+        "#14100e": 15.867,
+        "#2b2721": 12.45,
+        "#332c26": 11.521,
+        "#3d352e": 10.083,
+        "#4a4436": 8.113,
+        "#5a1a10": 11.079,
+        "#5c534b": 6.305,
+        "#6b6259": 5.009,
+        "#713b12": 7.539,
+        "#f4ecdd": 1.016,
+        "#faf9f6": 1.132,
+        "#ffffff": 1.192
+      }
+    },
+    {
+      "plate": "olive.webp",
+      "bytes": 351850,
+      "darkestXY": [
+        519,
+        290
+      ],
+      "fieldLuminance": 0.831,
+      "pigmentLuminance": 0,
+      "ratios": {
+        "#100d0a": 16.251,
+        "#14100e": 15.867,
+        "#2b2721": 12.45,
+        "#332c26": 11.521,
+        "#3d352e": 10.083,
+        "#4a4436": 8.113,
+        "#5a1a10": 11.079,
+        "#5c534b": 6.305,
+        "#6b6259": 5.009,
+        "#713b12": 7.539,
+        "#f4ecdd": 1.016,
+        "#faf9f6": 1.132,
+        "#ffffff": 1.192
+      }
+    },
+    {
+      "plate": "oxblood.webp",
+      "bytes": 334194,
+      "darkestXY": [
+        484,
+        319
+      ],
+      "fieldLuminance": 0.831,
+      "pigmentLuminance": 0,
+      "ratios": {
+        "#100d0a": 16.251,
+        "#14100e": 15.867,
+        "#2b2721": 12.45,
+        "#332c26": 11.521,
+        "#3d352e": 10.083,
+        "#4a4436": 8.113,
+        "#5a1a10": 11.079,
+        "#5c534b": 6.305,
+        "#6b6259": 5.009,
+        "#713b12": 7.539,
+        "#f4ecdd": 1.016,
+        "#faf9f6": 1.132,
+        "#ffffff": 1.192
+      }
+    },
+    {
+      "plate": "stone.webp",
+      "bytes": 316806,
+      "darkestXY": [
+        519,
+        290
+      ],
+      "fieldLuminance": 0.831,
+      "pigmentLuminance": 0,
+      "ratios": {
+        "#100d0a": 16.251,
+        "#14100e": 15.867,
+        "#2b2721": 12.45,
+        "#332c26": 11.521,
+        "#3d352e": 10.083,
+        "#4a4436": 8.113,
+        "#5a1a10": 11.079,
+        "#5c534b": 6.305,
+        "#6b6259": 5.009,
+        "#713b12": 7.539,
+        "#f4ecdd": 1.016,
+        "#faf9f6": 1.132,
+        "#ffffff": 1.192
+      }
+    }
+  ],
+  "inventory": [
+    {
+      "colour": "#100d0a",
+      "files": [
+        "src/app/page.tsx"
+      ],
+      "role": "heading-body",
+      "required": 7,
+      "darkestFieldRatio": 16.251,
+      "passesOnField": true
+    },
+    {
+      "colour": "#14100e",
+      "files": [
+        "src/app/page.tsx",
+        "src/components/AppHeader.tsx",
+        "src/components/AnalyticsDashboard.tsx",
+        "src/components/Sidebar.tsx",
+        "src/components/SessionSummary.tsx",
+        "src/components/SettingsScreen.tsx",
+        "src/components/VisualPreview.tsx",
+        "src/app/globals.css"
+      ],
+      "role": "heading-body",
+      "required": 7,
+      "darkestFieldRatio": 15.867,
+      "passesOnField": true
+    },
+    {
+      "colour": "#2b2721",
+      "files": [
+        "src/components/IntroSequence.tsx"
+      ],
+      "role": "heading-body",
+      "required": 7,
+      "darkestFieldRatio": 12.45,
+      "passesOnField": true
+    },
+    {
+      "colour": "#332c26",
+      "files": [
+        "src/app/page.tsx"
+      ],
+      "role": "heading-body",
+      "required": 7,
+      "darkestFieldRatio": 11.521,
+      "passesOnField": true
+    },
+    {
+      "colour": "#3d352e",
+      "files": [
+        "src/app/page.tsx",
+        "src/components/AnalyticsDashboard.tsx",
+        "src/components/Sidebar.tsx",
+        "src/components/ConversationView.tsx",
+        "src/components/SessionSummary.tsx",
+        "src/components/SettingsScreen.tsx",
+        "src/components/VisualPreview.tsx"
+      ],
+      "role": "heading-body",
+      "required": 7,
+      "darkestFieldRatio": 10.083,
+      "passesOnField": true
+    },
+    {
+      "colour": "#4a4436",
+      "files": [
+        "src/components/IntroSequence.tsx"
+      ],
+      "role": "heading-body",
+      "required": 7,
+      "darkestFieldRatio": 8.113,
+      "passesOnField": true
+    },
+    {
+      "colour": "#5a1a10",
+      "files": [
+        "src/app/page.tsx"
+      ],
+      "role": "heading-body",
+      "required": 7,
+      "darkestFieldRatio": 11.079,
+      "passesOnField": true
+    },
+    {
+      "colour": "#5c534b",
+      "files": [
+        "src/app/page.tsx",
+        "src/components/AppHeader.tsx",
+        "src/components/SettingsScreen.tsx",
+        "src/components/VisualPreview.tsx"
+      ],
+      "role": "muted",
+      "required": 4.5,
+      "darkestFieldRatio": 6.305,
+      "passesOnField": true
+    },
+    {
+      "colour": "#6b6259",
+      "files": [
+        "src/app/page.tsx",
+        "src/components/AnalyticsDashboard.tsx",
+        "src/components/Sidebar.tsx",
+        "src/components/ConversationView.tsx",
+        "src/components/SessionSummary.tsx",
+        "src/components/SettingsScreen.tsx",
+        "src/components/VisualPreview.tsx",
+        "src/app/globals.css"
+      ],
+      "role": "muted",
+      "required": 4.5,
+      "darkestFieldRatio": 5.009,
+      "passesOnField": true
+    },
+    {
+      "colour": "#713b12",
+      "files": [
+        "src/app/page.tsx",
+        "src/components/OnboardingFlow.tsx",
+        "src/components/AnalyticsDashboard.tsx",
+        "src/components/ConversationView.tsx",
+        "src/components/SettingsScreen.tsx",
+        "src/components/VisualPreview.tsx"
+      ],
+      "role": "heading-body",
+      "required": 7,
+      "darkestFieldRatio": 7.539,
+      "passesOnField": true
+    },
+    {
+      "colour": "#f4ecdd",
+      "files": [
+        "src/app/page.tsx"
+      ],
+      "role": "inverse-on-solid-control",
+      "required": 7,
+      "darkestFieldRatio": 1.016,
+      "passesOnField": null
+    },
+    {
+      "colour": "#faf9f6",
+      "files": [
+        "src/app/page.tsx",
+        "src/components/AppHeader.tsx",
+        "src/components/SettingsScreen.tsx",
+        "src/components/VisualPreview.tsx",
+        "src/app/globals.css"
+      ],
+      "role": "inverse-on-solid-control",
+      "required": 7,
+      "darkestFieldRatio": 1.132,
+      "passesOnField": null
+    },
+    {
+      "colour": "#ffffff",
+      "files": [
+        "src/components/OnboardingFlow.tsx"
+      ],
+      "role": "inverse-on-solid-control",
+      "required": 7,
+      "darkestFieldRatio": 1.192,
+      "passesOnField": null
+    }
+  ],
+  "solidPairs": [
+    {
+      "foreground": "#faf9f6",
+      "background": "#14100e",
+      "ratio": 17.966,
+      "required": 7,
+      "pass": true
+    },
+    {
+      "foreground": "#f4ecdd",
+      "background": "#100d0a",
+      "ratio": 16.503,
+      "required": 7,
+      "pass": true
+    },
+    {
+      "foreground": "#ffffff",
+      "background": "#44403c",
+      "ratio": 10.272,
+      "required": 7,
+      "pass": true
+    },
+    {
+      "foreground": "#ffffff",
+      "background": "#57534e",
+      "ratio": 7.629,
+      "required": 7,
+      "pass": true
+    },
+    {
+      "foreground": "#100d0a",
+      "background": "#e7e1d2",
+      "ratio": 14.851,
+      "required": 7,
+      "pass": true
+    },
+    {
+      "foreground": "#14100e",
+      "background": "#faf9f6",
+      "ratio": 17.966,
+      "required": 7,
+      "pass": true
+    },
+    {
+      "foreground": "#6b6259",
+      "background": "#e7e1d2",
+      "ratio": 4.578,
+      "required": 4.5,
+      "pass": true
+    },
+    {
+      "foreground": "#6b6259",
+      "background": "#faf9f6",
+      "ratio": 5.672,
+      "required": 4.5,
+      "pass": true
+    }
+  ],
+  "corrections": [
+    "Plates lightened offline. Existing #8c8378 cannot reach muted 4.5 on white (max 3.728); processing text now uses Marcus muted ink #6b6259.",
+    "Existing #b0611f cannot reach body 7 on white (max 4.589). Text-only bronze now uses #713b12; decorative accent colours stay unchanged.",
+    "Removed text/container opacity reductions on hover, disabled controls, onboarding labels/placeholders and loading copy. Intro settled word opacity is at least .92. Entrance/exit animation frames are not settled text.",
+    "Inverse cream/white text is on solid ink controls, not directly on a plate. Both plate ratios and actual solid-control ratios are reported."
+  ]
+}

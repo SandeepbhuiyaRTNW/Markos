@@ -469,8 +469,8 @@ export default function Home() {
   if (authLoading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center relative gap-4">
-        <div className="ambient-bg" />
-        <div className="w-8 h-8 rounded-full border-2 border-[#b0611f]/20 border-t-[#b0611f] animate-spin" />
+        <ShaderBackground state="idle" register={0} />
+        <div className="relative z-10 w-8 h-8 rounded-full border-2 border-[#b0611f]/20 border-t-[#b0611f] animate-spin" />
       </div>
     );
   }
@@ -497,7 +497,7 @@ export default function Home() {
         <header className="relative z-20 flex-none">
           <div className="flex items-center justify-between px-6 sm:px-10 lg:px-16" style={{ height: 60 }}>
             <span style={{ fontSize: 13, letterSpacing: '0.3em', textTransform: 'uppercase', color: '#100d0a', fontWeight: 500 }}>Markos</span>
-            <button onClick={() => { setAuthStep('email'); document.getElementById('hero-email')?.focus(); }} className="transition-opacity hover:opacity-70 underline" style={{ fontSize: 13, letterSpacing: '0.04em', color: '#332c26' }}>Sign in</button>
+            <button onClick={() => { setAuthStep('email'); document.getElementById('hero-email')?.focus(); }} className="transition-opacity hover:underline underline-offset-4 underline" style={{ fontSize: 13, letterSpacing: '0.04em', color: '#332c26' }}>Sign in</button>
           </div>
         </header>
         <div className="relative z-10 flex-1 overflow-y-auto">
@@ -529,12 +529,12 @@ export default function Home() {
                     <input type="password" value={password} onChange={(e) => { setPassword(e.target.value); setAuthError(''); }}
                       onKeyDown={(e) => e.key === 'Enter' && password && enterPassword()} placeholder="Your password" autoFocus
                       className="placeholder:text-[#6b6259]" style={INPUT} />
-                    <button onClick={enterPassword} disabled={loggingIn || !password} className="disabled:opacity-50" style={BTN}>{loggingIn ? 'Signing in…' : 'Sign in'}</button>
+                    <button onClick={enterPassword} disabled={loggingIn || !password} className="disabled:cursor-not-allowed" style={BTN}>{loggingIn ? 'Signing in…' : 'Sign in'}</button>
                   </div>
                   {authError && <p className="text-center" style={ERR}>{authError}</p>}
                   <div className="text-center" style={{ marginTop: 12 }}>
-                    <button onClick={handleSendCode} disabled={sendingCode} className="transition-opacity hover:opacity-70 underline" style={LINK}>{sendingCode ? 'Sending…' : 'Email me a code instead'}</button>{DOT}
-                    <button onClick={() => { setAuthStep('email'); setPassword(''); setAuthError(''); }} className="transition-opacity hover:opacity-70 underline" style={LINK}>Change email</button>
+                    <button onClick={handleSendCode} disabled={sendingCode} className="transition-opacity hover:underline underline-offset-4 underline" style={LINK}>{sendingCode ? 'Sending…' : 'Email me a code instead'}</button>{DOT}
+                    <button onClick={() => { setAuthStep('email'); setPassword(''); setAuthError(''); }} className="transition-opacity hover:underline underline-offset-4 underline" style={LINK}>Change email</button>
                   </div>
                 </>
               ) : (
@@ -543,13 +543,13 @@ export default function Home() {
                   <div style={{ display: 'flex', gap: 10 }}>
                     <input type="text" inputMode="numeric" maxLength={6} value={otpCode} onChange={(e) => { setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setAuthError(''); }} onKeyDown={(e) => e.key === 'Enter' && otpCode.length === 6 && enterCode()} placeholder="6-digit code" autoFocus
                       className="font-mono placeholder:text-[#6b6259]" style={{ ...INPUT, fontSize: 18, letterSpacing: '0.3em', textAlign: 'center' }} />
-                    <button onClick={enterCode} disabled={verifyingCode || otpCode.length !== 6} className="disabled:opacity-50" style={BTN}>{verifyingCode ? 'Verifying…' : 'Enter'}</button>
+                    <button onClick={enterCode} disabled={verifyingCode || otpCode.length !== 6} className="disabled:cursor-not-allowed" style={BTN}>{verifyingCode ? 'Verifying…' : 'Enter'}</button>
                   </div>
                   {authError && <p className="text-center" style={ERR}>{authError}</p>}
                   <div className="text-center" style={{ marginTop: 12 }}>
-                    <button onClick={handleSendCode} disabled={sendingCode} className="transition-opacity hover:opacity-70 underline" style={LINK}>{sendingCode ? 'Sending…' : 'Resend code'}</button>{DOT}
-                    <button onClick={() => { setAuthStep('password'); setOtpCode(''); setAuthError(''); }} className="transition-opacity hover:opacity-70 underline" style={LINK}>Use password</button>{DOT}
-                    <button onClick={() => { setAuthStep('email'); setOtpCode(''); setAuthError(''); }} className="transition-opacity hover:opacity-70 underline" style={LINK}>Change email</button>
+                    <button onClick={handleSendCode} disabled={sendingCode} className="transition-opacity hover:underline underline-offset-4 underline" style={LINK}>{sendingCode ? 'Sending…' : 'Resend code'}</button>{DOT}
+                    <button onClick={() => { setAuthStep('password'); setOtpCode(''); setAuthError(''); }} className="transition-opacity hover:underline underline-offset-4 underline" style={LINK}>Use password</button>{DOT}
+                    <button onClick={() => { setAuthStep('email'); setOtpCode(''); setAuthError(''); }} className="transition-opacity hover:underline underline-offset-4 underline" style={LINK}>Change email</button>
                   </div>
                 </>
               )}
@@ -593,9 +593,9 @@ export default function Home() {
   if (checkingOnboarding) {
     return (
       <div className="h-screen flex flex-col items-center justify-center relative gap-4">
-        <div className="ambient-bg" />
-        <div className="w-8 h-8 rounded-full border-2 border-[#b0611f]/20 border-t-[#b0611f] animate-spin" />
-        <p className="text-xs text-muted-foreground/60">Preparing your session…</p>
+        <ShaderBackground state="idle" register={0} />
+        <div className="relative z-10 w-8 h-8 rounded-full border-2 border-[#b0611f]/20 border-t-[#b0611f] animate-spin" />
+        <p className="relative z-10 text-xs text-muted-foreground">Preparing your session…</p>
       </div>
     );
   }
@@ -604,7 +604,7 @@ export default function Home() {
   if (!onboardingComplete) {
     return (
       <div className="relative">
-        <div className="ambient-bg" />
+        <ShaderBackground state="idle" register={0} />
         <AppHeader mode="focused" />
         <div className="relative z-10">
           <OnboardingFlow userId={userId} onComplete={() => setOnboardingComplete(true)} />
@@ -619,7 +619,7 @@ export default function Home() {
   // shell unchanged. No state or handler changes — same VoiceOrb mount, same handlers.
   if (view === 'voice' && inputMode === 'voice') {
     return (
-      <div className="h-screen w-screen flex flex-col relative overflow-hidden" style={{ background: '#faf9f6' }}>
+      <div className="voice-room h-screen w-screen flex flex-col relative overflow-hidden" style={{ background: '#faf9f6' }}>
         {/* Ambient Paper Shaders backdrop — driven by conversation state + a slow
             emotional register. Presentation only; sits behind all content (z-0). */}
         <ShaderBackground state={state} register={register} />
@@ -630,6 +630,7 @@ export default function Home() {
           <div className="flex items-center gap-8 sm:gap-11 w-full" style={{ maxWidth: 860 }}>
             <div className="relative flex-none flex items-center justify-center">
               <VoiceOrb
+                register={register}
                 onStateChange={(s) => { if (s === 'listening') setVoiceError(null); setState(s); }}
                 onTranscript={handleTranscript}
                 onError={setVoiceError}
@@ -646,7 +647,7 @@ export default function Home() {
               <span
                 className="block"
                 style={{ fontSize: 9, letterSpacing: '.26em', textTransform: 'uppercase',
-                  color: (state === 'listening' || state === 'processing') ? '#6b6259' : '#b0611f' }}
+                  color: (state === 'listening' || state === 'processing') ? '#6b6259' : '#713b12' }}
               >
                 {(state === 'listening' || state === 'processing') ? 'You' : 'Marcus'}
               </span>
@@ -662,7 +663,7 @@ export default function Home() {
                   </div>
                 </>
               ) : state === 'processing' ? (
-                <p className="font-serif" style={{ margin: '22px 0 0', fontSize: 19, fontStyle: 'italic', color: '#8c8378' }}>
+                <p className="font-serif" style={{ margin: '22px 0 0', fontSize: 19, fontStyle: 'italic', color: '#6b6259' }}>
                   Reflecting&hellip;
                 </p>
               ) : state === 'speaking' && transcripts.length > 0 ? (
@@ -685,7 +686,7 @@ export default function Home() {
                 </>
               )}
               {voiceError && (
-                <p style={{ margin: '14px 0 0', fontSize: 12, color: '#b0611f', maxWidth: 420 }}>{voiceError}</p>
+                <p style={{ margin: '14px 0 0', fontSize: 12, color: '#713b12', maxWidth: 420 }}>{voiceError}</p>
               )}
             </div>
           </div>
@@ -707,8 +708,8 @@ export default function Home() {
               {/* Input mode: hands-free (VAD) ↔ tap-to-talk fallback */}
               <button
                 onClick={() => setHandsFree((v) => !v)}
-                className="ml-1 text-[10px] font-medium uppercase tracking-[.14em] transition-opacity hover:opacity-70"
-                style={{ color: handsFree ? '#b0611f' : '#6b6259' }}
+                className="ml-1 text-[10px] font-medium uppercase tracking-[.14em] transition-opacity hover:underline underline-offset-4"
+                style={{ color: handsFree ? '#713b12' : '#6b6259' }}
                 title={handsFree ? 'Switch to tap-to-talk' : 'Switch to hands-free'}
               >
                 · {handsFree ? 'hands-free' : 'tap to talk'}
@@ -717,8 +718,8 @@ export default function Home() {
               {handsFree && (
                 <button
                   onClick={() => setMuted((v) => !v)}
-                  className="ml-1 text-[10px] font-medium uppercase tracking-[.14em] transition-opacity hover:opacity-70"
-                  style={{ color: muted ? '#b0611f' : '#6b6259' }}
+                  className="ml-1 text-[10px] font-medium uppercase tracking-[.14em] transition-opacity hover:underline underline-offset-4"
+                  style={{ color: muted ? '#713b12' : '#6b6259' }}
                   title={muted ? 'Unmute the mic' : 'Mute the mic'}
                   aria-pressed={muted}
                 >
@@ -731,7 +732,7 @@ export default function Home() {
               <button
                 onClick={() => setShowTranscript((v) => !v)}
                 className="flex items-center gap-2 h-[38px] px-3 text-[10.5px] font-medium uppercase tracking-[.14em] transition-colors"
-                style={{ color: showTranscript ? '#b0611f' : '#5c534b' }}
+                style={{ color: showTranscript ? '#713b12' : '#5c534b' }}
                 aria-pressed={showTranscript}
               >
                 <MessageSquare className="w-3.5 h-3.5" /> Transcript
@@ -740,7 +741,7 @@ export default function Home() {
                 <button
                   onClick={handleEndSession}
                   disabled={endingSession}
-                  className="flex items-center gap-2 h-[38px] px-4 text-[10.5px] font-semibold uppercase tracking-[.14em] text-[#14100e] border-2 border-[#14100e] hover:bg-[#14100e] hover:text-[#faf9f6] transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 h-[38px] px-4 text-[10.5px] font-semibold uppercase tracking-[.14em] text-[#14100e] border-2 border-[#14100e] hover:bg-[#14100e] hover:text-[#faf9f6] transition-colors disabled:cursor-not-allowed"
                 >
                   {endingSession ? (<><Loader2 className="w-3.5 h-3.5 animate-spin" /> Ending…</>) : (<><Shield className="w-3.5 h-3.5" /> End Session</>)}
                 </button>
@@ -778,7 +779,7 @@ export default function Home() {
               <div className="flex flex-col" style={{ gap: 20 }}>
                 {openingMessage && (
                   <div className="flex flex-col" style={{ gap: 7 }}>
-                    <span style={{ fontSize: 9, letterSpacing: '.24em', textTransform: 'uppercase', color: '#b0611f' }}>Marcus</span>
+                    <span style={{ fontSize: 9, letterSpacing: '.24em', textTransform: 'uppercase', color: '#713b12' }}>Marcus</span>
                     <p className="font-serif" style={{ margin: 0, fontSize: 19, lineHeight: 1.62, color: '#3d352e' }}>{openingMessage}</p>
                   </div>
                 )}
@@ -789,7 +790,7 @@ export default function Home() {
                       <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.62, color: '#3d352e' }}>{t.user}</p>
                     </div>
                     <div className="flex flex-col" style={{ gap: 7 }}>
-                      <span style={{ fontSize: 9, letterSpacing: '.24em', textTransform: 'uppercase', color: '#b0611f' }}>Marcus</span>
+                      <span style={{ fontSize: 9, letterSpacing: '.24em', textTransform: 'uppercase', color: '#713b12' }}>Marcus</span>
                       <p className="font-serif" style={{ margin: 0, fontSize: 19, lineHeight: 1.62, color: '#3d352e' }}>{t.marcus}</p>
                     </div>
                   </div>
@@ -857,7 +858,7 @@ export default function Home() {
                   />
                   <button
                     onClick={handleGoToAnalytics}
-                    className="inline-flex items-center gap-2 transition-opacity hover:opacity-70"
+                    className="inline-flex items-center gap-2 transition-opacity hover:underline underline-offset-4"
                     style={{ color: '#6b6259', fontSize: 15, marginTop: 52 }}
                   >
                     <History className="w-4 h-4" strokeWidth={1.75} /> Back to sessions
@@ -883,15 +884,15 @@ export default function Home() {
                         <h1 className="font-serif text-center" style={{ fontSize: 'clamp(28px,4.5vw,42px)', fontWeight: 400, letterSpacing: '-0.02em', color: '#14100e', marginTop: 34 }}>Where do you want to start?</h1>
                         <div style={{ marginTop: 40 }}>
                           {/* Continue — first, warmer, and it NAMES what is being continued */}
-                          <button onClick={() => handleContinueSession(recentSessions[0].id)} className="block w-full text-left transition-opacity hover:opacity-80">
-                            <p style={{ fontSize: 12, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#8a4a14' }}>{`Continue · ${relDayUpper(recentSessions[0].date)}`}</p>
+                          <button onClick={() => handleContinueSession(recentSessions[0].id)} className="block w-full text-left transition-opacity hover:underline underline-offset-4">
+                            <p style={{ fontSize: 12, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#713b12' }}>{`Continue · ${relDayUpper(recentSessions[0].date)}`}</p>
                             <p style={{ fontSize: 22, color: '#14100e', marginTop: 6, lineHeight: 1.3 }}>{recentSessions[0].title}</p>
                             {recentSessions[0].lastUserMessage && (
-                              <p style={{ fontSize: 15, color: '#5c534b', marginTop: 6, fontStyle: 'italic', lineHeight: 1.45 }}>&ldquo;{clip(recentSessions[0].lastUserMessage, 92)}&rdquo;</p>
+                              <p style={{ fontSize: 15, color: '#3d352e', marginTop: 6, fontStyle: 'italic', lineHeight: 1.45 }}>&ldquo;{clip(recentSessions[0].lastUserMessage, 92)}&rdquo;</p>
                             )}
                           </button>
                           {/* Something else — quieter */}
-                          <button onClick={handleStartFresh} className="block w-full text-left transition-opacity hover:opacity-70" style={{ marginTop: 30 }}>
+                          <button onClick={handleStartFresh} className="block w-full text-left transition-opacity hover:underline underline-offset-4" style={{ marginTop: 30 }}>
                             <p style={{ fontSize: 16, color: '#5c534b' }}>Something else — <span style={{ color: '#6b6259' }}>start fresh, Marcus still knows you.</span></p>
                           </button>
                         </div>
@@ -927,7 +928,7 @@ export default function Home() {
                 <div className="relative z-10 flex-1 flex flex-col overflow-hidden">
                   <div className="flex-1 overflow-y-auto">
                     <div className="mx-auto w-full px-6 sm:px-10 lg:px-16 py-10 fade-in-up" style={{ maxWidth: 680 }}>
-                      {openingLoading && <p style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#6b6259', opacity: 0.6 }}>One moment…</p>}
+                      {openingLoading && <p style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#6b6259' }}>One moment…</p>}
                       {openingMessage && !openingLoading && (
                         <div>
                           <p style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#6b6259' }}>Marcus</p>
@@ -944,7 +945,7 @@ export default function Home() {
                           </div>
                         </div>
                       ))}
-                      {state === 'processing' && <p style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#6b6259', opacity: 0.6, marginTop: 26 }}>Reflecting…</p>}
+                      {state === 'processing' && <p style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#6b6259', marginTop: 26 }}>Reflecting…</p>}
                       <div ref={messagesEndRef} />
                     </div>
                   </div>
@@ -959,12 +960,12 @@ export default function Home() {
                           disabled={textSending || state === 'processing' || state === 'speaking'}
                           style={{ flex: 1, height: 46, padding: '0 16px', background: '#faf9f6', border: '1px solid #ded8cf', color: '#14100e', fontSize: 16 }}
                         />
-                        <button onClick={sendTextMessage} disabled={textSending || !textInput.trim() || state === 'processing' || state === 'speaking'} className="disabled:opacity-40" style={{ height: 46, width: 46, background: '#14100e', color: '#faf9f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <button onClick={sendTextMessage} disabled={textSending || !textInput.trim() || state === 'processing' || state === 'speaking'} className="disabled:cursor-not-allowed" style={{ height: 46, width: 46, background: '#14100e', color: '#faf9f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           {textSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                         </button>
                       </div>
                       {(transcripts.length > 0 || openingMessage) && conversationId && (
-                        <button onClick={handleEndSession} disabled={endingSession} className="disabled:opacity-50" style={{ fontSize: 13, color: '#5c534b', marginTop: 12 }}>
+                        <button onClick={handleEndSession} disabled={endingSession} className="disabled:cursor-not-allowed" style={{ fontSize: 13, color: '#5c534b', marginTop: 12 }}>
                           {endingSession ? 'Ending…' : 'End session'}
                         </button>
                       )}

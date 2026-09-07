@@ -268,3 +268,28 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--terracotta)
   * { @apply border-border outline-ring/50; }
   body { @apply bg-background text-foreground; }
 }
+
+/* Offline p5.brush pigment, animated by Paper ShaderMount. The grain is stationary. */
+.pigment-plate { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.pigment-plate--field { background: #fff; isolation: isolate; }
+.pigment-plate--orb { mix-blend-mode: multiply; }
+.plate-static, .plate-canvas, .plate-grain { position: absolute; inset: 0; }
+.plate-static { overflow: hidden; }
+.plate-static-image { position: absolute; inset: 0; background-size: 100% 200%; background-repeat: no-repeat; }
+.pigment-plate--field .plate-static { transform: scale(2.1); }
+.pigment-plate--field .plate-static-image { background-position: center bottom; }
+.pigment-plate--orb .plate-static { transform: scale(1.42); }
+.pigment-plate--orb .plate-static-image { background-position: center top; }
+.plate-canvas { mix-blend-mode: multiply; }
+.pigment-plate--orb > .plate-grain { display: none; } /* Natural grain is already in the pigment; field grain shows through its alpha. */
+[data-painted="true"] > .plate-static { visibility: hidden; }
+.plate-grain { z-index: 1; background: url('/plates/paper-grain.png') repeat; mix-blend-mode: multiply; }
+.voice-room .font-serif { font-family: var(--font-spectral), Georgia, serif; font-weight: 400; }
+@media (prefers-reduced-motion: reduce) {
+  .pigment-plate *, .voice-room *, .voice-room *::before, .voice-room *::after {
+    animation: none !important; transition: none !important; scroll-behavior: auto !important;
+  }
+}
+
+/* Keep placeholders readable on every existing input surface. */
+input::placeholder, textarea::placeholder { color: #6b6259; opacity: 1; }

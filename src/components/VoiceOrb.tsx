@@ -159,6 +159,8 @@ interface VoiceOrbProps {
   onError?: (message: string) => void;
   state: VoiceState;
   disabled?: boolean;
+  /** Presentation-only emotional weight, shared with the Paper field. */
+  register?: number;
   /** Hands-free (VAD, mic open, auto start/stop) vs classic tap-to-talk fallback. */
   handsFree?: boolean;
   /** User-muted: pause the open mic without ending the session. */
@@ -174,6 +176,7 @@ export default function VoiceOrb({
   onError,
   state,
   disabled = false,
+  register = 0.2,
   handsFree = true,
   muted = false,
 }: VoiceOrbProps) {
@@ -451,10 +454,8 @@ export default function VoiceOrb({
     if (isRecording) stopRecordingRef.current(); else startRecordingRef.current();
   };
 
-  // ─── Render: pure-CSS stone orb, state-driven rings/rim (unchanged visuals) ───
-  const rimAlpha = state === 'speaking' ? 0.8 : state === 'listening' ? 0.62 : 0.5;
-  const rimAnim = state === 'speaking' ? 'rim-pulse 2.6s ease-in-out infinite' : 'none';
-  const orbSat = disabled ? 0.35 : 1;
+  // Presentation: layered watercolour pigment driven by the existing audio envelope.
+
   const interactive = !handsFree && !(disabled || state === 'processing' || state === 'speaking');
 
   return (
@@ -466,24 +467,13 @@ export default function VoiceOrb({
       className={cn('relative flex items-center justify-center select-none', interactive ? 'cursor-pointer' : 'cursor-default')}
       style={{ width: 220, height: 220 }}
     >
-      {/* listening — two terracotta ripple rings */}
-      {state === 'listening' && (
-        <>
-          <div className="absolute rounded-full" style={{ width: 204, height: 204, border: '1px solid rgba(176,97,31,.4)', animation: 'ring-out 3.4s ease-out infinite' }} />
-          <div className="absolute rounded-full" style={{ width: 204, height: 204, border: '1px solid rgba(176,97,31,.28)', animation: 'ring-out 3.4s ease-out infinite', animationDelay: '1.2s' }} />
-        </>
-      )}
-      {/* processing — single spinning terracotta-topped arc */}
-      {state === 'processing' && (
-        <div className="absolute rounded-full" style={{ width: 232, height: 232, border: '1px solid #e4dfd7', borderTopColor: '#b0611f', animation: 'arc-turn 5.5s linear infinite' }} />
-      )}
-
-      {/* orb body — the Three.js orb, driven by the LIVE audio envelope (audioLevelsRef,
-          already tapped below). Same component + shader as the landing page. Its own static
-          gradient covers no-WebGL / reduced-motion, so it degrades cleanly. */}
+      {/* orb body — the Paper texture orb, driven by the LIVE audio envelope (audioLevelsRef,
+          already tapped below). Same component + shader as the landing page. Its static
+          artwork covers no-WebGL / reduced-motion, so it degrades cleanly. */}
       <Orb3D
         size={204}
-        style={{ filter: `saturate(${orbSat})` }}
+        register={register}
+        className="voice-orb-sculpture"
         getLevel={() => {
           const lv = audioLevelsRef.current;
           const raw = state === 'listening' ? lv.input * 6
@@ -492,16 +482,7 @@ export default function VoiceOrb({
           return Math.min(1, raw);
         }}
       />
-      {/* rim glow */}
-      <div
-        className="absolute rounded-full pointer-events-none"
-        style={{
-          width: 204, height: 204,
-          background: `radial-gradient(circle at 74% 76%,rgba(176,97,31,${disabled ? 0.12 : rimAlpha}),transparent 44%)`,
-          mixBlendMode: 'multiply',
-          animation: rimAnim,
-        }}
-      />
+
     </div>
   );
 }
