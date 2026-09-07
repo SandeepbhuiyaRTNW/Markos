@@ -31,6 +31,7 @@ import { enforceVocativePrinciple } from '../craft/craft-layer';
 import { WHISPERER_REGISTRY, WHISPERER_ACTIVATION_THRESHOLD } from '../whisperers';
 import { applyListeningKnowledge } from '../agent/listening-knowledge';
 import { applyEmbodiedManKnowledge } from '../agent/embodied-man-knowledge';
+import { buildInterviewNote, EMPTY_INTERVIEW_STATE, type InterviewState } from '../interview/session';
 import { computePERMASnapshot } from '../assessment/perma-snapshot';
 import { query } from '../db';
 import { persistTurnMessages, type QueryFn } from './persist-messages';
@@ -121,15 +122,23 @@ export async function processWithAgents(
   // first turn or load failure — the gauge then falls back to its session-count
   // seed, exactly the old behavior).
   let persistedState: SessionState = { trust: null, phase: null };
+  // Interview skeleton: filled in Tier 1 only when this conversation is tagged
+  // as an interview sitting; stays null on ordinary conversations.
+  let interviewState: InterviewState | null = null;
 
   // Phase 1: Fast DB fetches
   const memDone = trackEnvelopeAgent(env, 'memory-sentinel');
   try {
-    const [memCtx, kwmlCtx, sessionResult, sessHistory, stylePrefs, loadedState, lastSessionResult] = await Promise.all([
+    const [memCtx, kwmlCtx, sessionResult, sessHistory, stylePrefs, loadedState, lastSessionResult, convMetaResult, interviewResult] = await Promise.all([
       getMemoryContext(userId), getKWMLContext(userId),
       query(`SELECT COUNT(*) as cnt FROM conversations WHERE user_id = $1`, [userId]),
       getSessionHistory(userId), getStylePreferences(userId),
       loadSessionState(query, conversationId),
+      // Interview skeleton: is THIS conversation an interview sitting (tagged at
+      // creation), and if so where is he in the 12 sections? Two tiny indexed
+      // reads, folded into the batch so the turn pays no extra round trips.
+      query(`SELECT metadata FROM conversations WHERE id = $1`, [conversationId]).catch(() => null),
+      query(`SELECT state FROM interview_sessions WHERE user_id = $1`, [userId]).catch(() => null),
       // W13: the same last-ended-session anchors the opening message speaks from
       // (title + takeaways + pondering topics). Never throws — a missing/drifted
       // column must not break the turn.
@@ -141,6 +150,10 @@ export async function processWithAgents(
       ).catch(() => null),
     ]);
     persistedState = loadedState;
+    const convMeta = convMetaResult?.rows?.[0]?.metadata as Record<string, unknown> | undefined;
+    if (convMeta?.sessionType === 'interview') {
+      interviewState = { ...EMPTY_INTERVIEW_STATE, ...((interviewResult?.rows?.[0]?.state || {}) as Partial<InterviewState>) };
+    }
     env.sentinels.memory = {
       prior_threads: [], session_history: sessHistory, memory_context: memCtx,
       session_count: parseInt(sessionResult.rows[0]?.cnt || '0', 10),
@@ -320,6 +333,20 @@ export async function processWithAgents(
       // touches no body-history area — the null case pushes NOTHING, so a purely
       // neutral turn stays exactly as before.
       applyEmbodiedManKnowledge(env);
+
+      // Interview session context — when this conversation is an Embodied Man
+      // interview sitting, tell the Composer where he is in the 12 sections.
+      // Deterministic string assembly, no LLM; buildInterviewNote returns null
+      // when no sitting is open (paused/completed/not started) and pushes
+      // NOTHING, so an ordinary conversation stays byte-for-byte as before.
+      if (interviewState) {
+        const note = buildInterviewNote(interviewState);
+        if (note !== null) {
+          env.domain_whisperers.invoked.push('interview_session');
+          env.domain_whisperers.context_notes.push(note);
+          env.domain_whisperers.frameworks_applied.push('Embodied Man interview — structured session');
+        }
+      }
     } catch (err) { recordEnvelopeError(env, 'domain-whisperers', err); }
     finally { done(); }
   })();
