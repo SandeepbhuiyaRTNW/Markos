@@ -276,9 +276,9 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--terracotta)
 .plate-static, .plate-canvas, .plate-grain { position: absolute; inset: 0; }
 .plate-static { overflow: hidden; }
 .plate-static-image { position: absolute; inset: 0; background-size: 100% 200%; background-repeat: no-repeat; }
-.pigment-plate--field .plate-static { transform: scale(2.1); }
+.pigment-plate--field .plate-static { transform: scale(1); }
 .pigment-plate--field .plate-static-image { background-position: center bottom; }
-.pigment-plate--orb .plate-static { transform: scale(1.42); }
+.pigment-plate--orb .plate-static { transform: scale(1.12); }
 .pigment-plate--orb .plate-static-image { background-position: center top; }
 .plate-canvas { mix-blend-mode: multiply; }
 .pigment-plate--orb > .plate-grain { display: none; } /* Natural grain is already in the pigment; field grain shows through its alpha. */

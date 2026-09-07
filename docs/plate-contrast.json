@@ -1,221 +1,221 @@
 {
   "method": "Every decoded atlas pixel. Field half only under text; pigment half is decorative orb. Multiply worst grain; floor rounding. Also independent RGB minima for all possible bilinear/crossfade combinations. No mean luminance.",
-  "totalAssetBytes": 2711923,
+  "totalAssetBytes": 5144525,
   "opacityCases": [
     {
       "colour": "#2b2721",
       "opacity": 0.92,
-      "darkestFieldRatio": 9.968,
+      "darkestFieldRatio": 9.426,
       "required": 7,
       "pass": true
     }
   ],
   "grainFloor": 0.996078431372549,
   "crossfadeChannelFloor": [
-    235,
-    235,
-    235
+    228,
+    228,
+    228
   ],
-  "crossfadeLuminanceFloor": 0.831,
+  "crossfadeLuminanceFloor": 0.776,
   "plates": [
     {
       "plate": "aegean.webp",
-      "bytes": 356982,
+      "bytes": 646896,
       "darkestXY": [
-        519,
-        290
+        274,
+        576
       ],
-      "fieldLuminance": 0.831,
-      "pigmentLuminance": 0,
+      "fieldLuminance": 0.9,
+      "pigmentLuminance": 0.132,
       "ratios": {
-        "#100d0a": 16.251,
-        "#14100e": 15.867,
-        "#2b2721": 12.45,
-        "#332c26": 11.521,
-        "#3d352e": 10.083,
-        "#4a4436": 8.113,
-        "#5a1a10": 11.079,
-        "#5c534b": 6.305,
-        "#6b6259": 5.009,
-        "#713b12": 7.539,
-        "#f4ecdd": 1.016,
-        "#faf9f6": 1.132,
-        "#ffffff": 1.192
+        "#100d0a": 17.537,
+        "#14100e": 17.123,
+        "#2b2721": 13.436,
+        "#332c26": 12.433,
+        "#3d352e": 10.881,
+        "#4a4436": 8.755,
+        "#5a1a10": 11.956,
+        "#5c534b": 6.804,
+        "#6b6259": 5.406,
+        "#713b12": 8.136,
+        "#f4ecdd": 1.063,
+        "#faf9f6": 1.049,
+        "#ffffff": 1.105
       }
     },
     {
       "plate": "ash.webp",
-      "bytes": 331870,
+      "bytes": 628912,
       "darkestXY": [
-        484,
-        290
+        707,
+        327
       ],
-      "fieldLuminance": 0.831,
-      "pigmentLuminance": 0,
+      "fieldLuminance": 0.88,
+      "pigmentLuminance": 0.03,
       "ratios": {
-        "#100d0a": 16.251,
-        "#14100e": 15.867,
-        "#2b2721": 12.45,
-        "#332c26": 11.521,
-        "#3d352e": 10.083,
-        "#4a4436": 8.113,
-        "#5a1a10": 11.079,
-        "#5c534b": 6.305,
-        "#6b6259": 5.009,
-        "#713b12": 7.539,
-        "#f4ecdd": 1.016,
-        "#faf9f6": 1.132,
-        "#ffffff": 1.192
+        "#100d0a": 17.152,
+        "#14100e": 16.747,
+        "#2b2721": 13.141,
+        "#332c26": 12.16,
+        "#3d352e": 10.642,
+        "#4a4436": 8.563,
+        "#5a1a10": 11.694,
+        "#5c534b": 6.655,
+        "#6b6259": 5.287,
+        "#713b12": 7.958,
+        "#f4ecdd": 1.039,
+        "#faf9f6": 1.073,
+        "#ffffff": 1.129
       }
     },
     {
       "plate": "bronze.webp",
-      "bytes": 363848,
+      "bytes": 632264,
       "darkestXY": [
-        484,
-        318
+        274,
+        576
       ],
-      "fieldLuminance": 0.831,
-      "pigmentLuminance": 0,
+      "fieldLuminance": 0.9,
+      "pigmentLuminance": 0.119,
       "ratios": {
-        "#100d0a": 16.251,
-        "#14100e": 15.867,
-        "#2b2721": 12.45,
-        "#332c26": 11.521,
-        "#3d352e": 10.083,
-        "#4a4436": 8.113,
-        "#5a1a10": 11.079,
-        "#5c534b": 6.305,
-        "#6b6259": 5.009,
-        "#713b12": 7.539,
-        "#f4ecdd": 1.016,
-        "#faf9f6": 1.132,
-        "#ffffff": 1.192
+        "#100d0a": 17.537,
+        "#14100e": 17.123,
+        "#2b2721": 13.436,
+        "#332c26": 12.433,
+        "#3d352e": 10.881,
+        "#4a4436": 8.755,
+        "#5a1a10": 11.956,
+        "#5c534b": 6.804,
+        "#6b6259": 5.406,
+        "#713b12": 8.136,
+        "#f4ecdd": 1.063,
+        "#faf9f6": 1.049,
+        "#ffffff": 1.105
       }
     },
     {
       "plate": "burden.webp",
-      "bytes": 355048,
+      "bytes": 628236,
       "darkestXY": [
-        484,
-        319
+        699,
+        317
       ],
-      "fieldLuminance": 0.831,
-      "pigmentLuminance": 0,
+      "fieldLuminance": 0.898,
+      "pigmentLuminance": 0.109,
       "ratios": {
-        "#100d0a": 16.251,
-        "#14100e": 15.867,
-        "#2b2721": 12.45,
-        "#332c26": 11.521,
-        "#3d352e": 10.083,
-        "#4a4436": 8.113,
-        "#5a1a10": 11.079,
-        "#5c534b": 6.305,
-        "#6b6259": 5.009,
-        "#713b12": 7.539,
-        "#f4ecdd": 1.016,
-        "#faf9f6": 1.132,
-        "#ffffff": 1.192
+        "#100d0a": 17.492,
+        "#14100e": 17.079,
+        "#2b2721": 13.401,
+        "#332c26": 12.401,
+        "#3d352e": 10.853,
+        "#4a4436": 8.733,
+        "#5a1a10": 11.925,
+        "#5c534b": 6.786,
+        "#6b6259": 5.392,
+        "#713b12": 8.115,
+        "#f4ecdd": 1.06,
+        "#faf9f6": 1.052,
+        "#ffffff": 1.108
       }
     },
     {
       "plate": "marble.webp",
-      "bytes": 299914,
+      "bytes": 664242,
       "darkestXY": [
-        422,
-        381
+        274,
+        576
       ],
-      "fieldLuminance": 0.831,
-      "pigmentLuminance": 0,
+      "fieldLuminance": 0.9,
+      "pigmentLuminance": 0.144,
       "ratios": {
-        "#100d0a": 16.251,
-        "#14100e": 15.867,
-        "#2b2721": 12.45,
-        "#332c26": 11.521,
-        "#3d352e": 10.083,
-        "#4a4436": 8.113,
-        "#5a1a10": 11.079,
-        "#5c534b": 6.305,
-        "#6b6259": 5.009,
-        "#713b12": 7.539,
-        "#f4ecdd": 1.016,
-        "#faf9f6": 1.132,
-        "#ffffff": 1.192
+        "#100d0a": 17.537,
+        "#14100e": 17.123,
+        "#2b2721": 13.436,
+        "#332c26": 12.433,
+        "#3d352e": 10.881,
+        "#4a4436": 8.755,
+        "#5a1a10": 11.956,
+        "#5c534b": 6.804,
+        "#6b6259": 5.406,
+        "#713b12": 8.136,
+        "#f4ecdd": 1.063,
+        "#faf9f6": 1.049,
+        "#ffffff": 1.105
       }
     },
     {
       "plate": "olive.webp",
-      "bytes": 351850,
+      "bytes": 650704,
       "darkestXY": [
-        519,
-        290
+        274,
+        576
       ],
-      "fieldLuminance": 0.831,
-      "pigmentLuminance": 0,
+      "fieldLuminance": 0.9,
+      "pigmentLuminance": 0.144,
       "ratios": {
-        "#100d0a": 16.251,
-        "#14100e": 15.867,
-        "#2b2721": 12.45,
-        "#332c26": 11.521,
-        "#3d352e": 10.083,
-        "#4a4436": 8.113,
-        "#5a1a10": 11.079,
-        "#5c534b": 6.305,
-        "#6b6259": 5.009,
-        "#713b12": 7.539,
-        "#f4ecdd": 1.016,
-        "#faf9f6": 1.132,
-        "#ffffff": 1.192
+        "#100d0a": 17.537,
+        "#14100e": 17.123,
+        "#2b2721": 13.436,
+        "#332c26": 12.433,
+        "#3d352e": 10.881,
+        "#4a4436": 8.755,
+        "#5a1a10": 11.956,
+        "#5c534b": 6.804,
+        "#6b6259": 5.406,
+        "#713b12": 8.136,
+        "#f4ecdd": 1.063,
+        "#faf9f6": 1.049,
+        "#ffffff": 1.105
       }
     },
     {
       "plate": "oxblood.webp",
-      "bytes": 334194,
+      "bytes": 630646,
       "darkestXY": [
-        484,
-        319
+        696,
+        314
       ],
-      "fieldLuminance": 0.831,
-      "pigmentLuminance": 0,
+      "fieldLuminance": 0.886,
+      "pigmentLuminance": 0.035,
       "ratios": {
-        "#100d0a": 16.251,
-        "#14100e": 15.867,
-        "#2b2721": 12.45,
-        "#332c26": 11.521,
-        "#3d352e": 10.083,
-        "#4a4436": 8.113,
-        "#5a1a10": 11.079,
-        "#5c534b": 6.305,
-        "#6b6259": 5.009,
-        "#713b12": 7.539,
-        "#f4ecdd": 1.016,
-        "#faf9f6": 1.132,
-        "#ffffff": 1.192
+        "#100d0a": 17.272,
+        "#14100e": 16.864,
+        "#2b2721": 13.233,
+        "#332c26": 12.245,
+        "#3d352e": 10.716,
+        "#4a4436": 8.623,
+        "#5a1a10": 11.776,
+        "#5c534b": 6.701,
+        "#6b6259": 5.324,
+        "#713b12": 8.013,
+        "#f4ecdd": 1.047,
+        "#faf9f6": 1.065,
+        "#ffffff": 1.122
       }
     },
     {
       "plate": "stone.webp",
-      "bytes": 316806,
+      "bytes": 661214,
       "darkestXY": [
-        519,
-        290
+        274,
+        576
       ],
-      "fieldLuminance": 0.831,
-      "pigmentLuminance": 0,
+      "fieldLuminance": 0.9,
+      "pigmentLuminance": 0.144,
       "ratios": {
-        "#100d0a": 16.251,
-        "#14100e": 15.867,
-        "#2b2721": 12.45,
-        "#332c26": 11.521,
-        "#3d352e": 10.083,
-        "#4a4436": 8.113,
-        "#5a1a10": 11.079,
-        "#5c534b": 6.305,
-        "#6b6259": 5.009,
-        "#713b12": 7.539,
-        "#f4ecdd": 1.016,
-        "#faf9f6": 1.132,
-        "#ffffff": 1.192
+        "#100d0a": 17.537,
+        "#14100e": 17.123,
+        "#2b2721": 13.436,
+        "#332c26": 12.433,
+        "#3d352e": 10.881,
+        "#4a4436": 8.755,
+        "#5a1a10": 11.956,
+        "#5c534b": 6.804,
+        "#6b6259": 5.406,
+        "#713b12": 8.136,
+        "#f4ecdd": 1.063,
+        "#faf9f6": 1.049,
+        "#ffffff": 1.105
       }
     }
   ],
@@ -227,7 +227,7 @@
       ],
       "role": "heading-body",
       "required": 7,
-      "darkestFieldRatio": 16.251,
+      "darkestFieldRatio": 15.237,
       "passesOnField": true
     },
     {
@@ -244,7 +244,7 @@
       ],
       "role": "heading-body",
       "required": 7,
-      "darkestFieldRatio": 15.867,
+      "darkestFieldRatio": 14.877,
       "passesOnField": true
     },
     {
@@ -254,7 +254,7 @@
       ],
       "role": "heading-body",
       "required": 7,
-      "darkestFieldRatio": 12.45,
+      "darkestFieldRatio": 11.673,
       "passesOnField": true
     },
     {
@@ -264,7 +264,7 @@
       ],
       "role": "heading-body",
       "required": 7,
-      "darkestFieldRatio": 11.521,
+      "darkestFieldRatio": 10.802,
       "passesOnField": true
     },
     {
@@ -280,7 +280,7 @@
       ],
       "role": "heading-body",
       "required": 7,
-      "darkestFieldRatio": 10.083,
+      "darkestFieldRatio": 9.454,
       "passesOnField": true
     },
     {
@@ -290,7 +290,7 @@
       ],
       "role": "heading-body",
       "required": 7,
-      "darkestFieldRatio": 8.113,
+      "darkestFieldRatio": 7.607,
       "passesOnField": true
     },
     {
@@ -300,7 +300,7 @@
       ],
       "role": "heading-body",
       "required": 7,
-      "darkestFieldRatio": 11.079,
+      "darkestFieldRatio": 10.388,
       "passesOnField": true
     },
     {
@@ -313,7 +313,7 @@
       ],
       "role": "muted",
       "required": 4.5,
-      "darkestFieldRatio": 6.305,
+      "darkestFieldRatio": 5.911,
       "passesOnField": true
     },
     {
@@ -330,7 +330,7 @@
       ],
       "role": "muted",
       "required": 4.5,
-      "darkestFieldRatio": 5.009,
+      "darkestFieldRatio": 4.697,
       "passesOnField": true
     },
     {
@@ -345,7 +345,7 @@
       ],
       "role": "heading-body",
       "required": 7,
-      "darkestFieldRatio": 7.539,
+      "darkestFieldRatio": 7.069,
       "passesOnField": true
     },
     {
@@ -355,7 +355,7 @@
       ],
       "role": "inverse-on-solid-control",
       "required": 7,
-      "darkestFieldRatio": 1.016,
+      "darkestFieldRatio": 1.083,
       "passesOnField": null
     },
     {
@@ -369,7 +369,7 @@
       ],
       "role": "inverse-on-solid-control",
       "required": 7,
-      "darkestFieldRatio": 1.132,
+      "darkestFieldRatio": 1.208,
       "passesOnField": null
     },
     {
@@ -379,7 +379,7 @@
       ],
       "role": "inverse-on-solid-control",
       "required": 7,
-      "darkestFieldRatio": 1.192,
+      "darkestFieldRatio": 1.271,
       "passesOnField": null
     }
   ],

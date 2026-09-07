@@ -64,6 +64,11 @@ async function main() {
     plates.push({ plate: file, bytes: statSync(`public/plates/${file}`).size, darkestXY, fieldLuminance: round(fieldMin), pigmentLuminance: round(pigmentMin), ratios: Object.fromEntries([...colours.keys()].sort().map(hex => [hex, round(contrast(luminance(rgb(hex)), fieldMin))])) });
   }
   // Componentwise lower bound also covers every bilinear sample and crossfade between plates.
+  // Paper's animated composition clamps every channel to 229/255 before grain.
+  // Include that analytical all-frames bound as well as decoded static pixels.
+  const shader = readFileSync('src/components/PigmentPlate.tsx', 'utf8');
+  assert(shader.includes('229.0 / 255.0') || shader.includes('229.0/255.0'), 'Update audit for shader floor');
+  channelFloor.forEach((v, i) => { channelFloor[i] = Math.min(v, Math.floor(229 * grainFloor)); });
   const floorL = luminance(channelFloor);
   const inverse = new Set(['#faf9f6', '#f4ecdd', '#ffffff']);
   const inventory = [...colours.entries()].sort().map(([hex, uses]) => {

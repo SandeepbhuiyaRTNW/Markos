@@ -7,7 +7,7 @@ import type { ShaderMount, ShaderMountUniforms } from '@paper-design/shaders';
 export const MARCUS_PLATES = ['marble', 'stone', 'olive', 'aegean', 'bronze', 'burden', 'oxblood', 'ash'].map(name => `/plates/${name}.webp`);
 export const clampRegister = (value: number) => Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.2;
 
-// Paper's mount owns WebGL/resize; this shader ONLY samples painted pixels and displaces UVs.
+// Paper owns WebGL/resize. The orb samples painted strokes; the field blends them into Paper GrainGradient.
 // Atlas top = rich pigment; bottom = offline-lightened text-safe wash. Never sample across seam.
 const FRAGMENT = `#version 300 es
 precision highp float;
@@ -39,7 +39,7 @@ void main() {
   float t = uMotionTime;
   if (uOrb > .5) {
     // Two overlapping pigment impressions. Boundaries come from p5.brush, never a disc mask.
-    p /= 1.42 + .055 * sin(t*.8) + uLevel * .09;
+    p /= 1.12 + .055 * sin(t*.8) + uLevel * .09;
     p += uPointer * .008;
     float turn = sin(t*.37) * (.035 + uLevel*.055);
     p = mat2(cos(turn), -sin(turn), sin(turn), cos(turn)) * p;
@@ -51,13 +51,35 @@ void main() {
     float alpha = 1. - min(pigment.r, min(pigment.g, pigment.b));
     fragColor = vec4((pigment - vec3(1. - alpha)) / max(alpha, .0001), alpha);
   } else {
-    // Enlarge actual strokes into a broad field. No computed gradients or glow.
+    // Brush texture supplies the natural-media detail beneath the Paper currents.
     float aspect = u_resolution.x / u_resolution.y;
-    p *= vec2(min(1., aspect), min(1., 1./aspect)) / 2.1;
+    p *= vec2(min(1., aspect), min(1., 1./aspect)) / .95;
     p += vec2(sin(p.y*9.+t*.31), cos(p.x*8.-t*.24)) * .026;
     fragColor = vec4(paint(p + .5), 1.);
   }
 }`;
+
+/** Compose the installed Paper shader with painted detail, in one canvas/render pass. */
+function fieldFragment(paper: string) {
+  const paperPass = paper.replace(/\bu_time\b/g, 'uPaperTime').replace('void main()', 'void paperMain()');
+  const paintPass = FRAGMENT.replace('#version 300 es', '')
+    .replace('uniform mediump vec2 u_resolution;', '')
+    .replace('out vec4 fragColor;', '').replace('void main()', 'void paintMain()');
+  return paperPass + paintPass + `
+void main() {
+  paperMain();
+  vec3 current = fragColor.rgb;
+  paintMain();
+  // Pigment soaks into the moving Paper colour. This floor includes the contrast guard.
+  fragColor = vec4(max(vec3(229.0 / 255.0), current * mix(vec3(1.), fragColor.rgb, .48)), 1.);
+}`;
+}
+
+function fieldColors(weight: number) {
+  const cool = [[.90,.93,.88,1], [.88,.93,.94,1], [.96,.94,.88,1]];
+  const warm = [[.95,.89,.86,1], [.95,.92,.86,1], [.91,.90,.86,1]];
+  return cool.map((color, i) => color.map((channel, j) => channel + (warm[i][j] - channel) * weight));
+}
 
 interface Props {
   mode: 'orb' | 'field';
@@ -115,7 +137,7 @@ export default function PigmentPlate({ mode, register = .2, getLevel, speed = .1
       }
       void (async () => {
         try {
-          const [{ ShaderMount: PaperMount }, images] = await Promise.all([
+          const [{ ShaderMount: PaperMount, grainGradientFragmentShader, getShaderNoiseTexture }, images] = await Promise.all([
             import('@paper-design/shaders'),
             Promise.all(plates.map(src => new Promise<HTMLImageElement>((resolve, reject) => {
               const image = new Image();
@@ -127,7 +149,19 @@ export default function PigmentPlate({ mode, register = .2, getLevel, speed = .1
           if (disposed) return;
           const uniforms: ShaderMountUniforms = { uMotionTime: 0, uLevel: level, uRegister: weight, uOrb: mode === 'orb' ? 1 : 0, uPointer: pointer };
           images.forEach((image, i) => { uniforms[`uPlate${i}`] = image; });
-          mount = new PaperMount(canvasHost, FRAGMENT, uniforms, { alpha: mode === 'orb', premultipliedAlpha: false, antialias: false }, 0, 0, mode === 'orb' ? 1.5 : 1, mode === 'orb' ? 350_000 : 1_500_000);
+          if (mode === 'field') {
+            const noise = getShaderNoiseTexture();
+            await noise?.decode();
+            if (disposed) return;
+            Object.assign(uniforms, {
+              u_noiseTexture: noise, uPaperTime: 0,
+              u_colorBack: [.98, .972, .95, 1], u_colors: fieldColors(weight), u_colorsCount: 3,
+              u_softness: .72, u_intensity: .65, u_noise: .16, u_shape: 6,
+              u_originX: .5, u_originY: .5, u_worldWidth: 0, u_worldHeight: 0,
+              u_fit: 2, u_scale: 1.05, u_rotation: -18, u_offsetX: 0, u_offsetY: 0,
+            });
+          }
+          mount = new PaperMount(canvasHost, mode === 'field' ? fieldFragment(grainGradientFragmentShader) : FRAGMENT, uniforms, { alpha: mode === 'orb', premultipliedAlpha: false, antialias: false }, 0, 0, mode === 'orb' ? 1.5 : 1, mode === 'orb' ? 350_000 : 1_500_000);
           mount.canvasElement.addEventListener('webglcontextlost', lost);
           const draw = (now: number) => {
             if (disposed) return;
@@ -141,7 +175,7 @@ export default function PigmentPlate({ mode, register = .2, getLevel, speed = .1
                 weight += (clampRegister(input.current.register) - weight) * (1 - Math.exp(-dt / 4.5));
                 drift += (input.current.speed - drift) * (1 - Math.exp(-dt / .65));
                 time += dt * (mode === 'orb' ? .65 + level*.65 : drift*4) * (1 - weight*.25);
-                mount?.setUniforms({ uMotionTime: time, uLevel: level, uRegister: weight, uPointer: [...pointer] });
+                mount?.setUniforms({ uMotionTime: time, uLevel: level, uRegister: weight, uPointer: [...pointer], ...(mode === 'field' ? { uPaperTime: time, u_colors: fieldColors(weight) } : {}) });
                 canvasHost.style.visibility = 'visible';
                 element.dataset.painted = 'true';
               }

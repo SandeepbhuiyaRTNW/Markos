@@ -39,6 +39,17 @@ async function main() {
         await page.waitForTimeout(2000);
         const after = await page.screenshot();
         const a = await sharp(before).raw().toBuffer(), b = await sharp(after).raw().toBuffer();
+        const decoded = await sharp(after).removeAlpha().raw().toBuffer();
+        let fieldChanges = 0;
+        for (let y = 0; y < 400; y++) for (let x = 0; x < 640; x++) {
+          if (x >= 200 && x <= 420 && y >= 90 && y <= 310) continue;
+          for (let c = 0; c < 3; c++) {
+            assert(decoded[(y * 640 + x) * 3 + c] >= 228, 'Animated field fell below audited contrast floor');
+            const i = (y * 640 + x) * (a.length / (640 * 400)) + c;
+            if (a[i] !== b[i]) fieldChanges++;
+          }
+        }
+        assert(fieldChanges > 1000, 'Paper background itself must move');
         let changed = 0;
         for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) changed++;
         assert(changed > 1000, `Expected moving pigment, only ${changed} channels changed`);
