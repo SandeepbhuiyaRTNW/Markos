@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { query } from '../db';
+import { applyCorrections } from './corrections';
 
 function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); }
 
@@ -59,7 +60,7 @@ export async function getMemoryContext(userId: string): Promise<string> {
   // Fetch memories and session count in parallel
   const [memResult, sessionResult] = await Promise.all([
     query(
-      `SELECT layer_number, layer_name, key, value, confidence, updated_at
+      `SELECT layer_number, layer_name, key, value, confidence, updated_at, metadata
        FROM memory_layers WHERE user_id = $1
        ORDER BY layer_number, confidence DESC`,
       [userId]
@@ -81,6 +82,7 @@ export async function getMemoryContext(userId: string): Promise<string> {
   // Organize by layer
   const layers: Record<number, Array<{ key: string; value: string; confidence: number; updatedAt: string }>> = {};
   const highlights: string[] = [];
+  const corrections: Array<{ key: string; value: string; previous?: string; correctedAt?: string }> = [];
 
   for (const row of memResult.rows) {
     if (!layers[row.layer_number]) layers[row.layer_number] = [];
@@ -94,9 +96,31 @@ export async function getMemoryContext(userId: string): Promise<string> {
     if (parseFloat(row.confidence) >= 0.8) {
       highlights.push(`${row.key}: ${row.value}`);
     }
+    // Rows the man has explicitly corrected get their own section at the top —
+    // repeating a corrected mistake is the single fastest way to lose his trust.
+    const md = (row.metadata || {}) as Record<string, unknown>;
+    if (md.corrected) {
+      corrections.push({
+        key: row.key,
+        value: row.value,
+        previous: typeof md.previous_value === 'string' ? md.previous_value : undefined,
+        correctedAt: typeof md.corrected_at === 'string' ? md.corrected_at : undefined,
+      });
+    }
   }
 
   let context = `SESSIONS TOGETHER: ${sessionCount}\nTOTAL MEMORIES: ${memResult.rows.length}`;
+
+  // Corrections first: facts he explicitly corrected. The corrected version is
+  // the only true one; the old version must never be spoken again.
+  if (corrections.length > 0) {
+    context += `\n\nCORRECTIONS HE HAS MADE — the corrected version is right, never use the old one:`;
+    for (const c of corrections) {
+      const date = c.correctedAt ? new Date(c.correctedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+      context += `\n- ${c.key}: ${c.value}`;
+      if (c.previous) context += ` (he corrected this${date ? ` on ${date}` : ''}; previously "${c.previous}")`;
+    }
+  }
 
   // High-confidence highlights summary
   if (highlights.length > 0) {
@@ -258,6 +282,17 @@ export async function extractMemories(
   marcusResponse: string,
   messageId: string
 ) {
+  // Corrections run BEFORE general extraction: if this message corrects a fact
+  // Marcus previously got wrong, the dedicated pass overwrites the wrong row at
+  // confidence 1.0 and marks it, so the mistake cannot resurface next turn.
+  // Zero-cost on ordinary turns (lexical gate). Never blocks extraction.
+  try {
+    const applied = await applyCorrections(userId, userMessage, messageId);
+    if (applied > 0) console.log(`[Memory] ${applied} correction(s) applied for user ${userId}`);
+  } catch (e) {
+    console.warn('[Memory] Correction pass failed (extraction continues):', e);
+  }
+
   // Use GPT to extract memory-worthy information
   const extraction = await getOpenAI().chat.completions.create({
     model: 'gpt-4o-mini',
@@ -276,6 +311,7 @@ CRITICAL RULES:
 2. HIGH-IMPACT DETAILS get priority: threats, ultimatums, crises, specific events, specific names, specific fears, specific dreams.
 3. Use HIS words in the value field, not your interpretation. If he said "my wife will divorce me if I become a chef" — store exactly that.
 4. Each specific fact gets its OWN memory entry. Don't combine "wants to be a chef" and "wife threatens divorce" into one entry.
+5. If he CORRECTS a fact (says an earlier version was wrong), store the corrected version with confidence 1.0 under the fact's natural key — never re-store the old wrong value.
 
 Memory Layers:
 1-Identity: name, age, job, values, beliefs, personality traits
