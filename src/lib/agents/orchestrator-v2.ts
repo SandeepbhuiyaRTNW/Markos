@@ -129,7 +129,7 @@ export async function processWithAgents(
   // Phase 1: Fast DB fetches
   const memDone = trackEnvelopeAgent(env, 'memory-sentinel');
   try {
-    const [memCtx, kwmlCtx, sessionResult, sessHistory, stylePrefs, loadedState, lastSessionResult, convMetaResult, interviewResult] = await Promise.all([
+    const [memCtx, kwmlCtx, sessionResult, sessHistory, stylePrefs, loadedState, convMetaResult, interviewResult, lastSessionResult] = await Promise.all([
       getMemoryContext(userId), getKWMLContext(userId),
       query(`SELECT COUNT(*) as cnt FROM conversations WHERE user_id = $1`, [userId]),
       getSessionHistory(userId), getStylePreferences(userId),
