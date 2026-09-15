@@ -107,6 +107,10 @@ export default function Home() {
   const [interviewBusy, setInterviewBusy] = useState(false);
   const [interviewMode, setInterviewMode] = useState(false);
   const [showInterviewOffer, setShowInterviewOffer] = useState(false);
+  // True from onboarding completion until the interview-offer lookup resolves.
+  // Blocks the just-authed auto-entry effect so it can't drop him into a fresh
+  // voice session before we know whether to show him the interview offer.
+  const [awaitingInterviewLookup, setAwaitingInterviewLookup] = useState(false);
   const [continueFromId, setContinueFromId] = useState<string | null>(null);
   const [recentSessions, setRecentSessions] = useState<Array<{
     id: string; sessionNumber: number; title: string; summary: string | null;
@@ -248,11 +252,11 @@ export default function Home() {
   // just-authed user is dropped straight into the mic-open listening screen. It waits for
   // onboardingComplete, so it never fights the onboarding gate (new users still onboard first).
   useEffect(() => {
-    if (userId && onboardingComplete && pendingEntry && !showInterviewOffer && viewRef.current !== 'voice') {
+    if (userId && onboardingComplete && pendingEntry && !showInterviewOffer && !awaitingInterviewLookup && viewRef.current !== 'voice') {
       setPendingEntry(false);
       enterVoice({ sessionType: 'fresh', continueFrom: null });
     }
-  }, [userId, onboardingComplete, pendingEntry, showInterviewOffer, enterVoice]);
+  }, [userId, onboardingComplete, pendingEntry, showInterviewOffer, awaitingInterviewLookup, enterVoice]);
 
   const handleSendCode = async () => {
     if (!email || !email.includes('@')) { setAuthError('Please enter a valid email.'); return; }
@@ -687,6 +691,11 @@ export default function Home() {
         <AppHeader mode="focused" />
         <div className="relative z-10">
           <OnboardingFlow userId={userId} onComplete={() => {
+            // Hold the just-authed auto-entry effect until the offer lookup
+            // resolves — otherwise onboardingComplete flips true first, the
+            // effect sees showInterviewOffer=false and drops him into a fresh
+            // voice session, and the offer then pops over its running opening.
+            setAwaitingInterviewLookup(true);
             setOnboardingComplete(true);
             // Offer the Embodied Man interview as his first conversation. A man
             // who already has an interview (or whose state fails to load) skips
@@ -697,7 +706,8 @@ export default function Home() {
                 if (st && st.phase) setInterview(st);
                 if (st?.phase === 'not_started') setShowInterviewOffer(true);
               })
-              .catch(() => { /* offer is optional — never block entry */ });
+              .catch(() => { /* offer is optional — never block entry */ })
+              .finally(() => setAwaitingInterviewLookup(false));
           }} />
         </div>
       </div>
