@@ -158,13 +158,22 @@ export function pauseInterview(state: InterviewState, now: string): InterviewSta
   return { ...state, phase: 'paused', sittings: closeSitting(state.sittings, state.current_section, now), updated_at: now };
 }
 
-/** Resume a paused interview: same section, new sitting — the resumable sittings the spec asked for. */
+/**
+ * Resume a paused interview: same section, new sitting — the resumable sittings
+ * the spec asked for. A new sitting re-enters a permission-gated section fresh,
+ * so the gate is always re-armed regardless of the pre-pause flag: resuming
+ * lands in `gate_pending` for gated sections (re-consent required) and plain
+ * `in_progress` otherwise. This keeps the phase and the `gate_pending` flag in
+ * lockstep — the two ever drifting apart is what let a paused gate either skip
+ * re-consent or wedge advance/acceptGate against each other.
+ */
 export function resumeInterview(state: InterviewState, now: string): InterviewState {
   if (state.phase !== 'paused') return state;
+  const gated = PERMISSION_GATED_SECTIONS.includes(state.current_section);
   return {
     ...state,
-    phase: 'in_progress',
-    gate_pending: PERMISSION_GATED_SECTIONS.includes(state.current_section) ? state.gate_pending : false,
+    phase: gated ? 'gate_pending' : 'in_progress',
+    gate_pending: gated,
     sittings: [...state.sittings, { started_at: now, ended_at: null, from_section: state.current_section, to_section: state.current_section }],
     updated_at: now,
   };
