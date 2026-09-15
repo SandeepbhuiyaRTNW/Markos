@@ -51,6 +51,11 @@ export async function POST(req: NextRequest) {
     await query(`DELETE FROM open_loops WHERE user_id = $1`, [userId]);
     await query(`DELETE FROM reflections WHERE user_id = $1`, [userId]);
 
+    // interview_sessions cascades from users, but clean-slate keeps the users row,
+    // so the cascade never fires — delete the interview progress explicitly or
+    // "start over" silently restores his prior phase/section on next /api/interview.
+    await query(`DELETE FROM interview_sessions WHERE user_id = $1`, [userId]);
+
     // 5. conversations
     await query(
       `DELETE FROM conversations WHERE user_id = $1`,

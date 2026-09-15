@@ -4,6 +4,8 @@
 -- Run: psql $DATABASE_URL -f scripts/migrate-interview-sessions.sql
 -- ============================================
 
+-- FK cascades on user deletion. NOTE: /api/auth/clean-slate keeps the users row,
+-- so it must DELETE FROM interview_sessions explicitly — the cascade won't fire there.
 CREATE TABLE IF NOT EXISTS interview_sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,

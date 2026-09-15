@@ -349,6 +349,9 @@ export default function Home() {
       });
       if (!res.ok) throw new Error('Failed');
       setConversationId(null); setTranscripts([]); setOpeningMessage(null); setSessionNotes(null);
+      // The interview_sessions row is gone server-side; drop the stale client
+      // chrome too so the dashboard/progress strip don't show a deleted interview.
+      setInterview(null); setShowInterviewOffer(false); setInterviewMode(false);
       setSelectedConvId(null); setRefreshSidebar((p) => p + 1); setView('analytics');
     } catch (err) { console.error('Start over error:', err); }
   };
