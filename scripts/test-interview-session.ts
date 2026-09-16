@@ -90,5 +90,24 @@ const run = () => {
 };
 check('same inputs -> identical state', run() === run());
 
+console.log('H. Resume re-arms the permission gate (regression: finding 2)');
+// A resumed sitting re-enters a gated section fresh, so the gate must re-arm
+// regardless of where the pause fell relative to the gate. Section 2 is gated.
+const toGate = advanceSection(grantConsent(beginInterview({ ...EMPTY_INTERVIEW_STATE }, T0), T0), T0);
+// Pause AFTER accepting the gate: resume must NOT carry the accepted state over —
+// the new sitting requires fresh re-consent, so it lands back in gate_pending.
+const afterAccept = resumeInterview(pauseInterview(acceptGate(toGate, T0), T1), T2);
+check('pause-after-accept re-arms the gate on resume (no skipped re-consent)',
+  afterAccept.phase === 'gate_pending' && afterAccept.current_section === 2 && afterAccept.gate_pending === true
+  && acceptGate(afterAccept, T2).phase === 'in_progress');
+// Pause BEFORE accepting the gate: resume must land in a consistent gate_pending
+// (not in_progress+gate_pending, which advanceSection and acceptGate both refuse —
+// a permanent wedge). Prove it is not wedged: acceptGate then advance both work.
+const beforeAccept = resumeInterview(pauseInterview(toGate, T1), T2);
+check('pause-before-accept is not wedged on resume (acceptGate then advances)',
+  beforeAccept.phase === 'gate_pending' && beforeAccept.gate_pending === true
+  && acceptGate(beforeAccept, T2).phase === 'in_progress'
+  && advanceSection(acceptGate(beforeAccept, T2), T2).current_section === 3);
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
