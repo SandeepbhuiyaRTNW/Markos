@@ -30,6 +30,29 @@
  *   realities before she sees a lawyer"). The real net for that residual is an
  *   LLM-judge layer, which §7 should inform. This file is the extensible first
  *   layer, not the whole safety story.
+ *
+ * ⚠️ LIVE-TEST-REQUIRED — STRICT-CATEGORY OVER-REFUSAL (custody & alienation):
+ *   The custody and parental-alienation patterns cannot distinguish the man as
+ *   VICTIM/grieving ("I'm scared I'll never see my kids", "she'll take the kids
+ *   from me") from the man as AGGRESSOR ("she'll never see the kids again", "I'll
+ *   take the kids from her") — same words, opposite intent. They therefore REFUSE
+ *   the archetypal sympathetic case, the single most common thing this app's user
+ *   says. This is a SEMANTIC distinction regex MUST NOT attempt: any pronoun-based
+ *   carve-out either blocks grieving fathers or lets real threats through on one
+ *   wrong boundary — in the highest-stakes category. The correct fix is DEFERRING
+ *   these strict-category matches to the semantic judge ("Option B") — but that
+ *   rests on the judge (F1), which is unproven and injectable, so it CANNOT ship
+ *   until the judge is red-teamed live. Until then these over-refuse BY DESIGN;
+ *   the concrete cases are pinned in scripts/test-harm-gate.ts as
+ *   expectedCurrentlyRefused() so the over-refusal is tracked, not forgotten.
+ *
+ * ⚠️ LIVE-TEST-REQUIRED — THREAT NEGATION (owner decision C1): the threat category
+ *   makes NO attempt to distinguish a real threat from an apology/negated reference
+ *   ("I'll never threaten her again", "I regret threatening her") in regex. No
+ *   window value is safe — a distant negation lets a real threat slip (unsafe), a
+ *   nearby one over-refuses an apology (safe). So threat OVER-refuses genuine
+ *   apologies BY DESIGN; the semantic call is deferred to the judge (Option B),
+ *   blocked on F1. Tracked in test-harm-gate.ts as expectedCurrentlyRefused().
  */
 
 export interface HarmVerdict {
@@ -52,7 +75,10 @@ export const THREAT_PATTERNS: RegExp[] = [
   /\b(or else|watch what happens|you have no idea what i)\b/i,
   /\bi'?ll (make sure|ruin|destroy|end|wreck) (her|him|them|your|his|this)\b/i,
   /\b(threaten(ing)?|a threat) (her|him|them|to (hurt|harm|leave|take))\b/i,
-  /\bregret (leaving|the day|ever)\b/i,
+  // F3 + finding #2: second/third-person or imperative — "she'll/you'll regret the
+  // day", "make her regret" — but NOT first-person remorse ("I regret leaving her",
+  // which has no she/he/they/you subject, so it stays clean).
+  /\b(make (her|him|them) regret|(she|he|they|you)(?:'?ll| will) regret) (leaving|the day|ever|it|this|that)\b/i,
 ];
 
 /**
@@ -66,7 +92,9 @@ export const COERCION_LEVERAGE_PATTERNS: RegExp[] = [
   /\bremind(ing)? (her|him|them) (who|what|that|how much) (she|he|they) (needs?|depends? on|owes?|can'?t (do|make it)|would be nothing without)\b/i,
   /\bunless (she|he|they|you) (comes? back|agrees?|does what|stops|changes|apologi)\b/i,
   /\bhold(ing)? .{0,24} over (her|his|their) head\b/i,
-  /\b(leave|walk away|end up|be left) with nothing\b/i,
+  // finding #3: 2nd/3rd-person directed ("you'll/she'll be left with nothing") — but
+  // NOT first-person fear ("I'll leave with nothing": no she/he/they/you subject).
+  /\b((she|he|they|you)(?:'?ll| will| is going to)? (leave|walk away|end up|be left)|leave (her|him|them)|make (her|him|them) (leave|walk away|end up|be left)) with nothing\b/i,
   /\bmake (her|him|them) (afraid|scared|understand what (happens|she'?ll lose) if)\b/i,
   /\b(what'?s at stake for (her|him|them)|the consequences (for her|for him|she'?ll face|of leaving))\b/i,
   /\bif (she|he|they) (doesn'?t|don'?t|won'?t|leaves?|files?) .{0,40}(then )?(i'?ll|i will|she'?ll|he'?ll|there (will|won'?t)|nobody|no one)\b/i,
@@ -140,34 +168,91 @@ export const HARM_CATEGORIES: Record<string, RegExp[]> = {
   blackmail_exposure: BLACKMAIL_EXPOSURE_PATTERNS,
 };
 
-// Retrospective / negated / apology framing that flips a THREAT reference from
-// intent into a reference to PAST or DISAVOWED harm ("I regret threatening her",
-// "promise I will never threaten her again"). Applied ONLY to the threat category
-// — apologizing does not make "pretend to be my lawyer" safe. Ambiguous cases are
-// deferred to the semantic judge, which still runs whenever regex is clean.
-const THREAT_NEGATION_CUES = /\b(never|not going to|won'?t|will not|would never|no longer|regret|sorry|apolog|ashamed|make amends|used to)\b/i;
-function threatIsNegatedOrRetrospective(text: string, matchIndex: number): boolean {
-  const window = text.slice(Math.max(0, matchIndex - 40), matchIndex);
-  return THREAT_NEGATION_CUES.test(window);
+// ─── Negation / first-person suppression ───────────────────────────────
+// deception & impersonation over-refuse on DIRECTLY-NEGATED phrasings ("so I don't
+// make her doubt herself", "I don't want to pretend"). We suppress the regex hit for
+// those and let the semantic judge decide — but ONLY with a SHORT preceding-context
+// window, so a negation in a DIFFERENT clause ("it's not okay, gaslight her") cannot
+// mask genuine harm. An under-refusal is worse than an over-refusal here.
+//
+// Scope is deliberate (NEGATION_AWARE_CATEGORIES = deception, impersonation ONLY).
+// THREAT was REMOVED from the guard (C1): threat negation is semantic and belongs to
+// the judge, so threat now over-refuses apologies by design. Custody, alienation,
+// harassment, coercion, and blackmail also do NOT defer negated cases — there a
+// nearby negation usually IS the harm ("never see the kids again").
+// Finding #1 (root-cause fix): the old `n'?t\b` alternative matched the bare "nt" in
+// ordinary words like "want"/"aunt", so "I want to gaslight her" was wrongly treated
+// as negated and slipped. This lists whole negation WORDS in BOTH apostrophe and
+// apostrophe-less forms (phones type both). Curly apostrophes are already normalized
+// to ASCII on the input (C2), so straight forms suffice. "want" is not a negation
+// word, so it no longer suppresses — while real apostrophe-less "dont"/"wont" do.
+const DIRECT_NEGATION_CUES = /\b(don't|dont|won't|wont|can't|cant|doesn't|doesnt|isn't|isnt|wasn't|wasnt|didn't|didnt|wouldn't|wouldnt|shouldn't|shouldnt|couldn't|couldnt|haven't|havent|hasn't|hasnt|aren't|arent|ain't|aint|not|never|no longer)\b/i;
+// C1 (owner-approved): the THREAT category no longer attempts a negation/apology
+// distinction in regex. No window value is correct — a DISTANT negation lets a real
+// threat slip ("I won't lie, you'll regret this" → under-refusal, the UNSAFE
+// failure), a NEARBY one over-refuses a genuine apology (the SAFE failure). This is
+// a SEMANTIC call that belongs to the judge (Option B), same rationale as the F9
+// custody/alienation decision. So threat now OVER-refuses apologies BY DESIGN until
+// judge-deferral lands; the cases are pinned as expectedCurrentlyRefused() in the
+// test suite. deception & impersonation KEEP a short-window direct-negation guard
+// (benign negated forms are common there and the under-refusal risk is lower).
+const NEGATION_AWARE_CATEGORIES = new Set(['deception_manipulation', 'impersonation']);
+
+function isSuppressed(key: string, text: string, matchIndex: number): boolean {
+  if (NEGATION_AWARE_CATEGORIES.has(key)) {
+    const w = text.slice(Math.max(0, matchIndex - 14), matchIndex);
+    if (DIRECT_NEGATION_CUES.test(w)) return true;
+  }
+  return false;
 }
+
+// ─── C2: Unicode apostrophe normalization ────────────────────────────────
+// Contraction patterns use '? (an ASCII apostrophe). Phones type curly
+// apostrophes (U+2019 by default; also U+2018 and U+02BC), so a threat like
+// "she'll lose the kids" typed on iOS would evade EVERY '?-based pattern in this
+// file — a silent under-refusal (verified). We normalize those code points to
+// ASCII ' ONCE on the input, so every category pattern AND the negation-guard
+// windows see straight apostrophes. This covers every contraction in the file
+// (not one line), and any pattern added later benefits automatically.
+const UNICODE_APOSTROPHES = /[‘’ʼ]/g;
+
+// ─── C3: explicit, once-at-load global-regex construction ──────────────────
+// matchAll requires a global ('g') regex. The category patterns are authored
+// WITHOUT 'g' (they use /i only). Rather than string-splice `p.flags + 'g'` per
+// call — which throws on an already-global pattern and silently hides that
+// assumption — we build a global clone of each pattern ONCE at module load.
+// makeGlobal FAILS LOUDLY if a pattern is ever authored with 'g', so a future
+// edit surfaces the problem instead of misbehaving. No behavior change: the
+// existing test-harm-gate suite (same inputs) is the before/after parity proof.
+function makeGlobal(re: RegExp): RegExp {
+  if (re.global) throw new Error(`harm-gate pattern must not use the 'g' flag: /${re.source}/${re.flags}`);
+  return new RegExp(re.source, re.flags + 'g');
+}
+const GLOBAL_HARM_CATEGORIES: Array<[string, RegExp[]]> =
+  Object.entries(HARM_CATEGORIES).map(([key, patterns]) => [key, patterns.map(makeGlobal)]);
 
 /**
  * Scan text for harmful content. Runs every category; harmful = any match.
  * Pure and deterministic. Safe to call on the user's request AND on a draft.
+ *
+ * F2: uses matchAll (not match) so a negated FIRST occurrence of a pattern cannot
+ * hide a genuine LATER occurrence of the same pattern in the same text
+ * ("I regret nothing. You'll be sorry." → the threat is still caught).
+ * C2: input apostrophes are normalized to ASCII first (curly-apostrophe threats).
+ * C3: iterates the precompiled global patterns (GLOBAL_HARM_CATEGORIES).
  */
 export function checkHarm(text: string): HarmVerdict {
   const categories: string[] = [];
   const matched: string[] = [];
-  const s = text || '';
-  for (const [key, patterns] of Object.entries(HARM_CATEGORIES)) {
-    for (const p of patterns) {
-      const m = s.match(p);
-      if (!m) continue;
-      // Threat category: skip a match sitting in a negated/retrospective/apology
-      // frame; the judge remains the backstop for anything this defers.
-      if (key === 'threat' && threatIsNegatedOrRetrospective(s, m.index ?? 0)) continue;
-      if (!categories.includes(key)) categories.push(key);
-      matched.push(m[0]);
+  const s = (text || '').replace(UNICODE_APOSTROPHES, "'");
+  for (const [key, patterns] of GLOBAL_HARM_CATEGORIES) {
+    for (const g of patterns) {
+      for (const m of s.matchAll(g)) {
+        if (isSuppressed(key, s, m.index ?? 0)) continue;
+        if (!categories.includes(key)) categories.push(key);
+        matched.push(m[0]);
+        break; // one non-suppressed occurrence is enough for this pattern
+      }
     }
   }
   return { harmful: categories.length > 0, categories, matched };
@@ -234,8 +319,11 @@ export function getHarmRefusal(categories: string[]): string {
 //   • Semantic coercion (benign words, harmful intent) is OUT OF REACH of regex.
 //     The follow-up is an LLM-judge layer over the request+draft; §7 should
 //     define its rubric. Do NOT rely on this file alone for that residual.
-//   • The threat category DEFERS negated/retrospective/apology frames to the judge
-//     (threatIsNegatedOrRetrospective). A genuine threat wearing that framing
-//     ("I won't say it, but she'll be sorry") therefore rides the JUDGE path, not
-//     this gate. §7's rubric MUST cover soft/retrospective/implied threats.
+//   • NEGATION_AWARE_CATEGORIES (deception, impersonation ONLY) defer directly-
+//     negated phrasings to the judge ("so I don't make her doubt herself") via a
+//     short-window guard. THREAT does NOT (C1) — threat negation is semantic and
+//     belongs to the judge (Option B), so threat OVER-refuses genuine apologies
+//     until judge-deferral lands. Custody, alienation, harassment, coercion, and
+//     blackmail also do NOT defer negated cases — there a nearby negation usually
+//     IS the harm. §7's rubric MUST cover soft/negated/retrospective/implied cases.
 // ─────────────────────────────────────────────────────────────────────────────
