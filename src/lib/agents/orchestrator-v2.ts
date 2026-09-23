@@ -335,15 +335,18 @@ export async function processWithAgents(
       applyEmbodiedManKnowledge(env);
 
       // Interview session context — when this conversation is an Embodied Man
-      // interview sitting, tell the Composer where he is in the 12 sections.
-      // Deterministic string assembly, no LLM; buildInterviewNote returns null
-      // when no sitting is open (paused/completed/not started) and pushes
-      // NOTHING, so an ordinary conversation stays byte-for-byte as before.
+      // interview sitting, hand the Composer the current section's questions
+      // and the script's host rules. Deterministic string assembly, no LLM;
+      // buildInterviewNote returns null when no sitting is open
+      // (paused/completed/not started) and pushes NOTHING, so an ordinary
+      // conversation stays byte-for-byte as before. It rides session_notes,
+      // not context_notes: the interview is the mode, so it must not be
+      // trimmed by the coaching cap or hidden by the move-policy toggle.
       if (interviewState) {
         const note = buildInterviewNote(interviewState);
         if (note !== null) {
           env.domain_whisperers.invoked.push('interview_session');
-          env.domain_whisperers.context_notes.push(note);
+          (env.domain_whisperers.session_notes ??= []).push(note);
           env.domain_whisperers.frameworks_applied.push('Embodied Man interview — structured session');
         }
       }
