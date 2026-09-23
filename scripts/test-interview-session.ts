@@ -6,8 +6,9 @@
  * What these tests prove: the interview state machine (phases, consent gate,
  * 12 sections in order, gated sections, resumable sittings) transitions exactly
  * as specced, and the Composer note carries the current section's question
- * content (see scripts/test-embodied-questions.ts for the content itself). What they cannot prove: that the model obeys the note (same lens as
- * the other knowledge-module suites).
+ * content (see scripts/test-embodied-questions.ts for the content itself).
+ * What they cannot prove: that the model obeys the note (same lens as the
+ * other knowledge-module suites).
  */
 
 import {
@@ -79,7 +80,7 @@ check('note exists mid-interview', note !== null);
 check('note names the current section', !!note && note.includes('Section 1 of 12') && note.includes('Early Childhood'));
 check('note carries the section\'s first main question verbatim', !!note && note.includes('What are your earliest memories of living in your body?'));
 check('note carries the host rules', !!note && note.includes('HOST RULES') && note.includes('One question per turn'));
-check('resumed sitting asks for check-in + recap, not the boundary questions', !!note && note.includes('one-line recap') && !note.includes('B1.'));
+check('resumed sitting: check-in, asks about today\'s limits, never claims to remember, no boundary script', !!note && note.includes('present-moment check-in') && note.includes('stay away from today') && note.includes('do not claim to remember') && !note.includes('B1.'));
 const fresh = buildInterviewNote(grantConsent(beginInterview({ ...EMPTY_INTERVIEW_STATE }, T0), T0));
 check('first sitting at Section 1 leads with the boundary questions + check-in', !!fresh && fresh.includes('B1.') && fresh.includes('how does your body feel right now?'));
 check('note marks itself internal / never verbatim', !!note && note.includes('never read verbatim'));
