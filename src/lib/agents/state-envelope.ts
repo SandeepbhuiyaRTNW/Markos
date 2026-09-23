@@ -167,6 +167,13 @@ export interface DomainWhisperersOutput {
   frameworks_applied: string[];
   landmines: string[];        // things Marcus must NOT say (from whisperer red lines)
   context_notes: string[];    // internal clinical guidance for the Composer
+  /**
+   * Structured-session guidance (the Embodied Man interview while a sitting is
+   * open). Unlike context_notes this is the MODE, not optional coaching: it
+   * renders on every turn it is present, outside the whisperer coaching cap and
+   * the move-policy whisperer toggle. Optional so existing envelopes are unchanged.
+   */
+  session_notes?: string[];
 }
 
 export interface CraftDirectives {
