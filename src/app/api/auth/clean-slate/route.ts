@@ -56,8 +56,14 @@ export async function POST(req: NextRequest) {
     // "start over" silently restores his prior phase/section on next /api/interview.
     await query(`DELETE FROM interview_sessions WHERE user_id = $1`, [userId]);
     // Framework interview sessions carry his collected answers — same explicit delete,
-    // same reason: clean-slate must not silently restore a prior run.
-    await query(`DELETE FROM framework_interview_sessions WHERE user_id = $1`, [userId]);
+    // same reason: clean-slate must not silently restore a prior run. Tolerated
+    // failure: the table only exists where the migration has run, and "start
+    // over" must never 500 over a pending migration.
+    try {
+      await query(`DELETE FROM framework_interview_sessions WHERE user_id = $1`, [userId]);
+    } catch (e) {
+      console.warn('[CleanSlate] framework_interview_sessions delete skipped (migration pending?)', e);
+    }
 
     // 5. conversations
     await query(
