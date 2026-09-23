@@ -6,6 +6,7 @@ import { synthesizeSpeech } from '@/lib/voice/tts';
 import { buildSystemPrompt } from '@/lib/agent/system-prompt';
 import { loadInterviewState } from '@/lib/interview/store';
 import { currentSection, TOTAL_SECTIONS } from '@/lib/interview/session';
+import { sectionContent, BEFORE_RECORDING, OPENING_FRAMING, SECTION_7_CONSENT_CHECK } from '@/lib/interview/embodied-questions';
 import { emitTurnTiming, type TurnTimingCtx } from '@/lib/observability/turn-timing';
 
 function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); }
@@ -163,19 +164,35 @@ export async function GET(req: NextRequest) {
     }
 
     // Interview sittings get their own opening: greet him INTO the section he
-    // is on (or back into it, another day). Consent already happened in the UI.
-    // The deep question content is not authored yet, so the instruction bars
-    // inventing the interview's questions — receive, don't interrogate.
+    // is on (or back into it, another day). Consent to the interview itself
+    // already happened in the UI. The opening ends on the ONE question the
+    // script puts first at this point (embodied-questions.ts, verbatim): the
+    // first boundary question on a brand-new interview, the Section 7 consent
+    // check when that gate is live, otherwise the section's first main
+    // question — or, on a resumed sitting, a present-moment check-in.
     let interviewInstruction = '';
+    let interviewFirstLine = '';
     if (sessionType === 'interview') {
       const iState = await loadInterviewState(userId).catch(() => null);
       const section = iState ? currentSection(iState) : null;
-      if (section) {
-        const resuming = (iState?.sittings.length ?? 0) > 1;
+      if (iState && section) {
+        const resuming = iState.sittings.length > 1;
+        const brandNew = !resuming && iState.current_section === 1 && iState.sections_completed.length === 0;
+        const content = sectionContent(section.section);
+        const firstMain = content?.main[0]?.text ?? content?.sub_blocks?.[0]?.main[0]?.text ?? null;
         interviewInstruction = `
 
 ## INTERVIEW SESSION CONTEXT
-He is in the Embodied Man interview${resuming ? ', picking it back up after time away' : ''} — Section ${section.section} of ${TOTAL_SECTIONS}: "${section.name}" (${section.life_stage}). He has already consented to the interview's depth in the app — do not re-ask permission for the interview itself. The interview's deep question content is NOT authored yet: do NOT invent its questions, do NOT announce a questionnaire or a list of sections. Receive whatever he brings inside this section's territory, in your usual plain voice.`;
+He is in the Embodied Man interview${resuming ? ', picking it back up after time away' : ''} — Section ${section.section} of ${TOTAL_SECTIONS}: "${section.name}" (${section.life_stage}). He has already consented to the interview itself in the app — do not re-ask permission for the interview. You are the host: plain, unhurried, one question at a time. Never tell him what his body means. Do NOT read a list of sections or announce a questionnaire.`;
+        if (brandNew) {
+          interviewFirstLine = `Welcome him in plain words, and give him the frame in one sentence, in your own voice: "${OPENING_FRAMING}" Tell him he can skip anything and stop any time. Then ask, as written: "${BEFORE_RECORDING[0]}"`;
+        } else if (section.section === 7 && iState.gate_pending) {
+          interviewFirstLine = `Welcome him into this part in one short sentence, then ask ONLY this, as written: "${SECTION_7_CONSENT_CHECK}"`;
+        } else if (resuming) {
+          interviewFirstLine = `Welcome him back in one short sentence and ask how his body feels right now (he can keep it simple, or say nothing much). Do not start the next interview question yet.`;
+        } else if (firstMain) {
+          interviewFirstLine = `Welcome him into this part in one short sentence, then ask, as written: "${firstMain}"`;
+        }
       }
     }
 
@@ -184,7 +201,7 @@ He is in the Embodied Man interview${resuming ? ', picking it back up after time
       openingInstruction = `
 
 ## YOUR TASK — OPEN AN INTERVIEW SITTING${interviewInstruction}
-Open the sitting in 2-3 sentences: welcome him into this part of the interview and end with ONE open doorway into the section's territory — not a scripted interview question. Do NOT read the context above back to him, and do NOT start with "Brother" — vary your openings.`;
+Open the sitting in 2-3 sentences. ${interviewFirstLine || 'Welcome him into this part of the interview and end with ONE open doorway into the section.'} End on that one question — no second question. Do NOT read the context above back to him, and do NOT start with "Brother" — vary your openings.`;
     } else if (sessionType === 'fresh') {
       const nameGreeting = userName ? `You know this man as ${userName}. ` : '';
       openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION (NEW TOPIC)
