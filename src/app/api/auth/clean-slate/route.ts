@@ -55,6 +55,9 @@ export async function POST(req: NextRequest) {
     // so the cascade never fires — delete the interview progress explicitly or
     // "start over" silently restores his prior phase/section on next /api/interview.
     await query(`DELETE FROM interview_sessions WHERE user_id = $1`, [userId]);
+    // Framework interview sessions carry his collected answers — same explicit delete,
+    // same reason: clean-slate must not silently restore a prior run.
+    await query(`DELETE FROM framework_interview_sessions WHERE user_id = $1`, [userId]);
 
     // 5. conversations
     await query(
@@ -70,4 +73,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Failed to clean slate: ${errMsg}` }, { status: 500 });
   }
 }
-
