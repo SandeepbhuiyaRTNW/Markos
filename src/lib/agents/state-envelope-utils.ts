@@ -166,6 +166,14 @@ export function buildEnvelopeContextSummary(
   if (env.wisdom_council.invoked.length > 0) {
     parts.push(`## WISDOM COUNCIL: ${env.wisdom_council.invoked.join(', ')}`);
   }
+  // Structured session (Embodied Man interview sitting): always rendered when
+  // present — never trimmed by the coaching cap, never hidden by the
+  // move-policy whisperer toggle — and placed before QUESTIONS so the
+  // interview's own question outranks any bank suggestion.
+  const sessionNotes = env.domain_whisperers.session_notes ?? [];
+  if (sessionNotes.length > 0) {
+    parts.push(`## STRUCTURED SESSION — THE INTERVIEW (outranks QUESTIONS below)\n${sessionNotes.join('\n')}`);
+  }
   if (includeQuestionCandidates && env.domain_whisperers.question_candidates.length > 0) {
     const qs = env.domain_whisperers.question_candidates;
     const trust = env.assessment.trust;
