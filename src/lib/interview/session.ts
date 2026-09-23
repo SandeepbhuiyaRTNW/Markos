@@ -212,17 +212,20 @@ export function buildInterviewNote(state: InterviewState): string | null {
   if (!section) return null;
   const sittingNo = state.sittings.length;
   const firstSittingStart = sittingNo <= 1 && state.current_section === 1 && state.sections_completed.length === 0;
-  const resumed = sittingNo > 1;
   const gateLine = state.gate_pending && section.gate
     ? `\n- GATE LIVE for this section: ${section.gate}. Do not go further into this section's sensitive territory until he has plainly said yes.`
     : '';
-  const resumeLine = resumed
-    ? `\n- This is sitting #${sittingNo}, another day. If you have not done it yet in this conversation: a short present-moment check-in and a one-line recap of where you were, in HIS words, then continue with the next main question he has not answered.`
-    : '';
+  // Every sitting (and every re-entry into an open sitting) is a NEW
+  // conversation, so earlier answers and his Before Recording boundaries are
+  // not in this conversation's history. Nothing per-question is persisted yet,
+  // so the note says so plainly instead of pretending continuity.
+  const continuityLine = firstSittingStart
+    ? ''
+    : `\n- Earlier parts of the interview happened in other conversations you cannot see here. If this conversation has not done it yet: a short present-moment check-in, then ask once, briefly, whether there is anything he wants you to stay away from today. Do not guess what he said before and do not claim to remember it. If you are not sure which of this section's main questions he already answered, ask him where he wants to pick up rather than repeating one.`;
   return [
     `EMBODIED MAN INTERVIEW — structured session in progress (internal guidance, never read verbatim). This outranks any other question suggestion this turn.`,
     `- You are hosting the interview: open, ask, listen, pace, honor his limits. Not therapy, not coaching, not assessment. He is in Section ${section.section} of ${TOTAL_SECTIONS}: "${section.name}" (${section.life_stage}). Sitting #${sittingNo}. Sections done: ${state.sections_completed.length} of ${TOTAL_SECTIONS}.`,
-    `- Progress is his, not yours: never rush him to the next section, never declare a section finished for him, and if he wants to pause, skip, or stop, that is his call — acknowledge it plainly. When this section's main questions are asked or skipped, you may tell him plainly he can move on when he is ready.${gateLine}${resumeLine}`,
+    `- Progress is his, not yours: never rush him to the next section, never declare a section finished for him, and if he wants to pause, skip, or stop, that is his call — acknowledge it plainly. When this section's main questions are asked or skipped, you may tell him plainly he can move on when he is ready.${gateLine}${continuityLine}`,
     ...buildSectionContentLines(section.section, { includeBeforeRecording: firstSittingStart, gatePending: state.gate_pending }),
     `HOST RULES (the script's own, binding every turn):`,
     ...HOST_RULES,
