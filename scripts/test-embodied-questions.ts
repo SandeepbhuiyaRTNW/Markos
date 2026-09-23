@@ -73,6 +73,8 @@ for (let n = 1; n <= 12; n++) {
   const content = buildSectionContentLines(n).join('\n').toLowerCase();
   check(`Section ${n}: section content introduces no clinical vocabulary`, CLINICAL_BLACKLIST.every((w) => !new RegExp(`\\b${w.replace('/', '\\/')}\\b`).test(content)));
 }
+check('every note tells Marcus the crisis guidance outranks the interview', [1, 5, 12].every((n) => buildInterviewNote(stateAt(n))!.includes('crisis guidance outranks everything')));
+check('a note past the first sitting never claims continuity it does not have', buildInterviewNote(stateAt(3))!.includes('do not claim to remember'));
 check(`longest note stays reasonable (${maxLen} chars < 6500)`, maxLen < 6500);
 check('boundary questions only on the very first sitting at Section 1', buildInterviewNote(stateAt(1))!.includes('B1.') && !buildInterviewNote(stateAt(2))!.includes('B1.'));
 
