@@ -6,7 +6,7 @@ import { synthesizeSpeech } from '@/lib/voice/tts';
 import { buildSystemPrompt } from '@/lib/agent/system-prompt';
 import { loadInterviewState } from '@/lib/interview/store';
 import { currentSection, TOTAL_SECTIONS } from '@/lib/interview/session';
-import { sectionContent, BEFORE_RECORDING, OPENING_FRAMING, SECTION_7_CONSENT_CHECK } from '@/lib/interview/embodied-questions';
+import { BEFORE_RECORDING, OPENING_FRAMING, SECTION_7_CONSENT_CHECK } from '@/lib/interview/embodied-questions';
 import { emitTurnTiming, type TurnTimingCtx } from '@/lib/observability/turn-timing';
 
 function getOpenAI() { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); }
@@ -168,8 +168,7 @@ export async function GET(req: NextRequest) {
     // already happened in the UI. The opening ends on the ONE question the
     // script puts first at this point (embodied-questions.ts, verbatim): the
     // first boundary question on a brand-new interview, the Section 7 consent
-    // check when that gate is live, otherwise the section's first main
-    // question — or, on a resumed sitting, a present-moment check-in.
+    // check when that gate is live, otherwise a present-moment check-in.
     let interviewInstruction = '';
     let interviewFirstLine = '';
     if (sessionType === 'interview') {
@@ -178,20 +177,20 @@ export async function GET(req: NextRequest) {
       if (iState && section) {
         const resuming = iState.sittings.length > 1;
         const brandNew = !resuming && iState.current_section === 1 && iState.sections_completed.length === 0;
-        const content = sectionContent(section.section);
-        const firstMain = content?.main[0]?.text ?? content?.sub_blocks?.[0]?.main[0]?.text ?? null;
         interviewInstruction = `
 
 ## INTERVIEW SESSION CONTEXT
 He is in the Embodied Man interview${resuming ? ', picking it back up after time away' : ''} — Section ${section.section} of ${TOTAL_SECTIONS}: "${section.name}" (${section.life_stage}). He has already consented to the interview itself in the app — do not re-ask permission for the interview. You are the host: plain, unhurried, one question at a time. Never tell him what his body means. Do NOT read a list of sections or announce a questionnaire.`;
         if (brandNew) {
-          interviewFirstLine = `Welcome him in plain words, and give him the frame in one sentence, in your own voice: "${OPENING_FRAMING}" Tell him he can skip anything and stop any time. Then ask, as written: "${BEFORE_RECORDING[0]}"`;
+          interviewFirstLine = `Welcome him in plain words, and give him the frame in one sentence, in your own voice (it is a framing, not a question for him to answer now): "${OPENING_FRAMING}" Tell him he can skip anything and stop any time. Then ask, as written: "${BEFORE_RECORDING[0]}"`;
         } else if (section.section === 7 && iState.gate_pending) {
           interviewFirstLine = `Welcome him into this part in one short sentence, then ask ONLY this, as written: "${SECTION_7_CONSENT_CHECK}"`;
-        } else if (resuming) {
+        } else {
+          // Any other opening is a re-entry (a resumed sitting, or coming back
+          // to an open one): earlier answers live in other conversations, so
+          // re-asking the section's first question could repeat one he already
+          // answered. Check in first; the turn note handles where to pick up.
           interviewFirstLine = `Welcome him back in one short sentence and ask how his body feels right now (he can keep it simple, or say nothing much). Do not start the next interview question yet.`;
-        } else if (firstMain) {
-          interviewFirstLine = `Welcome him into this part in one short sentence, then ask, as written: "${firstMain}"`;
         }
       }
     }
