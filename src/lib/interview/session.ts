@@ -1,18 +1,18 @@
 /**
- * Embodied Man Interview — session machinery (skeleton).
+ * Embodied Man Interview — session machinery.
  *
  * This is the structured-interview session layer the build spec described and
  * the knowledge layer (src/lib/agent/embodied-man-knowledge.ts) explicitly left
  * unbuilt: interview session phases, a consent state, the 12 sections in order,
- * and resumable sittings. It is a SKELETON:
+ * and resumable sittings:
  *
  *   - The 12 section identities (names, life stages, gates) come from the
  *     knowledge layer's SECTION_MAP — the same source the turn-by-turn craft
  *     already uses — so the two never drift.
- *   - NO deep question content lives here. The real interview questions are
- *     authored with the founder (he asked for a say). Until then the composer
- *     note (buildInterviewNote) tells Marcus which section's territory the man
- *     is in and bars him from inventing the interview's questions.
+ *   - The question content lives in embodied-questions.ts (verbatim from the
+ *     Embodied Man script, provided 2026-09-22). The composer note
+ *     (buildInterviewNote) hands Marcus the current section's main questions,
+ *     follow-ups, and menus, plus the script's host rules.
  *   - Everything here is DETERMINISTIC: no LLM, no network. Persistence lives
  *     in store.ts (Postgres); this file never touches the DB.
  *
@@ -28,6 +28,7 @@
  */
 
 import { SECTION_MAP } from '../agent/embodied-man-knowledge';
+import { buildSectionContentLines, HOST_RULES } from './embodied-questions';
 
 export type InterviewPhase =
   | 'not_started'
@@ -119,9 +120,9 @@ export function grantConsent(state: InterviewState, now: string): InterviewState
  * Advance one section. Completing section 12 completes the interview.
  * Advancing INTO a permission-gated section (2, 5, 7 — see
  * PERMISSION_GATED_SECTIONS) sets gate_pending: the section's gate must be
- * re-confirmed (acceptGate) before the next advance. The deep
- * question content is out of scope for this skeleton; the gate exists so the
- * consent machinery is real when the content lands.
+ * re-confirmed (acceptGate) before the next advance. While the gate is live
+ * the composer note tells Marcus to get his plain yes first (Section 7: the
+ * scripted consent check is the only permitted first turn).
  */
 export function advanceSection(state: InterviewState, now: string): InterviewState {
   if (state.phase !== 'in_progress' || state.gate_pending) return state;
@@ -197,25 +198,33 @@ function bumpSitting(sittings: Sitting[], reached: number): Sitting[] {
 
 /**
  * The deterministic per-turn note for the Composer while an interview sitting
- * is open. Pushed into the same envelope channels every knowledge module rides
- * (domain_whisperers.context_notes) by orchestrator-v2 when the conversation
- * is tagged as an interview. NOT a script — internal guidance, and it carries
- * NO question content: until the founder authors the questions, Marcus receives
- * what the man shares inside the current section's territory and does not
- * invent the interview's questions.
+ * is open. Rides env.domain_whisperers.session_notes (orchestrator-v2), which
+ * renders on every turn — NOT subject to the whisperer coaching cap or the
+ * move-policy whisperer toggle — because while he is in the interview this is
+ * the mode itself, not optional coaching. Internal guidance, never a script
+ * read aloud as a block. It carries the current section's question content
+ * VERBATIM from the Embodied Man script (embodied-questions.ts) plus the
+ * standing host rules from the script and build spec.
  */
 export function buildInterviewNote(state: InterviewState): string | null {
   if (state.phase !== 'in_progress' && state.phase !== 'gate_pending') return null;
   const section = currentSection(state);
   if (!section) return null;
   const sittingNo = state.sittings.length;
+  const firstSittingStart = sittingNo <= 1 && state.current_section === 1 && state.sections_completed.length === 0;
+  const resumed = sittingNo > 1;
   const gateLine = state.gate_pending && section.gate
     ? `\n- GATE LIVE for this section: ${section.gate}. Do not go further into this section's sensitive territory until he has plainly said yes.`
     : '';
+  const resumeLine = resumed
+    ? `\n- This is sitting #${sittingNo}, another day. If you have not done it yet in this conversation: a short present-moment check-in and a one-line recap of where you were, in HIS words, then continue with the next main question he has not answered.`
+    : '';
   return [
-    `EMBODIED MAN INTERVIEW — structured session in progress (internal guidance, never read verbatim):`,
-    `- He is inside the interview, Section ${section.section} of ${TOTAL_SECTIONS}: "${section.name}" (${section.life_stage}). Sitting #${sittingNo}. Sections done: ${state.sections_completed.length} of ${TOTAL_SECTIONS}.`,
-    `- The interview's deep question content is NOT authored yet. Do NOT invent the interview's questions and do not announce a questionnaire. Receive whatever he brings inside this section's territory, in your usual plain voice; the embodied-man craft and guardrails still apply.`,
-    `- Progress is his, not yours: never rush him to the next section, never declare a section finished for him, and if he wants to pause or stop, that is his call — acknowledge it plainly.${gateLine}`,
+    `EMBODIED MAN INTERVIEW — structured session in progress (internal guidance, never read verbatim). This outranks any other question suggestion this turn.`,
+    `- You are hosting the interview: open, ask, listen, pace, honor his limits. Not therapy, not coaching, not assessment. He is in Section ${section.section} of ${TOTAL_SECTIONS}: "${section.name}" (${section.life_stage}). Sitting #${sittingNo}. Sections done: ${state.sections_completed.length} of ${TOTAL_SECTIONS}.`,
+    `- Progress is his, not yours: never rush him to the next section, never declare a section finished for him, and if he wants to pause, skip, or stop, that is his call — acknowledge it plainly. When this section's main questions are asked or skipped, you may tell him plainly he can move on when he is ready.${gateLine}${resumeLine}`,
+    ...buildSectionContentLines(section.section, { includeBeforeRecording: firstSittingStart, gatePending: state.gate_pending }),
+    `HOST RULES (the script's own, binding every turn):`,
+    ...HOST_RULES,
   ].join('\n');
 }
