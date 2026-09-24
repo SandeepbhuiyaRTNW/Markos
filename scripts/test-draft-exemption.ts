@@ -22,7 +22,7 @@ import {
   VOICE_GATES,
   HARM_LAYERS,
 } from '../src/lib/agents/draft-exemption';
-import { judgeHarm, normalizeJudgeCategory, type JudgeFn } from '../src/lib/sentinels/harm-judge';
+import { judgeHarm, normalizeJudgeCategory, sanitizeJudgeReason, type JudgeFn } from '../src/lib/sentinels/harm-judge';
 
 let passed = 0, failed = 0;
 function assert(name: string, cond: boolean, detail = '') {
@@ -88,6 +88,9 @@ async function main() {
   assert('unknown/PII string normalized to other',
     normalizeJudgeCategory('here is the raw user message with private details') === 'other');
   assert('non-string normalized to other', normalizeJudgeCategory(undefined) === 'other');
+  assert('F7 sanitizeJudgeReason(harmful) is category-derived, not model free-text',
+    sanitizeJudgeReason(true, 'coercion') === 'flagged:coercion');
+  assert('F7 sanitizeJudgeReason(clean) is fixed string', sanitizeJudgeReason(false, 'none') === 'clean');
 
   console.log('\n── SUMMARY ──');
   console.log(`  passed: ${passed}   failed: ${failed}`);
