@@ -173,6 +173,186 @@ export async function processWithAgents(
   const understandingPromise = (async () => {
     const done = trackEnvelopeAgent(env, 'listener-stack');
     try {
+ * Orchestrator V2 — Full 6-Tier Turn Flow (§11)
+ *
+ * Flow: Sentinels (parallel) → Assessment Ring (parallel) → Whisperer routing
+ *       → Wisdom Council → Composer → Craft Layer → Boundary Sentinel
+ *
+ * Maintains backward-compatible AgentResponse interface.
+ * State Envelope replaces MCPContext as the internal bus.
+ */
+
+import { createStateEnvelope, trackEnvelopeAgent, recordEnvelopeError, listenerStackFromAnalysis } from './state-envelope-utils';
+import type { StateEnvelope } from './state-envelope';
+import { analyzeUnderstanding } from '../understanding/stack';
+import { getMemoryContext, getSessionHistory, getStylePreferences } from '../memory/memory-manager';
+import { detectKWML } from '../kwml/detector';
+import { detectCrisisType } from '../sentinels/crisis';
+import { getCrisisResponse, isPostCrisisRetreat, POST_CRISIS_RETREAT_RESPONSE } from '../sentinels/crisis-responses';
+import { detectAIIdentityQuestion, getAIHonestyResponse } from '../sentinels/ai-honesty';
+import { detectFrameCollapse, getFrameRefusalResponse } from '../sentinels/frame-refusal';
+import { runPathwayRouter } from '../sentinels/pathway-router';
+import { runCulturalContext } from '../sentinels/cultural';
+import { classifyArena } from '../assessment/arena-classifier';
+import { classifySilence } from '../assessment/silence-typer';
+import { computeTrust } from '../assessment/trust-gauge';
+import { mapPhase, monotonicPhase } from '../assessment/phase-mapper';
+import { loadSessionState, saveSessionState, type SessionState } from './session-state';
+import { selectMove, moveSelectorEnforced } from '../assessment/move-selector';
+import { selectKnowledgePlan } from '../assessment/knowledge-selector';
+import { selectWisdomVoices } from '../wisdom/council';
+import { enforceVocativePrinciple } from '../craft/craft-layer';
+import { WHISPERER_REGISTRY, WHISPERER_ACTIVATION_THRESHOLD } from '../whisperers';
+import { applyListeningKnowledge } from '../agent/listening-knowledge';
+import { applyEmbodiedManKnowledge } from '../agent/embodied-man-knowledge';
+import { buildInterviewNote, EMPTY_INTERVIEW_STATE, type InterviewState } from '../interview/session';
+import { computePERMASnapshot } from '../assessment/perma-snapshot';
+import { query } from '../db';
+import { readContextOr } from './context-read';
+import { persistTurnMessages, type QueryFn } from './persist-messages';
+import { logTurn } from '../observability/turn-logger';
+import { analyzeConversation, type ConversationState } from './conversation-state';
+
+// Re-export the same public interface
+export interface AgentResponse {
+  response: string;
+  emotion: string;
+  kwmlArchetype: string;
+  agentTimings: Record<string, number>;
+  errors: Array<{ agent: string; error: string }>;
+  envelope?: StateEnvelope; // Optional: full envelope for observability
+}
+
+export async function processWithAgents(
+  userId: string,
+  conversationId: string,
+  userMessage: string,
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+): Promise<AgentResponse> {
+  // Kick off the user-name lookup concurrently. It is only needed when we build
+  // a response: the sentinel early-returns await it directly; the main path sets
+  // it after the Tier-1 DB batch (the query overlaps the batch, so no extra
+  // sequential round trip).
+  const userNamePromise: Promise<string | null> = query(`SELECT name FROM users WHERE id = $1`, [userId])
+    .then(r => r.rows[0]?.name || null)
+    .catch(() => null);
+
+  const env = createStateEnvelope({ userId, conversationId, utterance: userMessage, conversationHistory, userName: null });
+
+  // ═══════════════════════════════════════════
+  // TIER 1 — SENTINELS (parallel, every turn)
+  // ═══════════════════════════════════════════
+
+  // 1a. Crisis Sentinel — fast classifier (synchronous, ~0ms)
+  const crisisType = detectCrisisType(userMessage);
+  if (crisisType && crisisType !== 'passive_crisis') {
+    // Acute crisis — force response, bypass all other tiers
+    const userName = await userNamePromise;
+    env.user_name = userName;
+    const forcedResponse = getCrisisResponse(crisisType);
+    env.sentinels.crisis = { level: 'acute', type: crisisType, protocol: crisisType, forced_response: forcedResponse };
+    // Apply vocative filter to crisis responses too
+    const cleanedCrisis = enforceVocativePrinciple(forcedResponse || '988 Suicide & Crisis Lifeline: call or text 988.', userName);
+    env.final_response = cleanedCrisis;
+    return buildResponse(env);
+  }
+
+  // Post-crisis retreat check
+  if (isPostCrisisRetreat(userMessage, conversationHistory)) {
+    const userName = await userNamePromise;
+    env.user_name = userName;
+    env.final_response = enforceVocativePrinciple(POST_CRISIS_RETREAT_RESPONSE, userName);
+    return buildResponse(env);
+  }
+
+  // 1b. AI-Honesty Sentinel — forced route (Engineering Findings §6)
+  if (detectAIIdentityQuestion(userMessage)) {
+    const { isHostileAIChallenge } = await import('../sentinels/ai-honesty');
+    env.sentinels.ai_honesty = { triggered: true, hostile: isHostileAIChallenge(userMessage) };
+    const honestyResponse = getAIHonestyResponse(userMessage);
+    const userName = await userNamePromise;
+    env.user_name = userName;
+    env.final_response = enforceVocativePrinciple(honestyResponse, userName);
+    return buildResponse(env);
+  }
+
+  // 1c. Frame-Refusal Sentinel — role boundary enforcement (Engineering Findings §7)
+  const frameCollapse = detectFrameCollapse(userMessage);
+  if (frameCollapse && frameCollapse !== 'draft_request' && frameCollapse !== 'book_recommend') {
+    env.sentinels.frame_refusal = { triggered: true, category: frameCollapse };
+    const turnCount = conversationHistory.filter(m => m.role === 'user').length;
+    const refusalResponse = getFrameRefusalResponse(frameCollapse, turnCount);
+    if (refusalResponse) {
+      const userName = await userNamePromise;
+      env.user_name = userName;
+      env.final_response = enforceVocativePrinciple(refusalResponse, userName);
+      return buildResponse(env);
+    }
+  }
+
+  // 1d. Parallel sentinel fetch: Memory + Understanding + KWML + Cultural
+  const historyStr = conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n');
+
+  // W2: persisted trust/phase from earlier turns of THIS conversation (nulls on
+  // first turn or load failure — the gauge then falls back to its session-count
+  // seed, exactly the old behavior).
+  let persistedState: SessionState = { trust: null, phase: null };
+  // Interview skeleton: filled in Tier 1 only when this conversation is tagged
+  // as an interview sitting; stays null on ordinary conversations.
+  let interviewState: InterviewState | null = null;
+
+  // A failed read must not erase successful memory, style or continuity reads.
+  const contextRead = <T>(name: string, read: Promise<T>, fallback: T) =>
+    readContextOr(read, fallback, (err) => recordEnvelopeError(env, `memory-sentinel:${name}`, err));
+
+  // Phase 1: Fast DB fetches
+  const memDone = trackEnvelopeAgent(env, 'memory-sentinel');
+  try {
+    const [memCtx, sessionResult, sessHistory, stylePrefs, loadedState, convMetaResult, interviewResult, lastSessionResult] = await Promise.all([
+      contextRead('memory', getMemoryContext(userId), ''),
+      contextRead('session-count', query(`SELECT COUNT(*) as cnt FROM conversations WHERE user_id = $1`, [userId]), { rows: [], command: 'SELECT', rowCount: 0, oid: 0, fields: [] }),
+      contextRead('history', getSessionHistory(userId), ''),
+      contextRead('style', getStylePreferences(userId), ''),
+      contextRead('session-state', loadSessionState(query, conversationId), { trust: null, phase: null }),
+      // Interview skeleton: is THIS conversation an interview sitting (tagged at
+      // creation), and if so where is he in the 12 sections? Two tiny indexed
+      // reads, folded into the batch so the turn pays no extra round trips.
+      query(`SELECT metadata FROM conversations WHERE id = $1`, [conversationId]).catch(() => null),
+      query(`SELECT state FROM interview_sessions WHERE user_id = $1`, [userId]).catch(() => null),
+      // W13: the same last-ended-session anchors the opening message speaks from
+      // (title + takeaways + pondering topics). Never throws — a missing/drifted
+      // column must not break the turn.
+      query(
+        `SELECT takeaways, pondering_topics, metadata FROM conversations
+         WHERE user_id = $1 AND session_ended = true AND id != $2
+         ORDER BY ended_at DESC LIMIT 1`,
+        [userId, conversationId],
+      ).catch(() => null),
+    ]);
+    persistedState = loadedState;
+    const convMeta = convMetaResult?.rows?.[0]?.metadata as Record<string, unknown> | undefined;
+    if (convMeta?.sessionType === 'interview') {
+      interviewState = { ...EMPTY_INTERVIEW_STATE, ...((interviewResult?.rows?.[0]?.state || {}) as Partial<InterviewState>) };
+    }
+    env.sentinels.memory = {
+      prior_threads: [], session_history: sessHistory, memory_context: memCtx,
+      session_count: parseInt(sessionResult.rows[0]?.cnt || '0', 10),
+      style_preferences: stylePrefs, returning_patterns: [],
+      last_session_continuity: buildLastSessionContinuity(lastSessionResult?.rows?.[0] || null),
+    };
+  } catch (err) { recordEnvelopeError(env, 'memory-sentinel', err); }
+  finally { memDone(); }
+
+  // User name resolves concurrently with the batch above; assign unconditionally
+  // (independent of memory-fetch success, matching the original semantics).
+  env.user_name = await userNamePromise;
+
+  // Phase 2: LLM agents in parallel — understanding, KWML, and arena. Arena only
+  // needs message + history + memory (all ready after Phase 1), so it no longer
+  // waits behind Tier 2; it runs alongside the Tier-1 LLMs.
+  const understandingPromise = (async () => {
+    const done = trackEnvelopeAgent(env, 'listener-stack');
+    try {
       const analysis = await analyzeUnderstanding(userMessage, historyStr, env.sentinels.memory.memory_context || '');
       env.sentinels.listener_stack = listenerStackFromAnalysis(analysis);
     } catch (err) { recordEnvelopeError(env, 'listener-stack', err); }
