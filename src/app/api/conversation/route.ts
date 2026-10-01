@@ -52,11 +52,13 @@ export async function POST(req: NextRequest) {
     // 1. Transcribe audio (Whisper) — timed
     const audioBuffer = Buffer.from(await audioFile.arrayBuffer());
     const sttStart = Date.now();
-    const userText = await transcribeAudio(audioBuffer, audioFile.type);
-    const sttMs = Date.now() - sttStart;
+    // Overlap independent transcription and history I/O; handle rejection immediately.
+    const transcriptionPromise = transcribeAudio(audioBuffer, audioFile.type)
+      .then(text => ({ text, ms: Date.now() - sttStart }));
 
     // 2. Get conversation history — most recent 60 messages, re-ordered chronologically
-    const historyResult = await query(
+    const [{ text: userText, ms: sttMs }, historyResult] = await Promise.all([
+      transcriptionPromise, query(
       `SELECT role, content FROM (
          SELECT role, content, created_at FROM messages
          WHERE conversation_id = $1
@@ -65,7 +67,8 @@ export async function POST(req: NextRequest) {
        ) recent
        ORDER BY created_at ASC`,
       [conversationId]
-    );
+    ),
+    ]);
     const history = historyResult.rows.map((r: { role: string; content: string }) => ({
       role: r.role === 'marcus' ? 'assistant' as const : 'user' as const,
       content: r.content,
@@ -141,4 +144,3 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(result.rows[0]);
 }
-
