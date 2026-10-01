@@ -12,7 +12,7 @@ import { createStateEnvelope, trackEnvelopeAgent, recordEnvelopeError, listenerS
 import type { StateEnvelope } from './state-envelope';
 import { analyzeUnderstanding } from '../understanding/stack';
 import { getMemoryContext, getSessionHistory, getStylePreferences } from '../memory/memory-manager';
-import { detectKWML, getKWMLContext } from '../kwml/detector';
+import { detectKWML } from '../kwml/detector';
 import { detectCrisisType } from '../sentinels/crisis';
 import { getCrisisResponse, isPostCrisisRetreat, POST_CRISIS_RETREAT_RESPONSE } from '../sentinels/crisis-responses';
 import { detectAIIdentityQuestion, getAIHonestyResponse } from '../sentinels/ai-honesty';
@@ -129,8 +129,8 @@ export async function processWithAgents(
   // Phase 1: Fast DB fetches
   const memDone = trackEnvelopeAgent(env, 'memory-sentinel');
   try {
-    const [memCtx, kwmlCtx, sessionResult, sessHistory, stylePrefs, loadedState, convMetaResult, interviewResult, lastSessionResult] = await Promise.all([
-      getMemoryContext(userId), getKWMLContext(userId),
+    const [memCtx, sessionResult, sessHistory, stylePrefs, loadedState, convMetaResult, interviewResult, lastSessionResult] = await Promise.all([
+      getMemoryContext(userId),
       query(`SELECT COUNT(*) as cnt FROM conversations WHERE user_id = $1`, [userId]),
       getSessionHistory(userId), getStylePreferences(userId),
       loadSessionState(query, conversationId),
