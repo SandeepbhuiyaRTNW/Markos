@@ -22,6 +22,16 @@ import type { AgentResponse } from './orchestrator-v2';
 import { MOVE_CALIBRATION, GOVERNING_BAR } from './move-calibration';
 import { persistTurnMessages, type QueryFn } from './persist-messages';
 
+/** Technical recovery: do not invent a reflection, forgotten memory or unheard audio. */
+export function composerRecovery(env: Pick<StateEnvelope, 'utterance' | 'conversation_history'>): string {
+  const variants = [
+    "Hmm. My reply didn't come through. Can we try once more?",
+    "That reply didn't come through. Give me another try.",
+    "Something interrupted my reply. We can try again when you're ready.",
+  ];
+  return variants[env.conversation_history.length % variants.length];
+}
+
 export interface PreComposerResult {
   ragWisdom: string;
   legacyQuestions: string[];
@@ -323,7 +333,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
       const response = await model.invoke(messages);
       content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
     }
-    content = content || 'Something in what you said hit me. Say that again — slower this time.';
+    content = content || composerRecovery(env);
     content = enforceMovePolicy(content, policyContext);
 
     // ═══════════════════════════════════════════
@@ -547,7 +557,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
     env.total_ms = Date.now() - env.turn_start_ms;
   } catch (err) {
     recordEnvelopeError(env, 'composer', err);
-    env.final_response = "I hear you. Tell me more.";
+    env.final_response = composerRecovery(env);
   } finally { composerDone(); }
 
   // ═══════════════════════════════════════════
@@ -571,7 +581,7 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
   await import('../observability/turn-logger').then(({ logTurn }) => logTurn(env, testHooks?.queryFn)).catch(() => {});
 
   return {
-    response: env.final_response || "I hear you. Tell me more.",
+    response: env.final_response || composerRecovery(env),
     emotion: env.sentinels.listener_stack?.primary_emotion || 'neutral',
     kwmlArchetype: env.assessment.archetype?.active || '',
     agentTimings: env.agent_timings,
@@ -796,3 +806,4 @@ function applyMoveCraftPolicy(current: StateEnvelope['craft_directives'], moveDe
   }
   return next;
 }
+
