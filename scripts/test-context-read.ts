@@ -20,6 +20,9 @@ async function main() {
   assert.ok(MARCUS_SYSTEM_PROMPT.includes('You are Marcus Aurelius'));
   assert.ok(MARCUS_SYSTEM_PROMPT.includes('Do not replace the request with a question about his feelings'));
   assert.ok(MARCUS_SYSTEM_PROMPT.includes('not professional advice'));
-  console.log('Context isolation + conversational prompt: 12 assertions passed (no DB/LLM).');
+  assert.ok(MARCUS_SYSTEM_PROMPT.includes('CAP RAMBLING, NOT THOUGHT'));
+  assert.ok(MARCUS_SYSTEM_PROMPT.includes('acknowledgment is a valid complete turn'));
+  assert.ok(!MARCUS_SYSTEM_PROMPT.includes('That is real" is a valid start, not a full response'));
+  console.log('Context isolation + conversational prompt: 15 assertions passed (no DB/LLM).');
 }
 void main();
