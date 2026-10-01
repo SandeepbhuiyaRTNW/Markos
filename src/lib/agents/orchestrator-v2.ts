@@ -12,7 +12,7 @@ import { createStateEnvelope, trackEnvelopeAgent, recordEnvelopeError, listenerS
 import type { StateEnvelope } from './state-envelope';
 import { analyzeUnderstanding } from '../understanding/stack';
 import { getMemoryContext, getSessionHistory, getStylePreferences } from '../memory/memory-manager';
-import { detectKWML, getKWMLContext } from '../kwml/detector';
+import { detectKWML } from '../kwml/detector';
 import { detectCrisisType } from '../sentinels/crisis';
 import { getCrisisResponse, isPostCrisisRetreat, POST_CRISIS_RETREAT_RESPONSE } from '../sentinels/crisis-responses';
 import { detectAIIdentityQuestion, getAIHonestyResponse } from '../sentinels/ai-honesty';
@@ -134,9 +134,8 @@ export async function processWithAgents(
   // Phase 1: Fast DB fetches
   const memDone = trackEnvelopeAgent(env, 'memory-sentinel');
   try {
-    const [memCtx, kwmlCtx, sessionResult, sessHistory, stylePrefs, loadedState, convMetaResult, interviewResult, lastSessionResult] = await Promise.all([
+    const [memCtx, sessionResult, sessHistory, stylePrefs, loadedState, convMetaResult, interviewResult, lastSessionResult] = await Promise.all([
       contextRead('memory', getMemoryContext(userId), ''),
-      contextRead('archetype', getKWMLContext(userId), ''),
       contextRead('session-count', query(`SELECT COUNT(*) as cnt FROM conversations WHERE user_id = $1`, [userId]), { rows: [], command: 'SELECT', rowCount: 0, oid: 0, fields: [] }),
       contextRead('history', getSessionHistory(userId), ''),
       contextRead('style', getStylePreferences(userId), ''),
@@ -433,3 +432,4 @@ function buildLastSessionContinuity(lastSession: {
   if (parts.length === 0) return null;
   return `LAST SESSION CONTINUITY (the session opener already spoke from this — treat it as something you both know):\n${parts.join('\n')}`;
 }
+

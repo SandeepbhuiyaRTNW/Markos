@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { voiceSilenceMs } from '../src/lib/voice/handsFree';
+assert.equal(voiceSilenceMs(undefined), 2200);
+assert.equal(voiceSilenceMs(''), 2200);
+assert.equal(voiceSilenceMs('1400'), 1400);
+assert.equal(voiceSilenceMs('1800'), 1800);
+assert.equal(voiceSilenceMs('2200'), 2200);
+for (const v of ['bad', '0', '1200', '2300', 'Infinity']) assert.equal(voiceSilenceMs(v), 2200);
+const composer = readFileSync('src/lib/agents/orchestrator-v2-composer.ts', 'utf8');
+assert.ok(composer.indexOf('for await (const chunk') < composer.indexOf('await regenForBoundary();'));
+assert.ok(composer.includes('const tts') === false);
+assert.ok(composer.includes('const MAX_REGENS = 2'));
+console.log('Safe latency configuration + unchanged safety order: 13 assertions passed.');

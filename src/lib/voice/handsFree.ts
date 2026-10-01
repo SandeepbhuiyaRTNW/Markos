@@ -9,6 +9,12 @@ export type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
  * before ending a turn — this is an emotional-support app; people pause to think,
  * breathe, or get emotional and must NOT be cut off mid-sentence.
  */
+/** Explicit opt-in only: keep the existing 2.2s pause unless configured and tested. */
+export function voiceSilenceMs(value: string | undefined): number {
+  const n = Number(value);
+  return value && Number.isFinite(n) && n >= 1400 && n <= 2200 ? n : 2200;
+}
+
 export const VAD_TUNING = {
   model: 'v5' as const,
   // Silence (below negativeSpeechThreshold) must persist this long before the turn
@@ -17,7 +23,7 @@ export const VAD_TUNING = {
   // than cut a grieving man off. ~2.2s. (Tradeoff: a slightly longer beat of quiet
   // before Marcus replies. If it still clips, raise toward 2600; if it feels laggy,
   // ease toward 2000.)
-  redemptionMs: 2200,
+  redemptionMs: voiceSilenceMs(process.env.NEXT_PUBLIC_VOICE_SILENCE_MS),
   // Prepend a lead-in so the first word is never clipped.
   preSpeechPadMs: 320,
   // Ignore blips shorter than this (a cough, a click, a single "mm").

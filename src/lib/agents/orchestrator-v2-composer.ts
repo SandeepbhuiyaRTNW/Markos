@@ -157,7 +157,7 @@ export async function retrievePreComposer(
  * write per composer turn — i.e. the composer does NOT also return through buildResponse.
  */
 export interface ComposerTestHooks {
-  model?: { invoke(messages: (SystemMessage | HumanMessage | AIMessage)[]): Promise<{ content: unknown }> };
+  model?: { invoke(messages: (SystemMessage | HumanMessage | AIMessage)[]): Promise<{ content: unknown }>; stream?(messages: (SystemMessage | HumanMessage | AIMessage)[]): Promise<AsyncIterable<{ content: unknown }>> };
   queryFn?: QueryFn;
 }
 
@@ -313,8 +313,26 @@ Question style: ${phaseConstraints.question_style}${effectiveMaxDepth > phaseCon
       new HumanMessage(env.utterance),
     ];
 
-    const response = await model.invoke(messages);
-    let content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+    // Collect streamed text, but NEVER expose it before all full-reply safety gates.
+    // Fake models without stream retain the deterministic test seam.
+    let content: string;
+    if (model.stream) {
+      const chunks = await model.stream(messages);
+      content = '';
+      let firstChunk = true;
+      const streamStart = Date.now();
+      for await (const chunk of chunks) {
+        if (typeof chunk.content !== 'string') throw new Error('Unexpected Composer stream content');
+        if (firstChunk && chunk.content) {
+          env.agent_timings.composer_first_text = Date.now() - streamStart;
+          firstChunk = false;
+        }
+        content += chunk.content;
+      }
+    } else {
+      const response = await model.invoke(messages);
+      content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+    }
     content = content || composerRecovery(env);
     content = enforceMovePolicy(content, policyContext);
 
@@ -788,3 +806,4 @@ function applyMoveCraftPolicy(current: StateEnvelope['craft_directives'], moveDe
   }
   return next;
 }
+
