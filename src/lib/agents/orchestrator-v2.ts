@@ -34,6 +34,7 @@ import { applyEmbodiedManKnowledge } from '../agent/embodied-man-knowledge';
 import { buildInterviewNote, EMPTY_INTERVIEW_STATE, type InterviewState } from '../interview/session';
 import { computePERMASnapshot } from '../assessment/perma-snapshot';
 import { query } from '../db';
+import { readContextOr } from './context-read';
 import { persistTurnMessages, type QueryFn } from './persist-messages';
 import { logTurn } from '../observability/turn-logger';
 import { analyzeConversation, type ConversationState } from './conversation-state';
@@ -103,7 +104,7 @@ export async function processWithAgents(
 
   // 1c. Frame-Refusal Sentinel — role boundary enforcement (Engineering Findings §7)
   const frameCollapse = detectFrameCollapse(userMessage);
-  if (frameCollapse) {
+  if (frameCollapse && frameCollapse !== 'draft_request' && frameCollapse !== 'book_recommend') {
     env.sentinels.frame_refusal = { triggered: true, category: frameCollapse };
     const turnCount = conversationHistory.filter(m => m.role === 'user').length;
     const refusalResponse = getFrameRefusalResponse(frameCollapse, turnCount);
@@ -126,14 +127,20 @@ export async function processWithAgents(
   // as an interview sitting; stays null on ordinary conversations.
   let interviewState: InterviewState | null = null;
 
+  // A failed read must not erase successful memory, style or continuity reads.
+  const contextRead = <T>(name: string, read: Promise<T>, fallback: T) =>
+    readContextOr(read, fallback, (err) => recordEnvelopeError(env, `memory-sentinel:${name}`, err));
+
   // Phase 1: Fast DB fetches
   const memDone = trackEnvelopeAgent(env, 'memory-sentinel');
   try {
     const [memCtx, kwmlCtx, sessionResult, sessHistory, stylePrefs, loadedState, convMetaResult, interviewResult, lastSessionResult] = await Promise.all([
-      getMemoryContext(userId), getKWMLContext(userId),
-      query(`SELECT COUNT(*) as cnt FROM conversations WHERE user_id = $1`, [userId]),
-      getSessionHistory(userId), getStylePreferences(userId),
-      loadSessionState(query, conversationId),
+      contextRead('memory', getMemoryContext(userId), ''),
+      contextRead('archetype', getKWMLContext(userId), ''),
+      contextRead('session-count', query(`SELECT COUNT(*) as cnt FROM conversations WHERE user_id = $1`, [userId]), { rows: [], command: 'SELECT', rowCount: 0, oid: 0, fields: [] }),
+      contextRead('history', getSessionHistory(userId), ''),
+      contextRead('style', getStylePreferences(userId), ''),
+      contextRead('session-state', loadSessionState(query, conversationId), { trust: null, phase: null }),
       // Interview skeleton: is THIS conversation an interview sitting (tagged at
       // creation), and if so where is he in the 12 sections? Two tiny indexed
       // reads, folded into the batch so the turn pays no extra round trips.

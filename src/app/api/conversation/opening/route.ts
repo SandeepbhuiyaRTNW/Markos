@@ -206,7 +206,7 @@ Open the sitting in 2-3 sentences. ${interviewFirstLine || 'Welcome him into thi
       openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION (NEW TOPIC)
 ${nameGreeting}He has chosen to start a NEW topic today — do NOT reference previous conversations, past struggles, or pondering topics. He wants a clean start on something different.
 Your job: Open with warmth and curiosity. Acknowledge that today is about something new. Invite him to bring whatever is on his mind RIGHT NOW.
-Keep it to 2-3 sentences. End with ONE open question like "What's on your mind today?" or "What brought you here today?"
+Briefly welcome him. Offer a low-pressure doorway into whatever he wants to discuss. At most one question; no intake form or demand to explain why he came.
 Do NOT say "I remember" or reference past sessions. Do NOT start with "Brother" — vary your openings.`;
     } else if (continueFrom) {
       // ─── CONTINUING FROM A SPECIFIC SESSION ───
@@ -222,7 +222,7 @@ ${continuitySection}
 ${recentSection}
 
 Open by referencing one of the pondering topics DIRECTLY. Ask him if he had time to sit with it. Be specific — use his words.
-2-3 sentences. End with weight — a question, a truth, or a reflection. Do NOT start with "Brother" — vary your openings.`;
+Continue naturally from one relevant detail. A short acknowledgment can be enough. At most one question; no forced profound closing. Do NOT start with "Brother" — vary your openings.`;
       } else {
         openingInstruction = `\n\n## YOUR TASK — CONTINUE FROM A SPECIFIC SESSION
 He has chosen to CONTINUE from a previous conversation titled "${lastTitle}".
@@ -232,14 +232,14 @@ LAST SESSION EXCHANGE:
 ${recentSection}
 
 Open by referencing something specific from that conversation. What did he say? What was he working through? Ask him how things have been since then.
-2-3 sentences. End with weight — a question, a truth, or a reflection. Do NOT start with "Brother" — vary your openings.`;
+Continue naturally from one relevant detail. A short acknowledgment can be enough. At most one question; no forced profound closing. Do NOT start with "Brother" — vary your openings.`;
       }
     } else if (lastPondering.length > 0) {
-      openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION\nYou are speaking first. The man has just arrived. He was given specific topics to ponder since your last conversation. Reference one of the pondering topics DIRECTLY — ask him if he had time to sit with it, what came up for him when he thought about it. Be specific, not generic. Keep it to 2-3 sentences. End with ONE question about his reflection. Do NOT start with "Brother" — vary your openings.${continuitySection}${recentSection}`;
+      openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION\nYou are speaking first. The man has just arrived. He was given specific topics to ponder since your last conversation. You may use one relevant unfinished thread as a doorway, not homework to check. Do not demand a reflection or recite the topics. A short welcome or one specific optional question is enough; let him choose today's topic. Do NOT start with "Brother" — vary your openings.${continuitySection}${recentSection}`;
     } else if (hasMemory && hasPrevHistory) {
-      openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION\nYou are speaking first. The man has just arrived. Reference something SPECIFIC from the memory context below — a struggle, a pattern, a commitment — so he knows you have been thinking about him. ONLY reference things that are explicitly stated in your memory context. Do NOT invent or assume any memories. Keep it to 2-3 sentences. End with ONE grounded question. Do NOT start with "Brother" — vary your openings.${continuitySection}${recentSection}`;
+      openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION\nYou are speaking first. The man has just arrived. Use at most one relevant memory if it helps continue the conversation. Do not claim you were thinking about him while he was away, prove recall, or reopen an intimate topic without an invitation. ONLY reference things that are explicitly stated in your memory context. Do NOT invent or assume any memories. Keep it brief and natural. At most one optional question; no forced recap or probe. Do NOT start with "Brother" — vary your openings.${continuitySection}${recentSection}`;
     } else {
-      openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION\nThis is your first conversation with this man. You have NO prior memory of him — do NOT pretend you remember anything or reference any past sessions. Speak first. Set the tone for what this relationship will become. Welcome him with weight and purpose — not warmth for warmth's sake, but genuine gravity. 2-3 sentences maximum. End with ONE question that begins to open him up. Do NOT start with "Brother" — vary your openings. CRITICAL: Do NOT say "I remember" or reference anything from past conversations — there are none.`;
+      openingInstruction = `\n\n## YOUR TASK — OPEN THIS SESSION\nThis is your first conversation with this man. You have NO prior memory of him — do NOT pretend you remember anything or reference any past sessions. Speak first. Introduce yourself briefly in your established voice. Offer one low-pressure invitation, without a biography questionnaire, solemn performance, or demand for vulnerability. One question maximum, then yield the floor. Do NOT start with "Brother" — vary your openings. CRITICAL: Do NOT say "I remember" or reference anything from past conversations — there are none.`;
     }
 
     const systemPrompt = buildSystemPrompt({
@@ -295,4 +295,3 @@ Open by referencing something specific from that conversation. What did he say? 
     return NextResponse.json({ error: 'Failed to generate opening' }, { status: 500 });
   }
 }
-
